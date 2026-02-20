@@ -360,18 +360,23 @@ func (h *RechargeHandler) HandleTelecomWebhook(c *gin.Context) {
 // @Router /api/v1/recharge/reference/{reference} [get]
 func (h *RechargeHandler) GetRechargeByReference(c *gin.Context) {
 	reference := c.Param("reference")
+	fmt.Printf("[DEBUG] GetRechargeByReference called with reference: %s\n", reference)
 
 	if reference == "" {
+		fmt.Printf("[ERROR] Reference is empty\n")
 		middleware.RespondWithError(c, errors.BadRequest("Payment reference is required"))
 		return
 	}
 
 	// Get recharge details by reference
+	fmt.Printf("[DEBUG] Calling rechargeService.GetRechargeByReference...\n")
 	recharge, err := h.rechargeService.GetRechargeByReference(c.Request.Context(), reference)
 	if err != nil {
+		fmt.Printf("[ERROR] GetRechargeByReference failed: %v\n", err)
 		middleware.RespondWithError(c, errors.NotFound("Recharge not found"))
 		return
 	}
+	fmt.Printf("[DEBUG] Recharge found: %+v\n", recharge)
 
 	middleware.RespondWithSuccess(c, recharge)
 }

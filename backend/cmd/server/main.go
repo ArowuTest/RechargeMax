@@ -528,6 +528,7 @@ type Handlers struct {
 	ValidationStats *handlers.ValidationStatsHandler
 	Webhook      *handlers.WebhookHandler
 	AdminSpinClaims *handlers.AdminSpinClaimsHandler
+	Test         *handlers.TestHandler
 }
 
 func initHandlers(svcs *Services, repos *Repositories, appConfig *Config, db *gorm.DB) *Handlers {
@@ -572,6 +573,7 @@ func initHandlers(svcs *Services, repos *Repositories, appConfig *Config, db *go
 		ValidationStats: handlers.NewValidationStatsHandler(),
 		Webhook: handlers.NewWebhookHandler(svcs.Webhook),
 		AdminSpinClaims: handlers.NewAdminSpinClaimsHandler(svcs.AdminSpinClaims),
+		Test: handlers.NewTestHandler(svcs.Recharge, svcs.Subscription),
 	}
 }
 
@@ -675,6 +677,12 @@ func setupRouter(hdlrs *Handlers, svcs *Services) *gin.Engine {
 				spin.POST("/play", hdlrs.Spin.PlaySpin) // Guest & auth spin support
 				spin.GET("/eligibility", hdlrs.Spin.CheckEligibility) // Check spin eligibility
 				spin.GET("/history", hdlrs.Spin.GetHistory) // Spin history
+			}
+
+			// Test routes (for development/testing)
+			test := v1.Group("/test")
+			{
+				test.POST("/process-payment", hdlrs.Test.ProcessPaymentManually)
 			}
 
 		// Protected routes (require authentication)

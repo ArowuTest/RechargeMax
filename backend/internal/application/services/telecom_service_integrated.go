@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"os"
 	"strings"
 	"time"
 )
@@ -125,6 +126,7 @@ func (s *TelecomServiceIntegrated) PurchaseData(ctx context.Context, network, ph
 
 // getActiveProvider retrieves the active provider configuration for a network and service type
 func (s *TelecomServiceIntegrated) getActiveProvider(ctx context.Context, network, serviceType string) (*ProviderConfig, error) {
+	// Try to get from database first
 	query := `
 		SELECT id, network, service_type, provider_mode, provider_name, priority, config
 		FROM get_active_provider($1, $2)
@@ -144,7 +146,19 @@ func (s *TelecomServiceIntegrated) getActiveProvider(ctx context.Context, networ
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("no active provider configured for network=%s, service_type=%s", network, serviceType)
+		// FALLBACK: No provider configured in database, use environment-based VTPass
+		fmt.Printf("⚠️  No provider configured for %s/%s, using environment fallback\n", network, serviceType)
+		return &ProviderConfig{
+			ID:           0,
+			Network:      network,
+			ServiceType:  serviceType,
+			ProviderMode: "VTU",
+			ProviderName: "VTPass",
+			Priority:     1,
+			Config: map[string]interface{}{
+				"mode": "sandbox",
+			},
+		}, nil
 	}
 
 	if err != nil {
@@ -156,6 +170,7 @@ func (s *TelecomServiceIntegrated) getActiveProvider(ctx context.Context, networ
 		return nil, fmt.Errorf("failed to parse provider config: %w", err)
 	}
 
+	fmt.Printf("✅ Using provider: %s (mode: %s) for %s/%s\n", config.ProviderName, config.ProviderMode, network, serviceType)
 	return &config, nil
 }
 
@@ -329,10 +344,28 @@ func (s *TelecomServiceIntegrated) purchaseDataSimulation(ctx context.Context, p
 
 // initializeVTPassService creates a VTPass service from config
 func (s *TelecomServiceIntegrated) initializeVTPassService(config map[string]interface{}) *VTPassService {
+	// Try to get from config first, fallback to environment variables
 	apiKey, _ := config["api_key"].(string)
+	if apiKey == "" {
+		apiKey = os.Getenv("VTPASS_API_KEY")
+	}
+	
 	publicKey, _ := config["public_key"].(string)
+	if publicKey == "" {
+		publicKey = os.Getenv("VTPASS_PUBLIC_KEY")
+	}
+	
 	secretKey, _ := config["secret_key"].(string)
+	if secretKey == "" {
+		secretKey = os.Getenv("VTPASS_SECRET_KEY")
+	}
+	
 	isSandbox, _ := config["is_sandbox"].(bool)
+	if !isSandbox {
+		// Check environment for sandbox mode
+		mode := os.Getenv("VTPASS_MODE")
+		isSandbox = mode == "sandbox"
+	}
 
 	return NewVTPassService(VTPassConfig{
 		APIKey:    apiKey,

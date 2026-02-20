@@ -127,7 +127,9 @@ func AdminAuthMiddleware(authService interface{}) gin.HandlerFunc {
 // LoggingMiddleware logs all requests
 func LoggingMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		fmt.Printf("[REQUEST] %s %s\n", c.Request.Method, c.Request.URL.Path)
 		c.Next()
+		fmt.Printf("[RESPONSE] %s %s - Status: %d\n", c.Request.Method, c.Request.URL.Path, c.Writer.Status())
 	}
 }
 

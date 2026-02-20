@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -89,12 +90,15 @@ func (h *RechargeHandler) InitiateRecharge(c *gin.Context) {
 func (h *RechargeHandler) InitiateAirtimeRecharge(c *gin.Context) {
 	// Get msisdn from auth context (if authenticated) or use phone number from request
 	msisdn := c.GetString("msisdn")
+	fmt.Printf("[DEBUG] InitiateAirtimeRecharge called, msisdn from context: %s\n", msisdn)
 
 	var req validation.AirtimeRechargeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		fmt.Printf("[ERROR] Failed to bind JSON: %v\n", err)
 		middleware.RespondWithError(c, errors.BadRequest("Invalid request format"))
 		return
 	}
+	fmt.Printf("[DEBUG] Request parsed: phone=%s, network=%s, amount=%d\n", req.PhoneNumber, req.Network, req.Amount)
 
 	// Validate request
 	if err := req.Validate(); err != nil {
@@ -117,11 +121,14 @@ func (h *RechargeHandler) InitiateAirtimeRecharge(c *gin.Context) {
 		PaymentMethod: "CARD", // Paystack gateway, CARD payment method
 	}
 
+	fmt.Printf("[DEBUG] Calling CreateRecharge service...\n")
 	result, err := h.rechargeService.CreateRecharge(c.Request.Context(), rechargeReq)
 	if err != nil {
+		fmt.Printf("[ERROR] CreateRecharge failed: %v\n", err)
 		middleware.RespondWithError(c, err)
 		return
 	}
+	fmt.Printf("[DEBUG] CreateRecharge succeeded, result: %+v\n", result)
 
 	// Log transaction
 	errors.LogTransaction("AIRTIME_RECHARGE", result.ID.String(), msisdn, float64(amountKobo)/100, "INITIATED")

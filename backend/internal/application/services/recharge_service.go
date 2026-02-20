@@ -207,6 +207,9 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 	// Calculate points earned (₦200 = 1 point)
 	// ₦200 = 20000 kobo, so points = amount / 20000
 	pointsEarned := recharge.Amount / 20000
+	
+	// Calculate draw entries (1 point = 1 draw entry)
+	drawEntries := pointsEarned
 
 	// Check if eligible for wheel spin (₦1000 minimum)
 	// ₦1000 = 100000 kobo
@@ -220,6 +223,7 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 		if err := tx.Model(&entities.Transactions{}).Where("id = ?", recharge.ID).Updates(map[string]interface{}{
 			"status":        "SUCCESS",
 			"points_earned": pointsEarned,
+			"draw_entries":  drawEntries,
 			"spin_eligible": isWheelEligible,
 			"completed_at":  time.Now(),
 		}).Error; err != nil {

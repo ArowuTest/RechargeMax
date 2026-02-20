@@ -732,3 +732,143 @@ func (s *SpinService) releaseLock(ctx context.Context, lockID int64) error {
 	query := "SELECT pg_advisory_unlock($1)"
 	return s.db.WithContext(ctx).Exec(query, lockID).Error
 }
+
+// SpinTierResponse represents a spin tier
+type SpinTierResponse struct {
+	ID              uuid.UUID `json:"id"`
+	TierName        string    `json:"tier_name"`
+	TierDisplayName string    `json:"tier_display_name"`
+	MinDailyAmount  int64     `json:"min_daily_amount"`
+	MaxDailyAmount  int64     `json:"max_daily_amount"`
+	SpinsPerDay     int       `json:"spins_per_day"`
+	TierColor       string    `json:"tier_color"`
+	TierIcon        string    `json:"tier_icon"`
+	TierBadge       string    `json:"tier_badge"`
+	Description     string    `json:"description"`
+	SortOrder       int       `json:"sort_order"`
+	IsActive        bool      `json:"is_active"`
+}
+
+// TierProgressResponse represents user's progress towards tiers
+type TierProgressResponse struct {
+	CurrentTier      *SpinTierResponse `json:"current_tier"`
+	NextTier         *SpinTierResponse `json:"next_tier"`
+	TodayAmount      int64             `json:"today_amount"`
+	ProgressPercent  float64           `json:"progress_percent"`
+	AmountToNextTier int64             `json:"amount_to_next_tier"`
+	AvailableSpins   int               `json:"available_spins"`
+}
+
+// GetAllTiers retrieves all active spin tiers
+func (s *SpinService) GetAllTiers(ctx context.Context) ([]SpinTierResponse, error) {
+	var tiers []SpinTierResponse
+	
+	err := s.db.WithContext(ctx).
+		Table("spin_tiers").
+		Where("is_active = ?", true).
+		Order("sort_order ASC").
+		Find(&tiers).Error
+	
+	if err != nil {
+		return nil, errors.DatabaseError(err)
+	}
+	
+	return tiers, nil
+}
+
+// GetTierProgress gets user's current tier and progress
+func (s *SpinService) GetTierProgress(ctx context.Context, msisdn string) (*TierProgressResponse, error) {
+	// Get user
+	user, err := s.userRepo.FindByMSISDN(ctx, msisdn)
+	if err != nil {
+		return nil, errors.NotFound("user")
+	}
+	
+	// Calculate today's total recharge amount
+	var todayAmount int64
+	err = s.db.WithContext(ctx).
+		Table("transactions").
+		Select("COALESCE(SUM(amount), 0)").
+		Where("user_id = ? AND status = 'SUCCESS' AND DATE(created_at) = CURRENT_DATE", user.ID).
+		Scan(&todayAmount).Error
+	
+	if err != nil {
+		return nil, errors.DatabaseError(err)
+	}
+	
+	// Get all tiers
+	var tiers []SpinTierResponse
+	err = s.db.WithContext(ctx).
+		Table("spin_tiers").
+		Where("is_active = ?", true).
+		Order("sort_order ASC").
+		Find(&tiers).Error
+	
+	if err != nil {
+		return nil, errors.DatabaseError(err)
+	}
+	
+	if len(tiers) == 0 {
+		return nil, errors.Internal("No active tiers found")
+	}
+	
+	// Find current tier based on today's amount
+	var currentTier *SpinTierResponse
+	var nextTier *SpinTierResponse
+	
+	for i, tier := range tiers {
+		if todayAmount >= tier.MinDailyAmount && todayAmount <= tier.MaxDailyAmount {
+			currentTier = &tiers[i]
+			// Get next tier if exists
+			if i+1 < len(tiers) {
+				nextTier = &tiers[i+1]
+			}
+			break
+		}
+	}
+	
+	// If no tier matches, user is below minimum (Bronze)
+	if currentTier == nil {
+		nextTier = &tiers[0] // First tier (Bronze)
+	}
+	
+	// Calculate progress
+	var progressPercent float64
+	var amountToNextTier int64
+	var availableSpins int
+	
+	if currentTier != nil {
+		availableSpins = currentTier.SpinsPerDay
+		
+		if nextTier != nil {
+			// Calculate progress to next tier
+			currentTierRange := float64(currentTier.MaxDailyAmount - currentTier.MinDailyAmount)
+			currentProgress := float64(todayAmount - currentTier.MinDailyAmount)
+			progressPercent = (currentProgress / currentTierRange) * 100
+			
+			amountToNextTier = nextTier.MinDailyAmount - todayAmount
+			if amountToNextTier < 0 {
+				amountToNextTier = 0
+			}
+		} else {
+			// Already at highest tier
+			progressPercent = 100
+			amountToNextTier = 0
+		}
+	} else {
+		// Below minimum tier
+		if nextTier != nil {
+			amountToNextTier = nextTier.MinDailyAmount - todayAmount
+			progressPercent = 0
+		}
+	}
+	
+	return &TierProgressResponse{
+		CurrentTier:      currentTier,
+		NextTier:         nextTier,
+		TodayAmount:      todayAmount,
+		ProgressPercent:  progressPercent,
+		AmountToNextTier: amountToNextTier,
+		AvailableSpins:   availableSpins,
+	}, nil
+}

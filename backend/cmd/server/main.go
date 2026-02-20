@@ -679,6 +679,13 @@ func setupRouter(hdlrs *Handlers, svcs *Services) *gin.Engine {
 				spin.GET("/history", hdlrs.Spin.GetHistory) // Spin history
 			}
 
+			// Spin tiers routes (public - for displaying prizes and progress)
+			spins := v1.Group("/spins")
+			{
+				spins.GET("/tiers", hdlrs.Spin.GetTiers) // Get all spin tiers
+				spins.GET("/tier-progress", hdlrs.Spin.GetTierProgress) // Get user's tier progress
+			}
+
 			// Test routes (for development/testing)
 			test := v1.Group("/test")
 			{

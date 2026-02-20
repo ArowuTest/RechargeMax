@@ -167,3 +167,54 @@ func (h *SpinHandler) Spin(c *gin.Context) {
 	// Alias for PlaySpin to match frontend expectations
 	h.PlaySpin(c)
 }
+
+// GetTiers godoc
+// @Summary Get all spin tiers
+// @Description Get all active spin tiers with prize information
+// @Tags spin
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Failure 500 {object} errors.ErrorResponse
+// @Router /spins/tiers [get]
+func (h *SpinHandler) GetTiers(c *gin.Context) {
+	tiers, err := h.spinService.GetAllTiers(c.Request.Context())
+	if err != nil {
+		middleware.RespondWithError(c, err)
+		return
+	}
+
+	middleware.RespondWithSuccess(c, map[string]interface{}{
+		"tiers": tiers,
+	})
+}
+
+// GetTierProgress godoc
+// @Summary Get user's tier progress
+// @Description Get user's progress towards different spin tiers
+// @Tags spin
+// @Produce json
+// @Param msisdn query string true "User's MSISDN"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} errors.ErrorResponse
+// @Failure 500 {object} errors.ErrorResponse
+// @Router /spins/tier-progress [get]
+func (h *SpinHandler) GetTierProgress(c *gin.Context) {
+	msisdn := c.Query("msisdn")
+	if msisdn == "" {
+		// Try to get from JWT context
+		msisdn = c.GetString("msisdn")
+	}
+	
+	if msisdn == "" {
+		middleware.RespondWithError(c, errors.BadRequest("MSISDN required"))
+		return
+	}
+
+	progress, err := h.spinService.GetTierProgress(c.Request.Context(), msisdn)
+	if err != nil {
+		middleware.RespondWithError(c, err)
+		return
+	}
+
+	middleware.RespondWithSuccess(c, progress)
+}

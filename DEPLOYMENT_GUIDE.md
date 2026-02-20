@@ -1,481 +1,709 @@
-# RechargeMax Rewards Platform - Deployment Guide
+# RechargeMax Deployment Guide
 
-**Version:** Production-Ready v1.0  
-**Date:** February 12, 2026  
-**Status:** ✅ All Fixes Applied & Tested
-
----
-
-## 📋 Table of Contents
-
-1. [System Requirements](#system-requirements)
-2. [Quick Start](#quick-start)
-3. [Database Setup](#database-setup)
-4. [Backend Setup](#backend-setup)
-5. [Frontend Setup](#frontend-setup)
-6. [Testing](#testing)
-7. [Production Deployment](#production-deployment)
-8. [Troubleshooting](#troubleshooting)
+**Date:** February 20, 2026  
+**Status:** Production Ready  
+**Target Scale:** 50 Million Users
 
 ---
 
-## 🖥️ System Requirements
+## Architecture Overview
 
-### Minimum Requirements
-- **OS:** Windows 10/11, macOS 12+, or Ubuntu 20.04+
-- **RAM:** 4GB minimum, 8GB recommended
-- **Disk Space:** 2GB free space
-- **Network:** Internet connection for package downloads
-
-### Required Software
-- **Go:** Version 1.21+ ([Download](https://go.dev/dl/))
-- **Node.js:** Version 18+ ([Download](https://nodejs.org/))
-- **PostgreSQL:** Version 14+ ([Download](https://www.postgresql.org/download/))
-- **Git:** Latest version ([Download](https://git-scm.com/downloads))
-
----
-
-## 🚀 Quick Start
-
-### 1. Extract the Package
-```bash
-# Extract the zip file to your desired location
-unzip RechargeMax_Production_Ready.zip
-cd RechargeMax_Updated
+```
+┌─────────────────┐
+│   Cloudflare    │  (CDN, DDoS Protection, SSL)
+└────────┬────────┘
+         │
+┌────────▼────────┐
+│  Load Balancer  │  (Nginx / AWS ALB)
+└────────┬────────┘
+         │
+    ┌────┴────┐
+    │         │
+┌───▼───┐ ┌──▼────┐
+│ API 1 │ │ API 2 │  (Go Backend - Multiple Instances)
+└───┬───┘ └──┬────┘
+    │        │
+    └────┬───┘
+         │
+┌────────▼────────┐
+│   PostgreSQL    │  (Primary + Read Replicas)
+│   + Redis       │  (Caching Layer)
+└─────────────────┘
+         │
+    ┌────┴────┐
+    │         │
+┌───▼───┐ ┌──▼────┐
+│Paystack│ │VTPass │  (External Services)
+└────────┘ └───────┘
 ```
 
-### 2. Database Setup
-```bash
-# Start PostgreSQL service
-# Windows: Start from Services
-# macOS: brew services start postgresql
-# Linux: sudo systemctl start postgresql
+---
 
-# Create database and user
-psql -U postgres
-CREATE DATABASE rechargemax_db;
-CREATE USER rechargemax WITH PASSWORD 'rechargemax123';
-GRANT ALL PRIVILEGES ON DATABASE rechargemax_db TO rechargemax;
-\q
+## Prerequisites
+
+### System Requirements
+
+**Minimum (Development):**
+- CPU: 2 cores
+- RAM: 4GB
+- Storage: 20GB SSD
+- OS: Ubuntu 22.04 LTS
+
+**Recommended (Production):**
+- CPU: 8 cores (16 for high traffic)
+- RAM: 16GB (32GB for high traffic)
+- Storage: 100GB SSD (with auto-scaling)
+- OS: Ubuntu 22.04 LTS
+
+### Software Dependencies
+
+- **Go:** 1.21+
+- **PostgreSQL:** 15+
+- **Redis:** 7+
+- **Node.js:** 20+
+- **Nginx:** 1.24+
+- **Docker:** 24+ (optional)
+- **Git:** 2.40+
+
+---
+
+## Environment Setup
+
+### 1. Clone Repository
+
+```bash
+git clone https://github.com/yourusername/RechargeMax_Clean.git
+cd RechargeMax_Clean
 ```
 
-### 3. Load Database Schema & Seed Data
+### 2. Configure Environment Variables
+
+**Backend (.env):**
+
 ```bash
-# Navigate to backend directory
 cd backend
-
-# Run the backend once to create tables (GORM AutoMigrate)
-go run cmd/server/main.go
-# Press Ctrl+C after you see "RechargeMax Rewards Platform - READY!"
-
-# Load production seed data
-psql -U rechargemax -d rechargemax_db -f ../database/seeds/MASTER_PRODUCTION_SEED_CORRECTED.sql
+cp .env.example .env
+nano .env
 ```
 
-### 4. Start Backend
+**Required Variables:**
+
+```env
+# Database
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=rechargemax_user
+DB_PASSWORD=your_secure_password_here
+DB_NAME=rechargemax_db
+DB_SSLMODE=disable  # Use 'require' in production
+
+# JWT
+JWT_SECRET=your_jwt_secret_here_min_32_chars
+JWT_EXPIRY=24h
+
+# Paystack (Production Keys)
+PAYSTACK_SECRET_KEY=sk_live_xxxxxxxxxxxxx
+PAYSTACK_PUBLIC_KEY=pk_live_xxxxxxxxxxxxx
+PAYSTACK_WEBHOOK_SECRET=whsec_xxxxxxxxxxxxx
+
+# VTPass (Production Keys)
+VTPASS_API_KEY=your_vtpass_api_key
+VTPASS_SECRET_KEY=your_vtpass_secret_key
+VTPASS_BASE_URL=https://api.vtpass.com/api
+
+# Server
+PORT=8080
+ENV=production
+CORS_ORIGINS=https://yourdomain.com
+
+# Redis
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=your_redis_password
+
+# Email (for notifications)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=noreply@yourdomain.com
+SMTP_PASSWORD=your_smtp_password
+
+# SMS (for OTP)
+SMS_API_KEY=your_sms_api_key
+SMS_SENDER_ID=RechargeMax
+
+# Monitoring
+SENTRY_DSN=https://xxxxx@sentry.io/xxxxx
+```
+
+**Frontend (.env):**
+
 ```bash
-# In backend directory
-go run cmd/server/main.go
-
-# Backend will start on http://localhost:8080
+cd ../frontend
+cp .env.example .env
+nano .env
 ```
 
-### 5. Start Frontend
-```bash
-# In a new terminal, navigate to frontend directory
-cd frontend
-
-# Install dependencies (first time only)
-npm install
-
-# Start development server
-npm run dev
-
-# Frontend will start on http://localhost:5173
+```env
+VITE_API_BASE_URL=https://api.yourdomain.com
+VITE_PAYSTACK_PUBLIC_KEY=pk_live_xxxxxxxxxxxxx
+VITE_APP_NAME=RechargeMax Rewards
+VITE_APP_URL=https://yourdomain.com
 ```
-
-### 6. Access the Platform
-- **User Portal:** http://localhost:5173
-- **Admin Portal:** http://localhost:5173/admin
-- **API Documentation:** http://localhost:8080/api/v1
-- **Health Check:** http://localhost:8080/health
 
 ---
 
-## 🗄️ Database Setup
+## Database Setup
 
-### PostgreSQL Installation
+### 1. Install PostgreSQL
 
-#### Windows
-1. Download PostgreSQL from https://www.postgresql.org/download/windows/
-2. Run the installer
-3. Set password for `postgres` user
-4. Add PostgreSQL to PATH
-
-#### macOS
-```bash
-brew install postgresql@14
-brew services start postgresql@14
-```
-
-#### Linux (Ubuntu/Debian)
 ```bash
 sudo apt update
-sudo apt install postgresql postgresql-contrib
+sudo apt install postgresql postgresql-contrib -y
 sudo systemctl start postgresql
 sudo systemctl enable postgresql
 ```
 
-### Create Database
+### 2. Create Database and User
+
+```bash
+sudo -u postgres psql
+```
+
 ```sql
--- Connect to PostgreSQL
-psql -U postgres
-
--- Create database
 CREATE DATABASE rechargemax_db;
-
--- Create user
-CREATE USER rechargemax WITH PASSWORD 'rechargemax123';
-
--- Grant privileges
-GRANT ALL PRIVILEGES ON DATABASE rechargemax_db TO rechargemax;
-
--- Connect to the database
-\c rechargemax_db
-
--- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
--- Exit
+CREATE USER rechargemax_user WITH ENCRYPTED PASSWORD 'your_secure_password';
+GRANT ALL PRIVILEGES ON DATABASE rechargemax_db TO rechargemax_user;
 \q
 ```
 
-### Load Seed Data
-```bash
-# The seed file contains:
-# - 4 Network Configurations (MTN, Airtel, Glo, 9mobile)
-# - 66 Data Plans
-# - 4 Subscription Tiers
-# - 15 Wheel Prizes
-# - 1 Admin User (admin@rechargemax.ng / Admin@123456)
+### 3. Run Migrations
 
-psql -U rechargemax -d rechargemax_db -f database/seeds/MASTER_PRODUCTION_SEED_CORRECTED.sql
-```
-
----
-
-## 🔧 Backend Setup
-
-### Environment Configuration
-
-The backend uses environment variables from `.env` file. The file is already configured with development defaults.
-
-**Key Environment Variables:**
-```env
-DATABASE_URL=postgresql://rechargemax:rechargemax123@localhost:5432/rechargemax_db?sslmode=disable
-JWT_SECRET=rechargemax_super_secret_key_2026_production_ready
-PORT=8080
-GIN_MODE=debug
-```
-
-### Install Dependencies
 ```bash
 cd backend
-go mod download
+go run cmd/migrate/main.go up
 ```
 
-### Build the Backend
+**Verify:**
+
 ```bash
-# Development build
-go build -o rechargemax cmd/server/main.go
-
-# Production build (optimized)
-go build -ldflags="-s -w" -o rechargemax cmd/server/main.go
+psql -U rechargemax_user -d rechargemax_db -c "\dt"
 ```
 
-### Run the Backend
+**Expected:** 36 tables listed
+
+### 4. Seed Essential Data
+
 ```bash
-# Development mode (with hot reload)
-go run cmd/server/main.go
-
-# Production mode (using compiled binary)
-./rechargemax
+psql -U rechargemax_user -d rechargemax_db < seeds/essential_data.sql
 ```
 
-### Verify Backend is Running
-```bash
-# Health check
-curl http://localhost:8080/health
-
-# Test admin login
-curl -X POST http://localhost:8080/api/v1/admin/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@rechargemax.ng","password":"Admin@123456"}'
-```
+**Tables Seeded:**
+- `networks` (MTN, Airtel, Glo, 9mobile)
+- `spin_tiers` (Bronze, Silver, Gold, Platinum, Diamond)
+- `provider_configs` (VTPass configuration)
+- `system_configs` (platform settings)
 
 ---
 
-## 🎨 Frontend Setup
+## Backend Deployment
 
-### Install Dependencies
-```bash
-cd frontend
-npm install
-```
+### Option 1: Direct Deployment (Systemd)
 
-### Environment Configuration
+**1. Build Binary:**
 
-The frontend is pre-configured to connect to `http://localhost:8080` for the backend API.
-
-If you need to change the API URL, update `frontend/src/lib/api-client.ts`:
-```typescript
-const API_BASE_URL = 'http://localhost:8080';
-```
-
-### Development Server
-```bash
-npm run dev
-# Frontend will start on http://localhost:5173
-```
-
-### Production Build
-```bash
-npm run build
-# Build output will be in frontend/dist/
-```
-
-### Preview Production Build
-```bash
-npm run preview
-```
-
----
-
-## 🧪 Testing
-
-### Backend Tests
 ```bash
 cd backend
-go test ./...
+go build -o rechargemax-api cmd/api/main.go
 ```
 
-### Frontend Tests
+**2. Create Systemd Service:**
+
+```bash
+sudo nano /etc/systemd/system/rechargemax-api.service
+```
+
+```ini
+[Unit]
+Description=RechargeMax API Service
+After=network.target postgresql.service redis.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/RechargeMax_Clean/backend
+ExecStart=/home/ubuntu/RechargeMax_Clean/backend/rechargemax-api
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/rechargemax/api.log
+StandardError=append:/var/log/rechargemax/api-error.log
+
+Environment="ENV=production"
+EnvironmentFile=/home/ubuntu/RechargeMax_Clean/backend/.env
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**3. Start Service:**
+
+```bash
+sudo mkdir -p /var/log/rechargemax
+sudo systemctl daemon-reload
+sudo systemctl start rechargemax-api
+sudo systemctl enable rechargemax-api
+sudo systemctl status rechargemax-api
+```
+
+### Option 2: Docker Deployment
+
+**1. Build Image:**
+
+```bash
+cd backend
+docker build -t rechargemax-api:latest .
+```
+
+**2. Run Container:**
+
+```bash
+docker run -d \
+  --name rechargemax-api \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  --env-file .env \
+  rechargemax-api:latest
+```
+
+### Option 3: Docker Compose (Recommended)
+
+**docker-compose.yml:**
+
+```yaml
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: rechargemax-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: rechargemax_db
+      POSTGRES_USER: rechargemax_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rechargemax_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: rechargemax-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rechargemax-api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - ./backend/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./backend/logs:/app/logs
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: rechargemax-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  redis_data:
+```
+
+**Deploy:**
+
+```bash
+docker-compose up -d
+docker-compose logs -f
+```
+
+---
+
+## Frontend Deployment
+
+### Option 1: Static Hosting (Vercel/Netlify)
+
+**1. Build:**
+
 ```bash
 cd frontend
-npm run test
+pnpm install
+pnpm run build
 ```
 
-### Manual Testing Checklist
+**2. Deploy to Vercel:**
 
-#### Admin Portal
-1. ✅ Login at http://localhost:5173/admin
-   - Email: `admin@rechargemax.ng`
-   - Password: `Admin@123456`
+```bash
+vercel --prod
+```
 
-2. ✅ Dashboard
-   - View statistics
-   - Check charts and graphs
+**3. Configure Environment:**
 
-3. ✅ User Management
-   - View all users
-   - Search users
-   - Update user status
+- Add environment variables in Vercel dashboard
+- Set build command: `pnpm run build`
+- Set output directory: `dist`
 
-4. ✅ Recharge Monitoring
-   - View transactions
-   - Filter by status
-   - Retry failed transactions
+### Option 2: Nginx Hosting
 
-5. ✅ Affiliate Management
-   - View affiliates
-   - Approve/reject applications
-   - View statistics
+**1. Build:**
 
-6. ✅ Network Configuration
-   - View networks
-   - View data plans
-   - Update configurations
+```bash
+cd frontend
+pnpm install
+pnpm run build
+```
 
-7. ✅ Wheel Prizes
-   - View prizes
-   - Update probabilities
-   - Manage inventory
+**2. Copy to Nginx:**
 
-#### User Portal
-1. ✅ Homepage
-2. ✅ Recharge flow
-3. ✅ Spin-to-win
-4. ✅ Points system
-5. ✅ Affiliate program
+```bash
+sudo cp -r dist/* /var/www/rechargemax/
+```
+
+**3. Configure Nginx:**
+
+```bash
+sudo nano /etc/nginx/sites-available/rechargemax
+```
+
+```nginx
+server {
+    listen 80;
+    server_name yourdomain.com www.yourdomain.com;
+
+    root /var/www/rechargemax;
+    index index.html;
+
+    # SPA routing
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # API proxy
+    location /api {
+        proxy_pass http://localhost:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+
+    # Gzip compression
+    gzip on;
+    gzip_vary on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+}
+```
+
+**4. Enable Site:**
+
+```bash
+sudo ln -s /etc/nginx/sites-available/rechargemax /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+**5. SSL Certificate (Let's Encrypt):**
+
+```bash
+sudo apt install certbot python3-certbot-nginx -y
+sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com
+```
 
 ---
 
-## 🚀 Production Deployment
+## Redis Setup
 
-### Backend Deployment (Render.com)
+```bash
+sudo apt install redis-server -y
+sudo nano /etc/redis/redis.conf
+```
 
-1. **Create PostgreSQL Database**
-   - Go to Render Dashboard
-   - Create new PostgreSQL database
-   - Copy the Internal Database URL
+**Configure:**
 
-2. **Create Web Service**
-   - Create new Web Service
-   - Connect your Git repository
-   - Build Command: `go build -o rechargemax cmd/server/main.go`
-   - Start Command: `./rechargemax`
-   - Add environment variables:
-     ```
-     DATABASE_URL=<your_render_postgres_url>
-     JWT_SECRET=<generate_with_openssl_rand_-hex_32>
-     PORT=8080
-     GIN_MODE=release
-     ENVIRONMENT=production
-     ```
+```conf
+bind 127.0.0.1
+requirepass your_redis_password
+maxmemory 2gb
+maxmemory-policy allkeys-lru
+```
 
-3. **Load Seed Data**
-   ```bash
-   # Connect to Render PostgreSQL
-   psql <your_render_postgres_url>
-   
-   # Load seed data
-   \i database/seeds/MASTER_PRODUCTION_SEED_CORRECTED.sql
-   ```
+**Start:**
 
-### Frontend Deployment (Vercel/Netlify)
-
-1. **Build the Frontend**
-   ```bash
-   cd frontend
-   npm run build
-   ```
-
-2. **Deploy to Vercel**
-   ```bash
-   npm install -g vercel
-   vercel --prod
-   ```
-
-3. **Update API URL**
-   - Update `frontend/src/lib/api-client.ts` with your Render backend URL
-   - Rebuild and redeploy
+```bash
+sudo systemctl start redis-server
+sudo systemctl enable redis-server
+```
 
 ---
 
-## 🐛 Troubleshooting
+## Monitoring & Logging
 
-### Backend Issues
+### 1. Application Logs
 
-#### "Database connection failed"
+**Backend Logs:**
+
 ```bash
-# Check PostgreSQL is running
-# Windows: Check Services
-# macOS: brew services list
-# Linux: sudo systemctl status postgresql
-
-# Verify credentials
-psql -U rechargemax -d rechargemax_db
+tail -f /var/log/rechargemax/api.log
 ```
 
-#### "Port 8080 already in use"
-```bash
-# Find process using port 8080
-# Windows: netstat -ano | findstr :8080
-# macOS/Linux: lsof -i :8080
+**Nginx Logs:**
 
-# Kill the process or change PORT in .env
+```bash
+tail -f /var/log/nginx/access.log
+tail -f /var/log/nginx/error.log
 ```
 
-#### "JWT_SECRET is required"
-```bash
-# Generate a new JWT secret
-openssl rand -hex 32
+### 2. Database Monitoring
 
-# Add to backend/.env
-JWT_SECRET=<generated_secret>
-```
+**Check Connections:**
 
-### Frontend Issues
-
-#### "Cannot connect to backend"
-```bash
-# Verify backend is running
-curl http://localhost:8080/health
-
-# Check API_BASE_URL in frontend/src/lib/api-client.ts
-```
-
-#### "npm install fails"
-```bash
-# Clear npm cache
-npm cache clean --force
-
-# Delete node_modules and package-lock.json
-rm -rf node_modules package-lock.json
-
-# Reinstall
-npm install
-```
-
-### Database Issues
-
-#### "Extension uuid-ossp does not exist"
 ```sql
--- Connect to database
-psql -U rechargemax -d rechargemax_db
-
--- Enable extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+SELECT count(*) FROM pg_stat_activity;
 ```
 
-#### "Permission denied for database"
+**Slow Queries:**
+
 ```sql
--- Connect as postgres user
-psql -U postgres
+SELECT query, calls, total_time, mean_time
+FROM pg_stat_statements
+ORDER BY mean_time DESC
+LIMIT 10;
+```
 
--- Grant all privileges
-GRANT ALL PRIVILEGES ON DATABASE rechargemax_db TO rechargemax;
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO rechargemax;
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO rechargemax;
+### 3. Performance Monitoring
+
+**Install Prometheus + Grafana:**
+
+```bash
+docker run -d --name prometheus -p 9090:9090 prom/prometheus
+docker run -d --name grafana -p 3001:3000 grafana/grafana
+```
+
+**Metrics Endpoint:**
+
+```go
+// Add to main.go
+import "github.com/prometheus/client_golang/prometheus/promhttp"
+
+router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 ```
 
 ---
 
-## 📞 Support
+## Security Checklist
 
-For issues or questions:
-- **Documentation:** Check this guide first
-- **Logs:** Check `backend/server.log` for backend errors
-- **Browser Console:** Check for frontend errors
-
----
-
-## ✅ What's Included
-
-### Backend (100% Complete)
-- ✅ 15 New Admin API Endpoints
-- ✅ 4 New Services (Recharge, User, Affiliate, Telecom)
-- ✅ Database Schema Aligned with Entities
-- ✅ GORM AutoMigrate for Table Creation
-- ✅ Enterprise-Grade Error Handling
-- ✅ JWT Authentication
-- ✅ Admin Authorization
-
-### Frontend (100% Complete)
-- ✅ Supabase Dependencies Removed
-- ✅ 3 New Admin APIs Integrated
-- ✅ All Components with Default Exports
-- ✅ Admin Portal Fully Functional
-- ✅ 20 Admin Modules Accessible
-
-### Database (100% Complete)
-- ✅ 48 Tables with Clean Names
-- ✅ Schema Aligned with Entities
-- ✅ Production Seed Data
-- ✅ Admin User Created
-- ✅ Networks & Data Plans Loaded
+✅ **Environment Variables:** Never commit .env files  
+✅ **Database:** Use strong passwords, enable SSL  
+✅ **API:** Rate limiting enabled (100 req/min per IP)  
+✅ **CORS:** Restrict to production domain only  
+✅ **JWT:** Use strong secret (min 32 chars)  
+✅ **HTTPS:** Force SSL redirect  
+✅ **Webhooks:** Verify signatures (Paystack)  
+✅ **SQL Injection:** Use parameterized queries (GORM)  
+✅ **XSS:** Sanitize user inputs  
+✅ **CSRF:** Use CSRF tokens  
+✅ **Firewall:** Only expose ports 80, 443  
+✅ **Backups:** Daily automated backups  
 
 ---
 
-**Champion Developer**  
-**February 12, 2026**
+## Backup Strategy
+
+### Database Backup
+
+**Daily Backup Script:**
+
+```bash
+#!/bin/bash
+BACKUP_DIR="/backups/postgres"
+DATE=$(date +%Y%m%d_%H%M%S)
+BACKUP_FILE="$BACKUP_DIR/rechargemax_$DATE.sql.gz"
+
+mkdir -p $BACKUP_DIR
+
+pg_dump -U rechargemax_user rechargemax_db | gzip > $BACKUP_FILE
+
+# Keep only last 30 days
+find $BACKUP_DIR -name "*.sql.gz" -mtime +30 -delete
+
+echo "Backup completed: $BACKUP_FILE"
+```
+
+**Cron Job:**
+
+```bash
+crontab -e
+```
+
+```cron
+0 2 * * * /home/ubuntu/scripts/backup_db.sh
+```
+
+### Restore Backup
+
+```bash
+gunzip -c /backups/postgres/rechargemax_20260220.sql.gz | \
+  psql -U rechargemax_user rechargemax_db
+```
+
+---
+
+## Scaling Strategy
+
+### Horizontal Scaling (50M Users)
+
+**1. Load Balancer:**
+- Use AWS ALB or Nginx
+- Distribute traffic across multiple API instances
+
+**2. Database:**
+- **Primary:** Write operations
+- **Read Replicas:** Read operations (3-5 replicas)
+- **Connection Pooling:** PgBouncer (max 1000 connections)
+
+**3. Caching:**
+- **Redis Cluster:** 3 master + 3 replica nodes
+- Cache: User sessions, API responses, spin tiers
+
+**4. CDN:**
+- Cloudflare for static assets
+- Edge caching for API responses
+
+**5. Queue System:**
+- RabbitMQ or AWS SQS for async tasks
+- Process recharges, send emails, SMS
+
+### Vertical Scaling
+
+**Database:**
+- Upgrade to 32GB RAM, 16 cores
+- Use SSD storage (NVMe)
+
+**API Servers:**
+- 16GB RAM, 8 cores per instance
+- Auto-scaling: 2-10 instances
+
+---
+
+## Troubleshooting
+
+### Issue 1: Database Connection Failed
+
+**Error:** `pq: password authentication failed`
+
+**Solution:**
+```bash
+# Check .env file
+cat backend/.env | grep DB_
+
+# Test connection
+psql -U rechargemax_user -d rechargemax_db -h localhost
+```
+
+### Issue 2: Migrations Failed
+
+**Error:** `migration 036 already applied`
+
+**Solution:**
+```bash
+# Check migration status
+go run cmd/migrate/main.go version
+
+# Rollback if needed
+go run cmd/migrate/main.go down 1
+
+# Re-apply
+go run cmd/migrate/main.go up
+```
+
+### Issue 3: Paystack Webhook Not Received
+
+**Solution:**
+1. Check webhook URL in Paystack dashboard
+2. Verify webhook secret in .env
+3. Check firewall allows incoming connections
+4. Test with Paystack webhook tester
+
+---
+
+## Production Checklist
+
+✅ All environment variables set  
+✅ Database migrations applied  
+✅ Essential data seeded  
+✅ SSL certificate installed  
+✅ Firewall configured  
+✅ Backups scheduled  
+✅ Monitoring enabled  
+✅ Load testing completed  
+✅ Security audit passed  
+✅ Documentation updated  
+✅ Team trained on deployment process  
+
+---
+
+## Support & Maintenance
+
+**Monitoring:**
+- Check logs daily
+- Monitor error rates
+- Track API response times
+
+**Updates:**
+- Apply security patches weekly
+- Update dependencies monthly
+- Database maintenance quarterly
+
+**Incident Response:**
+- On-call rotation (24/7)
+- Incident response playbook
+- Post-mortem after major incidents
+
+---
+
+**Prepared By:** Engineering Team  
+**Last Updated:** February 20, 2026  
+**Version:** 1.0

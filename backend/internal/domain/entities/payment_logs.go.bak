@@ -1,0 +1,35 @@
+package entities
+
+import (
+	"time"
+
+	"gorm.io/datatypes"
+)
+
+// PaymentLogs represents the payment_logs table
+type PaymentLogs struct {
+	EventType        string         `json:"event_type" gorm:"column:event_type"`
+	PaymentProvider  string         `json:"payment_provider" gorm:"column:payment_provider"`
+	PaymentReference string         `json:"payment_reference" gorm:"column:payment_reference"`
+	RequestPayload   datatypes.JSON `json:"request_payload" gorm:"column:request_payload"`
+	ResponsePayload  datatypes.JSON `json:"response_payload" gorm:"column:response_payload"`
+	StatusCode       *int           `json:"status_code" gorm:"column:status_code"`
+	ErrorMessage     string         `json:"error_message" gorm:"column:error_message"`
+	ErrorCode        string         `json:"error_code" gorm:"column:error_code"`
+	IpAddress        string         `json:"ip_address" gorm:"column:ip_address"`
+	UserAgent        string         `json:"user_agent" gorm:"column:user_agent"`
+	RequestId        string         `json:"request_id" gorm:"column:request_id"`
+	ResponseTimeMs   *int           `json:"response_time_ms" gorm:"column:response_time_ms"`
+	Amount           *float64       `json:"amount" gorm:"column:amount"`
+	Currency         string         `json:"currency" gorm:"column:currency"`
+	PaymentMethod    string         `json:"payment_method" gorm:"column:payment_method"`
+	IsSuccessful     *bool          `json:"is_successful" gorm:"column:is_successful"`
+	IsRetry          *bool          `json:"is_retry" gorm:"column:is_retry"`
+	RetryCount       *int           `json:"retry_count" gorm:"column:retry_count"`
+	CreatedAt        *time.Time     `json:"created_at" gorm:"column:created_at"`
+}
+
+// TableName specifies the table name for PaymentLogs
+func (PaymentLogs) TableName() string {
+	return "payment_logs"
+}

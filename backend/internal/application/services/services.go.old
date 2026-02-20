@@ -1,0 +1,38 @@
+package services
+
+import (
+	"gorm.io/gorm"
+	"rechargemax/internal/config"
+)
+
+// Services holds all service instances
+type Services struct {
+	Auth             *AuthService
+	User             *UserService
+	Recharge         *RechargeService
+	WheelSpin        *WheelSpinService
+	Affiliate        *AffiliateService
+	Subscription     *SubscriptionService
+	Device           *DeviceService
+	PushNotification *PushNotificationService
+	NetworkConfig    *NetworkConfigService // Strategic service for all network operations
+}
+
+// NewServices creates a new services container
+func NewServices(cfg *config.Config, db *gorm.DB) *Services {
+	bridgetuneService := NewBridgetuneService(db, cfg)
+	networkConfigService := NewNetworkConfigService(db, cfg) // Strategic service initialization
+	
+	return &Services{
+		Auth:             NewAuthService(db, cfg),
+		User:             NewUserService(db),
+		Recharge:         NewRechargeService(db, cfg),
+		WheelSpin:        NewWheelSpinService(db),
+		Affiliate:        NewAffiliateService(db),
+		Subscription:     NewSubscriptionService(db, cfg, bridgetuneService),
+		Device:           NewDeviceService(db),
+		PushNotification: NewPushNotificationService(db, cfg),
+		NetworkConfig:    networkConfigService,
+	}
+}
+

@@ -1,0 +1,33 @@
+package entities
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/datatypes"
+)
+
+// AffiliatePayouts represents the affiliate_payouts table
+type AffiliatePayouts struct {
+	PayoutBatchId   *uuid.UUID     `json:"payout_batch_id" gorm:"column:payout_batch_id"`
+	CommissionCount int            `json:"commission_count" gorm:"column:commission_count;not null" validate:"required"`
+	CommissionIds   datatypes.JSON `json:"commission_ids" gorm:"column:commission_ids"`
+	PayoutMethod    string         `json:"payout_method" gorm:"column:payout_method"`
+	BankName        string         `json:"bank_name" gorm:"column:bank_name"`
+	AccountNumber   string         `json:"account_number" gorm:"column:account_number"`
+	AccountName     string         `json:"account_name" gorm:"column:account_name"`
+	PayoutStatus    string         `json:"payout_status" gorm:"column:payout_status"`
+	PayoutReference string         `json:"payout_reference" gorm:"column:payout_reference"`
+	PayoutFee       *float64       `json:"payout_fee" gorm:"column:payout_fee"`
+	NetAmount       float64        `json:"net_amount" gorm:"column:net_amount;not null" validate:"required"`
+	ProcessedAt     *time.Time     `json:"processed_at" gorm:"column:processed_at"`
+	FailureReason   string         `json:"failure_reason" gorm:"column:failure_reason"`
+	Notes           string         `json:"notes" gorm:"column:notes"`
+	CreatedAt       *time.Time     `json:"created_at" gorm:"column:created_at"`
+	UpdatedAt       *time.Time     `json:"updated_at" gorm:"column:updated_at"`
+}
+
+// TableName specifies the table name for AffiliatePayouts
+func (AffiliatePayouts) TableName() string {
+	return "affiliate_payouts"
+}

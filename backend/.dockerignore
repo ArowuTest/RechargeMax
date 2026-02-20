@@ -1,0 +1,44 @@
+# Git
+.git
+.gitignore
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+rechargemax
+main
+
+# Test files
+*_test.go
+testdata
+
+# Documentation
+*.md
+docs/
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/

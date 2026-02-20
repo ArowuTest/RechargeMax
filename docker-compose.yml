@@ -1,0 +1,122 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:14-alpine
+    container_name: rechargemax_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: rechargemax_db
+      POSTGRES_USER: rechargemax
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-rechargemax123}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/seeds:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rechargemax -d rechargemax_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rechargemax_network
+
+  # Backend API (Go/Gin)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rechargemax_backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # Database
+      DATABASE_URL: postgresql://rechargemax:${DB_PASSWORD:-rechargemax123}@postgres:5432/rechargemax_db?sslmode=disable
+      
+      # JWT
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
+      
+      # Paystack
+      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY}
+      PAYSTACK_PUBLIC_KEY: ${PAYSTACK_PUBLIC_KEY}
+      
+      # VTPass
+      VTPASS_API_KEY: ${VTPASS_API_KEY}
+      VTPASS_PUBLIC_KEY: ${VTPASS_PUBLIC_KEY}
+      VTPASS_SECRET_KEY: ${VTPASS_SECRET_KEY}
+      VTPASS_SANDBOX_MODE: ${VTPASS_SANDBOX_MODE:-true}
+      VTPASS_BASE_URL: ${VTPASS_BASE_URL:-https://sandbox.vtpass.com/api}
+      
+      # Server
+      PORT: 8080
+      GIN_MODE: ${GIN_MODE:-release}
+      
+      # CORS
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8081,http://localhost}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - rechargemax_network
+    volumes:
+      - ./backend/logs:/app/logs
+
+  # Frontend (React/Vite)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
+    container_name: rechargemax_frontend
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - rechargemax_network
+
+  # Nginx Reverse Proxy (Optional - for production)
+  nginx:
+    image: nginx:alpine
+    container_name: rechargemax_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - rechargemax_network
+    profiles:
+      - production
+
+networks:
+  rechargemax_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local

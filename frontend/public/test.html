@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>React Test</title>
+</head>
+<body>
+  <div id="test-root"></div>
+  <script type="module">
+    import React from 'http://localhost:8081/node_modules/.vite/deps/react.js?v=0afbbaeb';
+    import ReactDOM from 'http://localhost:8081/node_modules/.vite/deps/react-dom_client.js?v=0afbbaeb';
+    
+    console.log('Test: React loaded', React);
+    console.log('Test: ReactDOM loaded', ReactDOM);
+    
+    const root = ReactDOM.createRoot(document.getElementById('test-root'));
+    console.log('Test: Root created', root);
+    
+    root.render(React.createElement('h1', {}, 'React is working!'));
+    console.log('Test: Render called');
+  </script>
+</body>
+</html>

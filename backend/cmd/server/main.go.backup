@@ -1,0 +1,491 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+
+	"rechargemax/internal/application/services"
+	"rechargemax/internal/domain/repositories"
+	"rechargemax/internal/infrastructure/persistence"
+	"rechargemax/internal/middleware"
+	"rechargemax/internal/presentation/handlers"
+)
+
+func main() {
+	log.Println("🚀 Starting RechargeMax Rewards Platform...")
+
+	// Load configuration from environment
+	config := loadConfig()
+	
+	// Initialize database
+	db, err := initDatabase(config.DatabaseURL)
+	if err != nil {
+		log.Fatalf("❌ Failed to connect to database: %v", err)
+	}
+	log.Println("✅ Database connected successfully")
+
+	// Initialize repositories
+	repos := initRepositories(db)
+	log.Println("✅ Repositories initialized")
+
+	// Initialize services
+	svcs := initServices(repos, config, db)
+	log.Println("✅ Services initialized")
+
+	// Initialize handlers
+	hdlrs := initHandlers(svcs, db)
+	log.Println("✅ Handlers initialized")
+
+	// Setup router
+	router := setupRouter(hdlrs, svcs)
+	log.Println("✅ Router configured")
+
+	// Start server
+	srv := &http.Server{
+		Addr:         ":" + config.Port,
+		Handler:      router,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	// Start server in goroutine
+	go func() {
+		log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		log.Println("🎉 RechargeMax Rewards Platform - READY!")
+		log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		log.Printf("🌐 Server: http://localhost:%s", config.Port)
+		log.Printf("📊 Health: http://localhost:%s/health", config.Port)
+		log.Printf("🔌 API v1: http://localhost:%s/api/v1", config.Port)
+		log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("❌ Server failed to start: %v", err)
+		}
+	}()
+
+	// Wait for interrupt signal
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	log.Println("\n🛑 Shutting down server...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("❌ Server forced to shutdown: %v", err)
+	}
+
+	log.Println("✅ Server exited gracefully")
+}
+
+// Config holds application configuration
+type Config struct {
+	DatabaseURL       string
+	Port              string
+	PaystackKey       string
+	FlutterwaveKey    string
+	TermiiKey         string
+	SendgridKey       string
+	FCMKey            string
+	JWTSecret         string
+	Environment       string
+}
+
+func loadConfig() *Config {
+	return &Config{
+		DatabaseURL:    getEnv("DATABASE_URL", ""),
+		Port:           getEnv("PORT", "8080"),
+		PaystackKey:    getEnv("PAYSTACK_SECRET_KEY", ""),
+		FlutterwaveKey: getEnv("FLUTTERWAVE_SECRET_KEY", ""),
+		TermiiKey:      getEnv("TERMII_API_KEY", ""),
+		SendgridKey:    getEnv("SENDGRID_API_KEY", ""),
+		FCMKey:         getEnv("FCM_SERVER_KEY", ""),
+		JWTSecret:      getEnv("JWT_SECRET", "rechargemax-secret-key-change-in-production"),
+		Environment:    getEnv("ENVIRONMENT", "development"),
+	}
+}
+
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+func initDatabase(dbURL string) (*gorm.DB, error) {
+	if dbURL == "" {
+		return nil, fmt.Errorf("DATABASE_URL environment variable is required")
+	}
+
+	db, err := gorm.Open(postgres.Open(dbURL), &gorm.Config{})
+	if err != nil {
+		return nil, err
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, err
+	}
+
+	sqlDB.SetMaxIdleConns(10)
+	sqlDB.SetMaxOpenConns(100)
+	sqlDB.SetConnMaxLifetime(time.Hour)
+
+	if err := sqlDB.Ping(); err != nil {
+		return nil, fmt.Errorf("database ping failed: %w", err)
+	}
+
+	return db, nil
+}
+
+// Repositories holds all repository instances
+type Repositories struct {
+	User              repositories.UserRepository
+	OTP               repositories.OTPRepository
+	Transaction       repositories.TransactionRepository
+	Subscription      repositories.SubscriptionRepository
+	Spin              repositories.SpinRepository
+	Wallet            repositories.WalletRepository
+	WalletTransaction repositories.WalletTransactionRepository
+	Affiliate         repositories.AffiliateRepository
+	BankAccount       repositories.BankAccountRepository
+	Withdrawal        repositories.WithdrawalRepository
+	Draw              repositories.DrawRepository
+	Winner            repositories.WinnerRepository
+	NetworkCache      repositories.NetworkCacheRepository
+	Network           repositories.NetworkRepository
+	Device            repositories.DeviceRepository
+	Notification      repositories.NotificationRepository
+	AuditLog          repositories.AuditLogRepository
+	Admin             repositories.AdminRepository
+	PaymentLog        repositories.PaymentLogRepository
+}
+
+func initRepositories(db *gorm.DB) *Repositories {
+	return &Repositories{
+		User:              persistence.NewUserRepository(db),
+		OTP:               persistence.NewOTPRepository(db),
+		Transaction:       persistence.NewTransactionRepository(db),
+		Subscription:      persistence.NewSubscriptionRepository(db),
+		Spin:              persistence.NewSpinRepository(db),
+		Wallet:            persistence.NewWalletRepository(db),
+		WalletTransaction: persistence.NewWalletTransactionRepository(db),
+		Affiliate:         persistence.NewAffiliateRepository(db),
+		BankAccount:       persistence.NewBankAccountRepository(db),
+		Withdrawal:        persistence.NewWithdrawalRepository(db),
+		Draw:              persistence.NewDrawRepository(db),
+		Winner:            persistence.NewWinnerRepository(db),
+		NetworkCache:      persistence.NewNetworkCacheRepository(db),
+		Network:           persistence.NewNetworkRepository(db),
+		Device:            persistence.NewDeviceRepository(db),
+		Notification:      persistence.NewNotificationRepository(db),
+		AuditLog:          persistence.NewAuditLogRepository(db),
+		Admin:             persistence.NewAdminRepository(db),
+		PaymentLog:        persistence.NewPaymentLogRepository(db),
+	}
+}
+
+// Services holds all service instances
+type Services struct {
+	Auth         *services.AuthService
+	User         *services.UserService
+	Recharge     *services.RechargeService
+	Payment      *services.PaymentService
+	Wallet       *services.WalletService
+	Affiliate    *services.AffiliateService
+	Subscription *services.SubscriptionService
+	Spin         *services.SpinService
+	HLR          *services.HLRService
+	Telecom      *services.TelecomService
+	NetworkConfig *services.NetworkConfigService
+	Draw         *services.DrawService
+	Winner       *services.WinnerService
+	Notification *services.NotificationService
+	Device       *services.DeviceService
+	PushNotification *services.PushNotificationService
+	FraudDetection *services.FraudDetectionService
+}
+
+func initServices(repos *Repositories, config *Config, db *gorm.DB) *Services {
+	// Initialize core services first
+	paymentService := services.NewPaymentService(config.PaystackKey, config.FlutterwaveKey)
+	hlrService := services.NewHLRService(repos.NetworkCache, config.TermiiKey)
+	deviceService := services.NewDeviceService(repos.Device)
+	pushNotificationService := services.NewPushNotificationService(config.FCMKey, deviceService)
+	
+	notificationService := services.NewNotificationService(
+		repos.Notification,
+		repos.Device,
+		repos.User,
+		config.TermiiKey,
+		config.SendgridKey,
+		config.FCMKey,
+	)
+
+	walletService := services.NewWalletService(
+		repos.Wallet,
+		repos.WalletTransaction,
+		paymentService,
+	)
+
+	affiliateService := services.NewAffiliateService(
+		repos.Affiliate,
+		repos.User,
+		persistence.NewAffiliateCommissionRepository(db), // Add commission repo
+		repos.Transaction,
+		walletService,
+	)
+
+	telecomService := services.NewTelecomService(config.TermiiKey, "", "") // apiKey, apiSecret, baseURL
+
+	networkConfigService := services.NewNetworkConfigService()
+
+	rechargeService := services.NewRechargeService(
+		repos.Transaction, // RechargeRepository (alias)
+		repos.User,
+		repos.Transaction,
+		hlrService,
+		telecomService,
+		paymentService,
+		affiliateService,
+		"http://localhost:8080", // baseURL
+	)
+
+	userService := services.NewUserService(
+		repos.User,
+		repos.Transaction,
+		repos.BankAccount,
+		repos.Withdrawal,
+		repos.Transaction, // RechargeRepository (alias)
+		repos.Spin,
+		repos.Subscription,
+	)
+
+	subscriptionService := services.NewSubscriptionService(
+		repos.Subscription,
+		repos.User,
+		paymentService,
+		hlrService,
+	)
+
+	spinService := services.NewSpinService(
+		repos.Spin,
+		nil, // WheelPrizeRepository - if needed, add it
+		repos.User,
+		repos.Transaction,
+		hlrService,
+	)
+
+	drawService := services.NewDrawService(
+		repos.Draw,
+		repos.Transaction, // RechargeRepository (alias)
+		repos.Subscription,
+		repos.Spin, // SpinResultRepository (alias)
+	)
+
+	winnerService := services.NewWinnerService(
+		repos.Winner,
+		repos.Draw,
+		repos.User,
+		hlrService,
+		notificationService,
+	)
+
+	authService := services.NewAuthService(
+		repos.OTP,
+		repos.User,
+		config.JWTSecret,
+		24 * time.Hour,
+		config.TermiiKey,
+		"production",
+	)
+
+	fraudDetectionService := services.NewFraudDetectionService()
+
+	return &Services{
+		Auth:         authService,
+		User:         userService,
+		Recharge:     rechargeService,
+		Payment:      paymentService,
+		Wallet:       walletService,
+		Affiliate:    affiliateService,
+		Subscription: subscriptionService,
+		Spin:         spinService,
+		HLR:          hlrService,
+		Telecom:      telecomService,
+		NetworkConfig: networkConfigService,
+		Draw:         drawService,
+		Winner:       winnerService,
+		Notification: notificationService,
+		Device:       deviceService,
+		PushNotification: pushNotificationService,
+		FraudDetection: fraudDetectionService,
+	}
+}
+
+// Handlers holds all handler instances
+type Handlers struct {
+	Health       *handlers.HealthHandler
+	Auth         *handlers.AuthHandler
+	User         *handlers.UserHandler
+	Recharge     *handlers.RechargeHandler
+	Subscription *handlers.SubscriptionHandler
+	Spin         *handlers.SpinHandler
+	Affiliate    *handlers.AffiliateHandler
+	Draw         *handlers.DrawHandler
+	Winner       *handlers.WinnerHandler
+	Notification *handlers.NotificationHandler
+	Admin        *handlers.AdminHandler
+}
+
+func initHandlers(svcs *Services, db *gorm.DB) *Handlers {
+	return &Handlers{
+		Health:       handlers.NewHealthHandler(db),
+		Auth:        handlers.NewAuthHandler(svcs.Auth),
+		User:         handlers.NewUserHandler(svcs.User, svcs.Wallet),
+		Recharge:     handlers.NewRechargeHandler(svcs.Recharge),
+		Subscription: handlers.NewSubscriptionHandler(svcs.Subscription),
+		Spin:         handlers.NewSpinHandler(svcs.Spin),
+		Affiliate:    handlers.NewAffiliateHandler(svcs.Affiliate),
+		Draw:         handlers.NewDrawHandler(svcs.Draw),
+		Winner:       handlers.NewWinnerHandler(svcs.Winner),
+		Notification: handlers.NewNotificationHandler(svcs.Notification),
+		Admin:        handlers.NewAdminHandler(svcs.Draw, svcs.Winner, svcs.User),
+	}
+}
+
+func setupRouter(hdlrs *Handlers, svcs *Services) *gin.Engine {
+	// Set Gin mode based on environment
+	if os.Getenv("ENVIRONMENT") == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	router := gin.New()
+
+	// Global middleware
+	router.Use(gin.Recovery())
+	router.Use(middleware.LoggingMiddleware())
+	router.Use(middleware.CORSMiddleware())
+	router.Use(middleware.SecurityHeadersMiddleware())
+	router.Use(middleware.RequestIDMiddleware())
+
+	// Health check (no auth required)
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":    "healthy",
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
+			"service":   "rechargemax-api",
+			"version":   "1.0.0",
+		})
+	})
+
+	// API v1
+	v1 := router.Group("/api/v1")
+	{
+		// Auth routes (public)
+		auth := v1.Group("/auth")
+		{
+			auth.POST("/send-otp", hdlrs.Auth.SendOTP)
+			auth.POST("/verify-otp", hdlrs.Auth.VerifyOTP)
+		}
+
+		// Protected routes (require authentication)
+		protected := v1.Group("")
+		protected.Use(middleware.AuthMiddleware(svcs.Auth))
+		{
+			// User routes
+			user := protected.Group("/user")
+			{
+				user.GET("/profile", hdlrs.User.GetProfile)
+				// user.PUT("/profile", hdlrs.User.UpdateProfile) // TODO: Implement UpdateProfile
+				user.GET("/wallet", hdlrs.User.GetWallet)
+				user.GET("/transactions", hdlrs.User.GetTransactions)
+			}
+
+			// Recharge routes
+			recharge := protected.Group("/recharge")
+			{
+				recharge.POST("/initiate", hdlrs.Recharge.InitiateRecharge)
+				recharge.GET("/history", hdlrs.Recharge.GetHistory)
+// 				recharge.GET("/:id", hdlrs.Recharge.GetRecharge)
+			}
+
+			// Subscription routes
+			subscription := protected.Group("/subscription")
+			{
+				subscription.POST("/create", hdlrs.Subscription.CreateSubscription)
+				subscription.GET("/status", hdlrs.Subscription.GetSubscription)
+				subscription.POST("/cancel", hdlrs.Subscription.CancelSubscription)
+// 				subscription.GET("/history", hdlrs.Subscription.GetHistory)
+			}
+
+			// Spin routes
+			spin := protected.Group("/spin")
+			{
+				spin.GET("/eligibility", hdlrs.Spin.CheckEligibility)
+				spin.POST("/play", hdlrs.Spin.PlaySpin)
+				spin.GET("/history", hdlrs.Spin.GetHistory)
+			}
+
+			// Affiliate routes
+			affiliate := protected.Group("/affiliate")
+			{
+				affiliate.GET("/code", hdlrs.Affiliate.GetReferralCode)
+				affiliate.GET("/stats", hdlrs.Affiliate.GetStats)
+				affiliate.GET("/referrals", hdlrs.Affiliate.GetReferrals)
+				// affiliate.GET("/earnings", hdlrs.Affiliate.GetEarnings) // TODO: Implement GetEarnings
+			}
+
+			// Winner routes
+			winner := protected.Group("/winner")
+			{
+				winner.GET("/my-wins", hdlrs.Winner.GetMyWins)
+				winner.POST("/:id/claim", hdlrs.Winner.ClaimPrize)
+			}
+
+			// Notification routes
+			notifications := protected.Group("/notifications")
+			{
+				notifications.GET("", hdlrs.Notification.GetNotifications)
+				notifications.GET("/unread-count", hdlrs.Notification.GetUnreadCount)
+				notifications.POST("/:id/read", hdlrs.Notification.MarkAsRead)
+			}
+		}
+
+		// Admin routes (require admin authentication)
+		admin := v1.Group("/admin")
+		admin.Use(middleware.AdminAuthMiddleware(svcs.Auth))
+		{
+			admin.GET("/dashboard", hdlrs.Admin.GetDashboardStats)
+			admin.GET("/users", hdlrs.Admin.GetUsers)
+			// admin.GET("/users/:id", hdlrs.Admin.GetUser) // TODO: Implement GetUser
+			
+			// Draw management
+			admin.GET("/draws", hdlrs.Admin.GetDraws)
+			admin.POST("/draws", hdlrs.Draw.CreateDraw)
+// 			admin.GET("/draws/:id", hdlrs.Draw.GetDraw)
+			admin.GET("/draws/:id/export", hdlrs.Draw.ExportEntries)
+			admin.POST("/draws/:id/import-winners", hdlrs.Draw.ImportWinners)
+			
+			// Winner management
+			// admin.GET("/winners", hdlrs.Admin.GetWinners) // TODO: Implement GetWinners
+// 			admin.GET("/winners/:id", hdlrs.Winner.GetWinner)
+// 			admin.PUT("/winners/:id", hdlrs.Winner.UpdateWinner)
+		}
+	}
+
+	return router
+}

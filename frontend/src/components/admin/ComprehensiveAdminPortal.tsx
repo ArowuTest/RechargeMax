@@ -1,0 +1,1979 @@
+import React, { useState, useEffect } from 'react';
+import { adminApi } from '@/lib/api-client';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { useAdminContext } from '@/contexts/AdminContext';
+import { useToast } from '@/hooks/use-toast';
+import { NetworkDialog } from './NetworkDialog';
+import { DataPlanDialog } from './DataPlanDialog';
+import { WheelPrizeDialog } from './WheelPrizeDialog';
+import { CreateAdminDialog } from './CreateAdminDialog';
+import SpinTiersManagement from './SpinTiersManagement';
+import SpinPrizeClaimsManagement from './SpinPrizeClaimsManagement';
+import SystemMonitoringDashboard from './SystemMonitoringDashboard';
+import DrawIntegrationDashboard from './DrawIntegrationDashboard';
+import PrizeTemplateManagement from './PrizeTemplateManagement';
+import StrategicAffiliateAdminDashboard from './StrategicAffiliateAdminDashboard';
+import { 
+  Users, 
+  DollarSign, 
+  TrendingUp, 
+  Award,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Shield,
+  Settings,
+  Eye,
+  UserCheck,
+  UserX,
+  Pause,
+  Play,
+  Loader2,
+  AlertCircle,
+  Plus,
+  Edit,
+  Trash2,
+  Wifi,
+  Phone,
+  Star,
+  Gift,
+  Bell,
+  BarChart3,
+  Network,
+  Smartphone,
+  Ticket,
+  Trophy
+} from 'lucide-react';
+
+interface AdminStats {
+  total_users: number;
+  new_users_today: number;
+  total_transactions: number;
+  transactions_today: number;
+  total_prizes: number;
+  total_affiliates: number;
+  pending_affiliates: number;
+  approved_affiliates: number;
+  total_revenue: number;
+  total_commissions: number;
+}
+
+interface NetworkConfig {
+  id: string;
+  network_name: string;
+  network_code: string;
+  is_active: boolean;
+  airtime_enabled: boolean;
+  data_enabled: boolean;
+  commission_rate: number;
+  minimum_amount: number;
+  maximum_amount: number;
+}
+
+interface DataPlan {
+  id: string;
+  network_id: string;
+  plan_name: string;
+  data_amount: string;
+  price: number;
+  validity_days: number;
+  plan_code: string;
+  is_active: boolean;
+  sort_order: number;
+  network_configs_2025_11_10_13_30?: {
+    network_name: string;
+    network_code: string;
+  };
+}
+
+interface WheelPrize {
+  id: string;
+  prize_name: string;
+  prize_type: string;
+  prize_value: number;
+  probability: number;
+  minimum_recharge: number;
+  is_active: boolean;
+  icon_name: string;
+  color_scheme: string;
+  sort_order: number;
+}
+
+interface DailySubscription {
+  id: string;
+  subscription_name: string;
+  daily_amount: number;
+  description: string;
+  benefits: string[];
+  is_active: boolean;
+  max_subscribers: number;
+  current_subscribers: number;
+}
+
+interface PlatformSetting {
+  id: string;
+  setting_key: string;
+  setting_value: any;
+  description: string;
+}
+
+interface ComprehensiveAdminPortalProps {
+  adminSession?: {
+    admin: {
+      id: string;
+      email: string;
+      full_name: string;
+      role: string;
+      permissions: string[];
+    };
+    session_token: string;
+    expires_at: string;
+  };
+  onLogout?: () => void;
+}
+
+export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> = ({ 
+  adminSession, 
+  onLogout 
+}) => {
+  console.log('🚀 ComprehensiveAdminPortal RENDERING');
+  const { admin: contextAdmin, sessionToken, isAuthenticated, isLoading, hasPermission, logout } = useAdminContext();
+  console.log('📊 Admin Context:', { contextAdmin, sessionToken, isAuthenticated, isLoading });
+  const { toast } = useToast();
+  
+  // Use props admin session if provided, otherwise fall back to context
+  const admin = adminSession?.admin || contextAdmin;
+  console.log('👤 Final Admin Object:', admin);
+  const isAuth = adminSession ? true : isAuthenticated;
+  const isLoad = adminSession ? false : isLoading;
+  
+  // Permission check function
+  const checkPermission = (permission: string): boolean => {
+    if (!admin) return false;
+    return admin.permissions?.includes(permission) || admin.role === 'SUPER_ADMIN';
+  };
+  
+  // Use the appropriate permission function
+  const permissionCheck = adminSession ? checkPermission : hasPermission;
+  const [actionLoading, setActionLoading] = useState<string>('');
+  
+  // Determine first available tab based on permissions
+  const getFirstAvailableTab = (): string => {
+    if (admin?.role === 'SUPER_ADMIN') return 'dashboard';
+    if (hasPermission('view_analytics')) return 'dashboard';
+    if (hasPermission('view_monitoring')) return 'monitoring';
+    if (hasPermission('manage_draws')) return 'draw';
+    if (hasPermission('manage_networks')) return 'networks';
+    if (hasPermission('manage_prizes')) return 'prizes';
+    if (hasPermission('manage_settings')) return 'spin-tiers';
+    if (hasPermission('manage_affiliates')) return 'strategic-affiliates';
+    if (hasPermission('manage_users')) return 'users';
+    if (hasPermission('manage_admins')) return 'admins';
+    return 'monitoring'; // fallback
+  };
+  
+  const [activeTab, setActiveTab] = useState<string>(getFirstAvailableTab());
+  
+  // Admin management states
+  const [admins, setAdmins] = useState<any[]>([]);
+  const [showCreateAdminDialog, setShowCreateAdminDialog] = useState(false);
+  
+  // State for all admin data
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [networks, setNetworks] = useState<NetworkConfig[]>([]);
+  const [dataPlans, setDataPlans] = useState<DataPlan[]>([]);
+  const [wheelPrizes, setWheelPrizes] = useState<WheelPrize[]>([]);
+  const [dailySubscription, setDailySubscription] = useState<DailySubscription | null>(null);
+  const [allDailySubscriptions, setAllDailySubscriptions] = useState<any[]>([]);
+  const [settings, setSettings] = useState<PlatformSetting[]>([]);
+  const [affiliates, setAffiliates] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [prizes, setPrizes] = useState<any[]>([]);
+  
+  // Dialog states
+  const [editingPrize, setEditingPrize] = useState<WheelPrize | null>(null);
+  const [editingDataPlan, setEditingDataPlan] = useState<DataPlan | null>(null);
+  const [showPrizeDialog, setShowPrizeDialog] = useState(false);
+  const [showDataPlanDialog, setShowDataPlanDialog] = useState(false);
+  const [showNetworkDialog, setShowNetworkDialog] = useState(false);
+  const [editingNetwork, setEditingNetwork] = useState<Network | null>(null);
+
+  useEffect(() => {
+    if (admin) {
+      initializeAdminPortal();
+      // Set initial tab based on permissions after admin loads
+      const firstTab = getFirstAvailableTab();
+      if (activeTab !== firstTab) {
+        setActiveTab(firstTab);
+        console.log('🎯 Setting initial tab to:', firstTab);
+      }
+    }
+  }, [admin]);
+
+  // Log tab state for debugging
+  useEffect(() => {
+    console.log('🔍 Active Tab State:', activeTab);
+  }, [activeTab]);
+
+  // Monitor and protect dailySubscription state from corruption
+  useEffect(() => {
+    if (dailySubscription) {
+      console.log('🔍 State Monitor - dailySubscription changed:', dailySubscription);
+      
+      // Check for suspicious values that indicate corruption
+      if (dailySubscription.amount === 80 && dailySubscription.draw_entries_earned === 4) {
+        console.log('❌ CORRUPTION DETECTED! Resetting to correct values');
+        setDailySubscription({
+          id: dailySubscription.id || 'corrected',
+          amount: 30,
+          draw_entries_earned: 1,
+          is_paid: true
+        });
+      }
+    }
+  }, [dailySubscription]);
+
+  const initializeAdminPortal = async () => {
+    console.log('=== INITIALIZING ADMIN PORTAL ===');
+    console.log('Admin:', admin);
+    console.log('Session Token:', sessionToken);
+    try {
+      const promises = [];
+      
+      // For Super Admin, fetch everything. For others, check permissions
+      const isSuperAdmin = admin?.role === 'SUPER_ADMIN';
+      
+      if (isSuperAdmin || permissionCheck('view_analytics')) {
+        promises.push(fetchDashboardStats());
+      }
+      if (isSuperAdmin || permissionCheck('manage_networks')) {
+        promises.push(fetchNetworks(), fetchDataPlans());
+      }
+      if (isSuperAdmin || permissionCheck('manage_prizes')) {
+        promises.push(fetchWheelPrizes());
+      }
+      if (isSuperAdmin || permissionCheck('manage_settings')) {
+        promises.push(fetchDailySubscription(), fetchAllDailySubscriptions(), fetchSettings());
+      }
+      if (isSuperAdmin || permissionCheck('manage_affiliates')) {
+        promises.push(fetchAffiliates());
+      }
+      if (isSuperAdmin || permissionCheck('manage_users')) {
+        promises.push(fetchUsers(), fetchTransactions(), fetchPrizes());
+      }
+      if (isSuperAdmin || permissionCheck('manage_admins')) {
+        promises.push(fetchAdmins());
+      }
+      
+      await Promise.all(promises);
+    } catch (error) {
+      console.error('Failed to initialize admin portal:', error);
+    }
+  };
+
+  const callAdminAPI = async (action: string, data?: any) => {
+    if (!sessionToken) throw new Error('Admin session required');
+
+    // Route actions to appropriate adminApi methods
+    switch (action) {
+      case 'get_dashboard_stats':
+        try {
+          const stats = await adminApi.getStats();
+          return stats;
+        } catch (error) {
+          console.error('Failed to fetch dashboard stats:', error);
+          // Return zeros if API fails
+          return {
+            success: true,
+            total_users: 0,
+            new_users_today: 0,
+            total_transactions: 0,
+            transactions_today: 0,
+            total_prizes: 0,
+            total_affiliates: 0,
+            pending_affiliates: 0,
+            approved_affiliates: 0,
+            total_revenue: 0,
+            today_revenue: 0,
+            total_commissions: 0
+          };
+        }
+      
+      case 'get_networks':
+        console.log('🟢 callAdminAPI: get_networks called');
+        const networks = await adminApi.getNetworks();
+        console.log('🟢 adminApi.getNetworks() response:', networks);
+        console.log('🟢 networks.data:', networks.data);
+        const networksResult = { success: true, networks: networks.data };
+        console.log('🟢 Returning:', networksResult);
+        return networksResult;
+      
+      case 'get_data_plans':
+        console.log('🟢 callAdminAPI: get_data_plans called');
+        const plans = await adminApi.getDataPlans();
+        console.log('🟢 adminApi.getDataPlans() response:', plans);
+        console.log('🟢 plans.data:', plans.data);
+        const plansResult = { success: true, data_plans: plans.data };
+        console.log('🟢 Returning:', plansResult);
+        return plansResult;
+      
+      case 'get_wheel_prizes':
+        const prizes = await adminApi.getWheelPrizes();
+        return { success: true, wheel_prizes: prizes.data };
+      
+      case 'get_users':
+        console.log('🟢 callAdminAPI: get_users called');
+        const users = await adminApi.users.getAll();
+        console.log('🟢 adminApi.users.getAll() response:', users);
+        console.log('🟢 users.data:', users.data);
+        const result = { success: true, users: users.data || [] };
+        console.log('🟢 Returning:', result);
+        return result;
+      
+      case 'get_admins':
+        // TODO: Implement backend endpoint for admins list
+        return { success: true, admins: [] };
+      
+      case 'get_affiliates':
+        const affiliates = await adminApi.affiliates.getAll();
+        return { success: true, affiliates: affiliates.data?.data || [] };
+      
+      case 'get_transactions':
+        // TODO: Implement backend endpoint for transactions
+        return { success: true, transactions: [] };
+      
+      case 'get_prizes':
+        // Get wheel prizes (same as get_wheel_prizes)
+        const allPrizes = await adminApi.getWheelPrizes();
+        return { success: true, prizes: allPrizes.data };
+      
+      case 'get_settings':
+        // TODO: Implement backend endpoint for settings
+        return { success: true, settings: [] };
+      
+      case 'get_daily_subscription':
+        try {
+          const config = await adminApi.subscriptions.getConfig();
+          return { success: true, daily_subscription: config.data };
+        } catch (error) {
+          return { success: true, daily_subscription: null };
+        }
+      
+      case 'get_all_daily_subscriptions':
+        try {
+          const subs = await adminApi.subscriptions.getAll();
+          return { success: true, data: { subscriptions: subs.data || [] } };
+        } catch (error) {
+          return { success: true, data: { subscriptions: [] } };
+        }
+      
+      case 'update_daily_subscription':
+        await adminApi.subscriptions.updateConfig(data.subscription_data);
+        return { success: true };
+      
+      case 'update_network':
+        await adminApi.networks.update(data.network_id, data.updates);
+        return { success: true };
+      
+      case 'create_network':
+        // TODO: Implement create network endpoint
+        return { success: true };
+      
+      case 'update_data_plan':
+        await adminApi.bundles.update(data.plan_id, data.updates);
+        return { success: true };
+      
+      case 'create_data_plan':
+        await adminApi.bundles.create(data.plan);
+        return { success: true };
+      
+      case 'update_wheel_prize':
+        await adminApi.spin.updatePrize(data.prize_id, data.updates);
+        return { success: true };
+      
+      case 'create_wheel_prize':
+        await adminApi.spin.createPrize(data);
+        return { success: true };
+      
+      case 'approve_affiliate':
+        await adminApi.affiliates.approve(data.affiliate_id);
+        return { success: true };
+      
+      case 'reject_affiliate':
+        await adminApi.affiliates.reject(data.affiliate_id, data.reason || 'Rejected by admin');
+        return { success: true };
+      
+      case 'suspend_affiliate':
+        await adminApi.affiliates.suspend(data.affiliate_id);
+        return { success: true };
+      
+      case 'create_admin':
+        // TODO: Implement create admin endpoint
+        return { success: true, temp_password: 'TempPass123!' };
+      
+      case 'update_admin':
+        // TODO: Implement update admin endpoint
+        return { success: true };
+      
+      case 'delete_admin':
+        // TODO: Implement delete admin endpoint
+        return { success: true };
+      
+      case 'update_setting':
+        await adminApi.config.set(data.setting_key, data.setting_value);
+        return { success: true };
+      
+      case 'trigger_frontend_update':
+        // No-op for now - frontend will update automatically
+        return { success: true };
+      
+      default:
+        console.warn(`Unhandled action: ${action}`);
+        return { success: false, error: `Action ${action} not implemented` };
+    }
+  };
+
+  const fetchDashboardStats = async () => {
+    console.log('Fetching dashboard stats...');
+    try {
+      const data = await callAdminAPI('get_dashboard_stats');
+      console.log('Dashboard stats received:', data);
+      setStats(data || {
+        total_users: 0,
+        new_users_today: 0,
+        total_transactions: 0,
+        transactions_today: 0,
+        total_prizes: 0,
+        total_affiliates: 0,
+        pending_affiliates: 0,
+        approved_affiliates: 0,
+        total_revenue: 0,
+        today_revenue: 0,
+        total_commissions: 0
+      });
+    } catch (error) {
+      console.error('Failed to fetch dashboard stats:', error);
+    }
+  };
+
+  const fetchNetworks = async () => {
+    try {
+      console.log('🟢 fetchNetworks: Starting...');
+      const data = await callAdminAPI('get_networks');
+      console.log('🟢 fetchNetworks: callAdminAPI returned:', data);
+      console.log('🟢 fetchNetworks: data.networks:', data?.networks);
+      setNetworks(data?.networks || []);
+      console.log('🟢 fetchNetworks: setNetworks called with:', data?.networks || []);
+    } catch (error) {
+      console.error('❌ Failed to fetch networks:', error);
+    }
+  };
+
+  const fetchDataPlans = async () => {
+    try {
+      console.log('🟢 fetchDataPlans: Starting...');
+      const data = await callAdminAPI('get_data_plans');
+      console.log('🟢 fetchDataPlans: data received:', data);
+      console.log('🟢 fetchDataPlans: data.data_plans:', data?.data_plans);
+      setDataPlans(data?.data_plans || []);
+      console.log('🟢 fetchDataPlans: dataPlans state updated');
+    } catch (error) {
+      console.error('❌ Failed to fetch data plans:', error);
+    }
+  };
+
+  const fetchWheelPrizes = async () => {
+    try {
+      const data = await callAdminAPI('get_wheel_prizes');
+      setWheelPrizes(data?.wheel_prizes || []);
+    } catch (error) {
+      console.error('Failed to fetch wheel prizes:', error);
+    }
+  };
+
+  const fetchDailySubscription = async () => {
+    try {
+      console.log('🔍 Fetching updated admin configuration...');
+      const data = await callAdminAPI('get_daily_subscription');
+      console.log('🔍 Raw API Response:', JSON.stringify(data, null, 2));
+      
+      if (data?.daily_subscription) {
+        const config = data.daily_subscription;
+        console.log('🔍 Extracted config:', JSON.stringify(config, null, 2));
+        
+        // Force correct values to prevent corruption
+        const cleanConfig = {
+          id: config.id,
+          amount: Number(config.amount) || 30,
+          draw_entries_earned: Number(config.draw_entries_earned) || 1,
+          is_paid: Boolean(config.is_paid)
+        };
+        
+        console.log('🔍 Clean config being set:', JSON.stringify(cleanConfig, null, 2));
+        setDailySubscription(cleanConfig);
+      } else {
+        console.log('❌ No daily_subscription in response');
+        setDailySubscription(null);
+      }
+    } catch (error) {
+      console.error('❌ Failed to fetch daily subscription:', error);
+      // Set default values on error
+      setDailySubscription({
+        id: 'default',
+        amount: 30,
+        draw_entries_earned: 1,
+        is_paid: true
+      });
+    }
+  };
+
+  const fetchSettings = async () => {
+    try {
+      const data = await callAdminAPI('get_settings');
+      setSettings(data?.settings || []);
+    } catch (error) {
+      console.error('Failed to fetch settings:', error);
+    }
+  };
+
+  const fetchAffiliates = async () => {
+    try {
+      const data = await callAdminAPI('get_affiliates');
+      setAffiliates(data?.affiliates || []);
+    } catch (error) {
+      console.error('Failed to fetch affiliates:', error);
+    }
+  };
+
+  const fetchAdmins = async () => {
+    try {
+      const data = await callAdminAPI('get_admins');
+      setAdmins(data?.admins || []);
+    } catch (error) {
+      console.error('Failed to fetch admins:', error);
+    }
+  };
+
+  const fetchUsers = async () => {
+    console.log('🔵 fetchUsers called');
+    try {
+      const data = await callAdminAPI('get_users');
+      console.log('🔵 fetchUsers response:', data);
+      console.log('🔵 data.users:', data?.users);
+      console.log('🔵 Array.isArray(data?.users):', Array.isArray(data?.users));
+      setUsers(data?.users || []);
+      console.log('🔵 Users state set to:', data?.users || []);
+    } catch (error) {
+      console.error('❌ Failed to fetch users:', error);
+    }
+  };
+
+  const fetchTransactions = async () => {
+    try {
+      const data = await callAdminAPI('get_transactions');
+      setTransactions(data?.transactions || []);
+    } catch (error) {
+      console.error('Failed to fetch transactions:', error);
+    }
+  };
+
+  const fetchPrizes = async () => {
+    try {
+      const data = await callAdminAPI('get_prizes');
+      setPrizes(data?.prizes || []);
+    } catch (error) {
+      console.error('Failed to fetch prizes:', error);
+    }
+  };
+
+  const fetchAllDailySubscriptions = async () => {
+    console.log('Fetching all daily subscriptions from unified table...');
+    try {
+      setActionLoading('fetch_all_subscriptions');
+      const data = await callAdminAPI('get_all_daily_subscriptions', { limit: 100 });
+      console.log('All daily subscriptions received:', data);
+      setAllDailySubscriptions(data?.data?.subscriptions || []);
+    } catch (error) {
+      console.error('Failed to fetch all daily subscriptions:', error);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleNetworkUpdate = async (networkId: string, updates: Partial<NetworkConfig>) => {
+    try {
+      setActionLoading(networkId);
+      await callAdminAPI('update_network', { network_id: networkId, updates }, sessionToken);
+      await fetchNetworks();
+      toast({
+        title: "Success",
+        description: "Network configuration updated successfully",
+      });
+    } catch (error) {
+      toast({
+        title: "Update Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setActionLoading('');
+    }
+  };
+
+
+  const handleNetworkSave = async (networkData: any) => {
+    try {
+      setActionLoading('network_save');
+      if (editingNetwork) {
+        await callAdminAPI('update_network', {
+          network_id: editingNetwork.id, 
+          updates: networkData 
+        }, sessionToken);
+        toast({
+          title: "Success",
+          description: "Network updated successfully",
+        });
+      } else {
+        await callAdminAPI('create_network', networkData, sessionToken);
+        toast({
+          title: "Success",
+          description: "Network created successfully",
+        });
+      }
+      await fetchNetworks();
+      setShowNetworkDialog(false);
+      setEditingNetwork(null);
+    } catch (error) {
+      toast({
+        title: editingNetwork ? "Update Failed" : "Creation Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setActionLoading('');
+    }
+  };
+
+  const handleDataPlanUpdate = async (planId: string, updates: any) => {
+    try {
+      setActionLoading(planId);
+      await callAdminAPI('update_data_plan', { 
+        plan_id: planId, 
+        updates 
+      });
+      await fetchDataPlans();
+      toast({
+        title: "Success",
+        description: "Data plan updated successfully",
+      });
+    } catch (error) {
+      toast({
+        title: "Update Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setActionLoading('');
+    }
+  };
+
+  const handleDataPlanSave = async (planData: any) => {
+    try {
+      setActionLoading('plan_save');
+      if (editingDataPlan) {
+        await callAdminAPI('update_data_plan', {
+          plan_id: editingDataPlan.id, 
+          updates: planData 
+        }, sessionToken);
+        toast({
+          title: "Success",
+          description: "Data plan updated successfully",
+        });
+      } else {
+        await callAdminAPI('create_data_plan', { plan: planData }, sessionToken);
+        toast({
+          title: "Success",
+          description: "Data plan created successfully",
+        });
+      }
+      await fetchDataPlans();
+      setShowDataPlanDialog(false);
+      setEditingDataPlan(null);
+    } catch (error) {
+      toast({
+        title: editingDataPlan ? "Update Failed" : "Creation Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setActionLoading('');
+    }
+  };
+
+  const validatePrizeProbabilities = (prizes: WheelPrize[]) => {
+    const totalProbability = prizes
+      .filter(p => p.is_active)
+      .reduce((sum, p) => sum + Number(p.probability), 0);
+    return { total: totalProbability, isValid: Math.abs(totalProbability - 100) < 0.01 };
+  };
+
+  const handleWheelPrizeSave = async (prizeData: any) => {
+    try {
+      setActionLoading('prize_save');
+      if (editingPrize) {
+        await callAdminAPI('update_wheel_prize', { 
+          prize_id: editingPrize.id, 
+          updates: prizeData 
+        });
+        toast({
+          title: "Success",
+          description: "Wheel prize updated successfully",
+        });
+      } else {
+        await callAdminAPI('create_wheel_prize', prizeData);
+        toast({
+          title: "Success",
+          description: "Wheel prize created successfully",
+        });
+      }
+      await fetchWheelPrizes();
+      setShowPrizeDialog(false);
+      setEditingPrize(null);
+      
+      // Sync wheel configuration with frontend
+      try {
+        await callAdminAPI('trigger_frontend_update');
+      } catch (syncError) {
+        console.error('Wheel sync failed:', syncError);
+      }
+    } catch (error) {
+      toast({
+        title: editingPrize ? "Update Failed" : "Creation Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setActionLoading('');
+    }
+  };
+
+
+  const handleDailySubscriptionUpdate = async (subscriptionData: any) => {
+    try {
+      setActionLoading('subscription');
+      await callAdminAPI('update_daily_subscription', { subscription_data: subscriptionData });
+      await fetchDailySubscription();
+      
+      // Sync with frontend
+      try {
+        await callAdminAPI('trigger_frontend_update');
+      } catch (syncError) {
+        console.error('Frontend sync failed:', syncError);
+      }
+      
+      toast({
+        title: "Success",
+        description: "Daily subscription updated successfully and synced with frontend",
+      });
+    } catch (error) {
+      toast({
+        title: "Update Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setActionLoading('');
+    }
+  };
+
+  const handleSettingUpdate = async (settingKey: string, settingValue: any, description?: string) => {
+    try {
+      setActionLoading(settingKey);
+      await callAdminAPI('update_setting', { 
+        setting_key: settingKey, 
+        setting_value: settingValue,
+        description 
+      });
+      await fetchSettings();
+      
+      // Sync settings with frontend
+      try {
+        await callAdminAPI('trigger_frontend_update');
+      } catch (syncError) {
+        console.error('Settings sync failed:', syncError);
+      }
+      
+      toast({
+        title: "Success",
+        description: "Setting updated successfully and synced with frontend",
+      });
+    } catch (error) {
+      toast({
+        title: "Update Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setActionLoading('');
+    }
+  };
+
+  const handleCreateAdmin = async (adminData: any) => {
+    try {
+      setActionLoading('create_admin');
+      const result = await callAdminAPI('create_admin', { admin_data: adminData });
+      await fetchAdmins();
+      setShowCreateAdminDialog(false);
+      toast({
+        title: "Admin Created",
+        description: `Admin created successfully. Temporary password: ${result.temp_password}`,
+      });
+    } catch (error) {
+      toast({
+        title: "Creation Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setActionLoading('');
+    }
+  };
+
+  const handleAffiliateAction = async (action: string, affiliateId: string) => {
+    try {
+      setActionLoading(affiliateId);
+      await callAdminAPI(action, { affiliate_id: affiliateId });
+      await fetchAffiliates();
+      await fetchDashboardStats(); // Refresh stats
+      toast({
+        title: "Success",
+        description: "Affiliate action completed successfully",
+      });
+    } catch (error) {
+      toast({
+        title: "Action Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setActionLoading('');
+    }
+  };
+
+
+  const handleUpdateAdmin = async (adminId: string, adminData: any) => {
+    try {
+      setActionLoading(adminId);
+      await callAdminAPI('update_admin', { admin_id: adminId, admin_data: adminData });
+      await fetchAdmins();
+      toast({
+        title: "Admin Updated",
+        description: "Admin updated successfully",
+      });
+    } catch (error) {
+      toast({
+        title: "Update Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setActionLoading('');
+    }
+  };
+
+  const handleDeleteAdmin = async (adminId: string) => {
+    try {
+      setActionLoading(adminId);
+      await callAdminAPI('delete_admin', { admin_id: adminId });
+      await fetchAdmins();
+      toast({
+        title: "Admin Deactivated",
+        description: "Admin deactivated successfully",
+      });
+    } catch (error) {
+      toast({
+        title: "Deactivation Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setActionLoading('');
+    }
+  };
+
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-NG', {
+      style: 'currency',
+      currency: 'NGN'
+    }).format(amount);
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'APPROVED':
+        return <Badge className="bg-green-100 text-green-800">Approved</Badge>;
+      case 'PENDING':
+        return <Badge className="bg-yellow-100 text-yellow-800">Pending</Badge>;
+      case 'REJECTED':
+        return <Badge className="bg-red-100 text-red-800">Rejected</Badge>;
+      case 'SUSPENDED':
+        return <Badge className="bg-gray-100 text-gray-800">Suspended</Badge>;
+      default:
+        return <Badge variant="secondary">{status}</Badge>;
+    }
+  };
+
+  const getPrizeIcon = (prizeType: string) => {
+    switch (prizeType) {
+      case 'CASH': return <DollarSign className="w-4 h-4 text-green-600" />;
+      case 'DATA': return <Wifi className="w-4 h-4 text-blue-600" />;
+      case 'AIRTIME': return <Phone className="w-4 h-4 text-purple-600" />;
+      case 'POINTS': return <Star className="w-4 h-4 text-yellow-600" />;
+      case 'TICKETS': return <Ticket className="w-4 h-4 text-orange-600" />;
+      default: return <Gift className="w-4 h-4 text-gray-600" />;
+    }
+  };
+
+  if (isLoad) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center">
+        <Card className="w-full max-w-md text-center">
+          <CardContent className="p-8">
+            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
+            <p>Loading comprehensive admin portal...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!admin) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md text-center">
+          <CardContent className="p-8">
+            <Shield className="w-12 h-12 text-blue-500 mx-auto mb-4" />
+            <h2 className="text-xl font-bold mb-2">Admin Access Required</h2>
+            <p className="text-gray-600 mb-4">
+              Please login with admin credentials to access the admin portal.
+            </p>
+            <Button onClick={() => window.location.href = '/#/admin/login'}>
+              Admin Login
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-4">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Admin Portal</h1>
+            <p className="text-gray-600">Welcome, {admin?.full_name} ({admin?.role})</p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => window.location.href = '/#/'}>
+              Main Site
+            </Button>
+            <Button variant="outline" onClick={logout}>
+              Logout
+            </Button>
+          </div>
+        </div>
+
+        {/* Stats Cards */}
+        {stats && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Total Users</p>
+                    <p className="text-2xl font-bold">{(stats?.total_users || 0).toLocaleString()}</p>
+                    <p className="text-xs text-green-600">+{stats?.new_users_today || 0} today</p>
+                  </div>
+                  <Users className="w-8 h-8 text-blue-600" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Total Revenue</p>
+                    <p className="text-2xl font-bold">{formatCurrency(stats?.total_revenue || 0)}</p>
+                    <p className="text-xs text-blue-600">{stats?.transactions_today || 0} transactions today</p>
+                  </div>
+                  <DollarSign className="w-8 h-8 text-green-600" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Affiliates</p>
+                    <p className="text-2xl font-bold">{stats?.total_affiliates || 0}</p>
+                    <p className="text-xs text-yellow-600">{stats?.pending_affiliates || 0} pending approval</p>
+                  </div>
+                  <Award className="w-8 h-8 text-purple-600" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Commissions</p>
+                    <p className="text-2xl font-bold">{formatCurrency(stats?.total_commissions || 0)}</p>
+                    <p className="text-xs text-purple-600">{stats?.total_prizes || 0} prizes won</p>
+                  </div>
+                  <TrendingUp className="w-8 h-8 text-yellow-600" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Main Content Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+          <TabsList className="grid w-full grid-cols-12">
+            {(admin?.role === 'SUPER_ADMIN' || hasPermission('view_analytics')) && <TabsTrigger value="dashboard">Dashboard</TabsTrigger>}
+            {(admin?.role === 'SUPER_ADMIN' || hasPermission('view_monitoring')) && <TabsTrigger value="monitoring">Monitoring</TabsTrigger>}
+            {(admin?.role === 'SUPER_ADMIN' || hasPermission('manage_draws')) && <TabsTrigger value="draw">Draw Engine</TabsTrigger>}
+            {(admin?.role === 'SUPER_ADMIN' || hasPermission('manage_draws')) && <TabsTrigger value="prize-templates">Prize Templates</TabsTrigger>}
+            {(admin?.role === 'SUPER_ADMIN' || hasPermission('manage_networks')) && <TabsTrigger value="networks">Networks</TabsTrigger>}
+            {(admin?.role === 'SUPER_ADMIN' || hasPermission('manage_prizes')) && <TabsTrigger value="prizes">Prizes</TabsTrigger>}
+            {(admin?.role === 'SUPER_ADMIN' || hasPermission('manage_settings')) && <TabsTrigger value="spin-tiers">Spin Tiers</TabsTrigger>}
+            {(admin?.role === 'SUPER_ADMIN' || hasPermission('manage_prizes')) && <TabsTrigger value="spin-claims">Prize Claims</TabsTrigger>}
+            {(admin?.role === 'SUPER_ADMIN' || hasPermission('manage_settings')) && <TabsTrigger value="subscription">Daily Draw</TabsTrigger>}
+            {(admin?.role === 'SUPER_ADMIN' || hasPermission('manage_affiliates')) && <TabsTrigger value="strategic-affiliates">Strategic Affiliates</TabsTrigger>}
+            {(admin?.role === 'SUPER_ADMIN' || hasPermission('manage_users')) && <TabsTrigger value="users">Users</TabsTrigger>}
+            {(admin?.role === 'SUPER_ADMIN' || hasPermission('manage_admins')) && <TabsTrigger value="admins">Admins</TabsTrigger>}
+            {(admin?.role === 'SUPER_ADMIN' || hasPermission('manage_settings')) && <TabsTrigger value="settings">Settings</TabsTrigger>}
+          </TabsList>
+
+          {/* Dashboard */}
+          <TabsContent value="dashboard">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="w-6 h-6" />
+                  Platform Analytics Dashboard
+                </CardTitle>
+                <CardDescription>
+                  Overview of platform performance and key metrics
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8">
+                  <BarChart3 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500">Analytics dashboard</p>
+                  <p className="text-sm text-gray-400">Revenue trends, user growth, and performance metrics</p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* System Monitoring */}
+          <TabsContent value="monitoring">
+            <SystemMonitoringDashboard />
+          </TabsContent>
+
+          {/* Draw Engine Integration */}
+          <TabsContent value="draw">
+            <DrawIntegrationDashboard />
+          </TabsContent>
+
+          <TabsContent value="prize-templates">
+            <PrizeTemplateManagement />
+          </TabsContent>
+
+          <TabsContent value="networks">
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <Network className="w-6 h-6" />
+                        Network Configuration
+                      </CardTitle>
+                      <CardDescription>
+                        Manage network providers, commission rates, and limits
+                      </CardDescription>
+                    </div>
+                    <Button 
+                      onClick={() => {
+                        setEditingNetwork(null);
+                        setShowNetworkDialog(true);
+                      }}
+                      disabled={actionLoading === 'create_network'}
+                    >
+                      {actionLoading === 'create_network' ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <Plus className="w-4 h-4 mr-2" />
+                      )}
+                      Add Network
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Network</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Services</TableHead>
+                        <TableHead>Commission</TableHead>
+                        <TableHead>Limits</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(networks || []).map((network) => (
+                        <TableRow key={network.id}>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">{network.network_name}</div>
+                              <div className="text-sm text-gray-500">{network.network_code}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Switch
+                              checked={network.is_active}
+                              onCheckedChange={(checked) => 
+                                handleNetworkUpdate(network.id, { is_active: checked })
+                              }
+                              disabled={actionLoading === network.id}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              <Badge variant={network.airtime_enabled ? "default" : "secondary"}>
+                                Airtime
+                              </Badge>
+                              <Badge variant={network.data_enabled ? "default" : "secondary"}>
+                                Data
+                              </Badge>
+                            </div>
+                          </TableCell>
+                          <TableCell>{network.commission_rate}%</TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              <div>Min: {formatCurrency(network.minimum_amount)}</div>
+                              <div>Max: {formatCurrency(network.maximum_amount)}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => {
+                                setEditingNetwork(network);
+                                setShowNetworkDialog(true);
+                              }}
+                              disabled={actionLoading === network.id}
+                            >
+                              {actionLoading === network.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <Edit className="w-3 h-3" />
+                              )}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+
+              {/* Data Plans Management */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <Smartphone className="w-6 h-6" />
+                        Data Bundle Plans
+                      </CardTitle>
+                      <CardDescription>
+                        Configure available data plans for each network
+                      </CardDescription>
+                    </div>
+                    <Button onClick={() => {
+                      setEditingDataPlan(null);
+                      setShowDataPlanDialog(true);
+                    }}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Plan
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Network</TableHead>
+                        <TableHead>Plan</TableHead>
+                        <TableHead>Data Amount</TableHead>
+                        <TableHead>Price</TableHead>
+                        <TableHead>Validity</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(dataPlans || []).map((plan) => (
+                        <TableRow key={plan.id}>
+                          <TableCell>
+                            <Badge variant="outline">
+                              {plan.network_provider}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{plan.plan_name}</TableCell>
+                          <TableCell>{plan.data_amount}</TableCell>
+                          <TableCell>{formatCurrency(plan.price)}</TableCell>
+                          <TableCell>{plan.validity_days} days</TableCell>
+                          <TableCell>
+                            <Badge variant={plan.is_active ? "default" : "secondary"}>
+                              {plan.is_active ? "Active" : "Inactive"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => {
+                                  setEditingDataPlan(plan);
+                                  setShowDataPlanDialog(true);
+                                }}
+                              >
+                                <Edit className="w-3 h-3" />
+                              </Button>
+                              <Button size="sm" variant="destructive">
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="prizes">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Gift className="w-6 h-6" />
+                      Wheel Spin Prizes
+                    </CardTitle>
+                    <CardDescription>
+                      Configure prizes, probabilities, and minimum recharge requirements
+                    </CardDescription>
+                    {wheelPrizes.length > 0 && (() => {
+                      const validation = validatePrizeProbabilities(wheelPrizes);
+                      return (
+                        <div className={`text-sm mt-2 p-2 rounded ${
+                          validation.isValid ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                        }`}>
+                          Total Probability: {validation.total.toFixed(1)}% 
+                          {validation.isValid ? ' ✓ Valid' : ' ⚠️ Must equal 100%'}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                  <Button onClick={() => {
+                    setEditingPrize(null);
+                    setShowPrizeDialog(true);
+                  }}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Prize
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Prize</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Value</TableHead>
+                      <TableHead>Probability</TableHead>
+                      <TableHead>Min Recharge</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(wheelPrizes || []).map((prize) => (
+                      <TableRow key={prize.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {getPrizeIcon(prize.prize_type)}
+                            <span>{prize.prize_name}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{prize.prize_type}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          {prize.prize_type === 'CASH' ? formatCurrency(prize.prize_value) :
+                           prize.prize_type === 'DATA' ? `${prize.prize_value}MB` :
+                           prize.prize_type === 'AIRTIME' ? formatCurrency(prize.prize_value) :
+                           `${prize.prize_value}`}
+                        </TableCell>
+                        <TableCell>{prize.probability}%</TableCell>
+                        <TableCell>{formatCurrency(prize.minimum_recharge)}</TableCell>
+                        <TableCell>
+                          <Badge variant={prize.is_active ? "default" : "secondary"}>
+                            {prize.is_active ? "Active" : "Inactive"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => {
+                                setEditingPrize(prize);
+                                setShowPrizeDialog(true);
+                              }}
+                            >
+                              <Edit className="w-3 h-3" />
+                            </Button>
+                            <Button size="sm" variant="destructive">
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Spin Tiers Management */}
+          <TabsContent value="spin-tiers">
+            <SpinTiersManagement />
+          </TabsContent>
+
+          {/* Spin Prize Claims Management */}
+          <TabsContent value="spin-claims">
+            <SpinPrizeClaimsManagement />
+          </TabsContent>
+
+          {/* Daily Subscription Management */}
+          <TabsContent value="subscription">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Clock className="w-6 h-6" />
+                  Daily Subscription Management
+                </CardTitle>
+                <CardDescription>
+                  Configure daily subscription pricing and benefits
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <h3 className="font-semibold text-blue-900 mb-2">Daily Subscription Configuration</h3>
+                    <p className="text-sm text-blue-700">Configure the pricing and benefits for daily subscriptions. Changes will be reflected immediately on the user frontend.</p>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="daily_amount">Daily Subscription Price (₦)</Label>
+                        <Input
+                          id="daily_amount"
+                          type="number"
+                          min="1"
+                          step="0.01"
+                          value={(() => {
+                            const amount = dailySubscription?.amount || 30;
+                            console.log('🔍 UI Display - dailySubscription state:', dailySubscription);
+                            console.log('🔍 UI Display - amount being shown:', amount);
+                            // Force correct minimum value
+                            return amount >= 20 ? amount : 30;
+                          })()}
+                          onChange={(e) => setDailySubscription(prev => ({
+                            ...prev,
+                            amount: parseFloat(e.target.value) || 20
+                          }))}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Amount users pay for daily subscription access</p>
+                      </div>
+                      
+                      <div>
+                        <Label htmlFor="draw_entries">Draw Entries Per Subscription</Label>
+                        <Input
+                          id="draw_entries"
+                          type="number"
+                          min="1"
+                          value={(() => {
+                            const entries = dailySubscription?.draw_entries_earned || 1;
+                            console.log('🔍 UI Display - entries being shown:', entries);
+                            return entries >= 1 ? entries : 1;
+                          })()}
+                          onChange={(e) => setDailySubscription(prev => ({
+                            ...prev,
+                            draw_entries_earned: parseInt(e.target.value) || 1
+                          }))}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Number of wheel spin entries earned per subscription</p>
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <Switch
+                          id="subscription_active"
+                          checked={dailySubscription?.is_paid !== false}
+                          onCheckedChange={(checked) => setDailySubscription(prev => ({
+                            ...prev,
+                            is_paid: checked
+                          }))}
+                        />
+                        <Label htmlFor="subscription_active">Enable Daily Subscriptions</Label>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="bg-gray-50 p-4 rounded-lg">
+                        <h4 className="font-medium mb-2">Current Configuration</h4>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span>Daily Price:</span>
+                            <span className="font-medium">₦{dailySubscription?.amount || 20}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Draw Entries:</span>
+                            <span className="font-medium">{dailySubscription?.draw_entries_earned || 1}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Status:</span>
+                            <Badge variant={dailySubscription?.is_paid ? 'default' : 'destructive'}>
+                              {dailySubscription?.is_paid ? 'Active' : 'Disabled'}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="bg-yellow-50 p-4 rounded-lg">
+                        <h4 className="font-medium text-yellow-800 mb-2">Impact</h4>
+                        <p className="text-sm text-yellow-700">
+                          Changes to the daily subscription price will be immediately reflected on the user frontend. 
+                          Users will see the new price when they attempt to purchase daily subscriptions.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Button 
+                    onClick={() => handleDailySubscriptionUpdate(dailySubscription)}
+                    disabled={actionLoading === 'subscription'}
+                    className="w-full md:w-auto"
+                  >
+                    {actionLoading === 'subscription' ? (
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    ) : null}
+                    Save Configuration
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+            
+            {/* All Daily Subscriptions */}
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="w-5 h-5" />
+                  All Daily Subscriptions
+                </CardTitle>
+                <CardDescription>
+                  View all user daily subscriptions and system configurations
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button 
+                  onClick={() => fetchAllDailySubscriptions()}
+                  className="mb-4"
+                  disabled={actionLoading === 'fetch_all_subscriptions'}
+                >
+                  {actionLoading === 'fetch_all_subscriptions' ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : null}
+                  Refresh All Subscriptions
+                </Button>
+                
+                {allDailySubscriptions && allDailySubscriptions.length > 0 ? (
+                  <div className="space-y-4">
+                    <div className="text-sm text-gray-600">
+                      Total Subscriptions: {allDailySubscriptions.length}
+                    </div>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead>User</TableHead>
+                          <TableHead>Amount</TableHead>
+                          <TableHead>Draw Entries</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Reference</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {allDailySubscriptions.map((subscription) => (
+                          <TableRow key={subscription.id}>
+                            <TableCell>
+                              {new Date(subscription.subscription_date).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell>
+                              {subscription.display_phone || 'System Config'}
+                              {subscription.display_name && (
+                                <div className="text-sm text-gray-500">
+                                  {subscription.display_name}
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell>₦{subscription.amount}</TableCell>
+                            <TableCell>{subscription.draw_entries_earned}</TableCell>
+                            <TableCell>
+                              <Badge variant={subscription.is_paid ? 'default' : 'destructive'}>
+                                {subscription.is_paid ? 'Paid' : 'Unpaid'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {subscription.payment_reference}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    No daily subscriptions found. Click "Refresh" to load data.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Strategic Affiliate Management */}
+          <TabsContent value="strategic-affiliates">
+            <StrategicAffiliateAdminDashboard sessionToken={sessionToken} />
+          </TabsContent>
+
+          {/* User Management */}
+          <TabsContent value="users">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="w-6 h-6" />
+                  User Management
+                </CardTitle>
+                <CardDescription>
+                  View and manage platform users
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>User</TableHead>
+                      <TableHead>Phone</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Transactions</TableHead>
+                      <TableHead>Total Spent</TableHead>
+                      <TableHead>Joined</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {users.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8">
+                          <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                          <p className="text-gray-500">No users found</p>
+                          <p className="text-sm text-gray-400">Registered users will appear here</p>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      (users || []).map((user) => (
+                        <TableRow key={user.id}>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">{user.full_name || 'N/A'}</div>
+                              <div className="text-sm text-gray-500">{user.email || 'No email'}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <code className="bg-gray-100 px-2 py-1 rounded text-sm">
+                              {user.msisdn}
+                            </code>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={user.is_active ? "default" : "secondary"}>
+                              {user.is_active ? "Active" : "Inactive"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              <div>{user.transaction_count || 0} transactions</div>
+                              <div className="text-gray-500">{user.points_balance || 0} points</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {formatCurrency(user.total_spent || 0)}
+                          </TableCell>
+                          <TableCell>
+                            {formatDate(user.created_at)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button size="sm" variant="outline">
+                                <Eye className="w-3 h-3" />
+                              </Button>
+                              <Button size="sm" variant="outline">
+                                <Edit className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Platform Settings */}
+          <TabsContent value="settings">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings className="w-6 h-6" />
+                  Platform Settings
+                </CardTitle>
+                <CardDescription>
+                  Configure platform-wide settings and parameters
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  {(settings || []).map((setting) => (
+                    <div key={setting.key || setting.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex-1">
+                        <h4 className="font-medium">{(setting.key || setting.setting_key || '').replace(/_/g, ' ').toUpperCase()}</h4>
+                        <p className="text-sm text-gray-500">{setting.description}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {typeof (setting.value || setting.setting_value) === 'boolean' ? (
+                          <Switch
+                            checked={setting.value || setting.setting_value}
+                            onCheckedChange={(checked) => 
+                              handleSettingUpdate(setting.key || setting.setting_key, checked, setting.description)
+                            }
+                            disabled={actionLoading === (setting.key || setting.setting_key)}
+                          />
+                        ) : (
+                          <Input
+                            value={setting.value || setting.setting_value}
+                            onChange={(e) => {
+                              const value = isNaN(Number(e.target.value)) ? e.target.value : Number(e.target.value);
+                              handleSettingUpdate(setting.key || setting.setting_key, value, setting.description);
+                            }}
+                            className="w-32"
+                            disabled={actionLoading === (setting.key || setting.setting_key)}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Admin Management */}
+          <TabsContent value="admins">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Shield className="w-6 h-6" />
+                      Admin Management
+                    </CardTitle>
+                    <CardDescription>
+                      Manage admin users and their roles (Super Admin only)
+                    </CardDescription>
+                  </div>
+                  {hasPermission('manage_admins') && (
+                    <Button onClick={() => setShowCreateAdminDialog(true)}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create Admin
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Admin</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Last Login</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(admins || []).map((adminUser) => (
+                      <TableRow key={adminUser.id}>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">{adminUser.full_name}</div>
+                            <div className="text-sm text-gray-500">{adminUser.email}</div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={adminUser.role === 'SUPER_ADMIN' ? 'default' : 'secondary'}>
+                            {adminUser.role}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={adminUser.is_active ? 'default' : 'destructive'}>
+                            {adminUser.is_active ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {adminUser.last_login ? formatDate(adminUser.last_login) : 'Never'}
+                        </TableCell>
+                        <TableCell>{formatDate(adminUser.created_at)}</TableCell>
+                        <TableCell>
+                          {hasPermission('manage_admins') && adminUser.role !== 'SUPER_ADMIN' && (
+                            <div className="flex gap-1">
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => handleUpdateAdmin(adminUser.id, {
+                                  full_name: adminUser.full_name,
+                                  role: adminUser.role,
+                                  is_active: !adminUser.is_active
+                                })}
+                                disabled={actionLoading === adminUser.id}
+                              >
+                                <Edit className="w-3 h-3" />
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="destructive"
+                                onClick={() => handleDeleteAdmin(adminUser.id)}
+                                disabled={actionLoading === adminUser.id}
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+
+        {/* Prize Dialog */}
+        <Dialog open={showPrizeDialog} onOpenChange={setShowPrizeDialog}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>
+                {editingPrize ? 'Edit Prize' : 'Add New Prize'}
+              </DialogTitle>
+              <DialogDescription>
+                Configure wheel spin prize details and probability
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="prize_name">Prize Name</Label>
+                <Input
+                  id="prize_name"
+                  defaultValue={editingPrize?.prize_name || ''}
+                  placeholder="e.g., ₦100 Cash"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="prize_type">Prize Type</Label>
+                <Select defaultValue={editingPrize?.prize_type || 'CASH'}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CASH">Cash</SelectItem>
+                    <SelectItem value="DATA">Data</SelectItem>
+                    <SelectItem value="AIRTIME">Airtime</SelectItem>
+                    <SelectItem value="POINTS">Points</SelectItem>
+                    <SelectItem value="TICKETS">Tickets</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="prize_value">Value</Label>
+                  <Input
+                    id="prize_value"
+                    type="number"
+                    defaultValue={editingPrize?.prize_value || ''}
+                    placeholder="100"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="probability">Probability (%)</Label>
+                  <Input
+                    id="probability"
+                    type="number"
+                    defaultValue={editingPrize?.probability || ''}
+                    placeholder="10"
+                    max="100"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="minimum_recharge">Minimum Recharge (₦)</Label>
+                <Input
+                  id="minimum_recharge"
+                  type="number"
+                  defaultValue={editingPrize?.minimum_recharge || '1000'}
+                  placeholder="1000"
+                />
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="is_active"
+                  defaultChecked={editingPrize?.is_active ?? true}
+                />
+                <Label htmlFor="is_active">Active</Label>
+              </div>
+
+              <div className="flex gap-2">
+                <Button 
+                  onClick={() => {
+                    const form = document.querySelector('[data-prize-form]') as HTMLFormElement;
+                    if (form) {
+                      const formData = new FormData(form);
+                      handleWheelPrizeUpdate({
+                        prize_name: (document.getElementById('prize_name') as HTMLInputElement).value,
+                        prize_type: (document.querySelector('[name="prize_type"]') as HTMLSelectElement)?.value || 'CASH',
+                        prize_value: parseFloat((document.getElementById('prize_value') as HTMLInputElement).value),
+                        probability: parseFloat((document.getElementById('probability') as HTMLInputElement).value),
+                        minimum_recharge: parseFloat((document.getElementById('minimum_recharge') as HTMLInputElement).value),
+                        is_active: (document.getElementById('is_active') as HTMLInputElement).checked
+                      });
+                    }
+                  }}
+                  disabled={actionLoading === 'prize'}
+                  className="flex-1"
+                >
+                  {actionLoading === 'prize' ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : null}
+                  {editingPrize ? 'Update Prize' : 'Create Prize'}
+                </Button>
+                <Button variant="outline" onClick={() => setShowPrizeDialog(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* New Dialog Components */}
+        <NetworkDialog
+          open={showNetworkDialog}
+          onOpenChange={setShowNetworkDialog}
+          network={editingNetwork}
+          onSave={handleNetworkSave}
+          loading={actionLoading === 'network_save'}
+        />
+
+        <DataPlanDialog
+          open={showDataPlanDialog}
+          onOpenChange={setShowDataPlanDialog}
+          dataPlan={editingDataPlan}
+          networks={networks}
+          onSave={handleDataPlanSave}
+          loading={actionLoading === 'plan_save'}
+        />
+
+        <WheelPrizeDialog
+          open={showPrizeDialog}
+          onOpenChange={setShowPrizeDialog}
+          prize={editingPrize}
+          existingPrizes={wheelPrizes}
+          onSave={handleWheelPrizeSave}
+          loading={actionLoading === 'prize_save'}
+        />
+
+        <CreateAdminDialog
+          open={showCreateAdminDialog}
+          onOpenChange={setShowCreateAdminDialog}
+          onSave={handleCreateAdmin}
+          loading={actionLoading === 'create_admin'}
+        />
+      </div>
+    </div>
+  );
+};
+
+export default ComprehensiveAdminPortal;

@@ -1,0 +1,367 @@
+package services
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"math/rand"
+	"time"
+)
+
+// TelecomServiceIntegrated handles VTU operations with dynamic provider switching
+type TelecomServiceIntegrated struct {
+	db            *sql.DB
+	vtpassService *VTPassService
+}
+
+// ProviderConfig represents a provider configuration from database
+type ProviderConfig struct {
+	ID           int64
+	Network      string
+	ServiceType  string
+	ProviderMode string
+	ProviderName string
+	Priority     int
+	Config       map[string]interface{}
+}
+
+// VTUResponse represents a unified response from any VTU provider
+type VTUResponse struct {
+	Success           bool
+	Status            string // COMPLETED, PROCESSING, FAILED, REVERSED
+	ProviderReference string
+	Message           string
+	Commission        float64
+	RawResponse       map[string]interface{}
+	ProviderMode      string
+	ProviderName      string
+	ResponseTimeMs    int64
+}
+
+// NewTelecomServiceIntegrated creates a new integrated telecom service
+func NewTelecomServiceIntegrated(db *sql.DB) *TelecomServiceIntegrated {
+	return &TelecomServiceIntegrated{
+		db: db,
+	}
+}
+
+// PurchaseAirtime purchases airtime using the configured provider
+func (s *TelecomServiceIntegrated) PurchaseAirtime(ctx context.Context, network, phone string, amountKobo int) (*VTUResponse, error) {
+	// Get active provider configuration
+	providerConfig, err := s.getActiveProvider(ctx, network, "AIRTIME")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get provider config: %w", err)
+	}
+
+	// Convert kobo to naira for provider
+	amountNaira := amountKobo / 100
+
+	// Route to appropriate provider based on mode
+	startTime := time.Now()
+	var response *VTUResponse
+
+	switch providerConfig.ProviderMode {
+	case "VTU":
+		response, err = s.purchaseAirtimeVTU(ctx, providerConfig, network, phone, amountNaira)
+	case "DIRECT":
+		response, err = s.purchaseAirtimeDirect(ctx, providerConfig, network, phone, amountNaira)
+	case "SIMULATION":
+		response, err = s.purchaseAirtimeSimulation(ctx, providerConfig, network, phone, amountNaira)
+	default:
+		return nil, fmt.Errorf("unsupported provider mode: %s", providerConfig.ProviderMode)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Calculate response time
+	response.ResponseTimeMs = time.Since(startTime).Milliseconds()
+	response.ProviderMode = providerConfig.ProviderMode
+	response.ProviderName = providerConfig.ProviderName
+
+	return response, nil
+}
+
+// PurchaseData purchases data using the configured provider
+func (s *TelecomServiceIntegrated) PurchaseData(ctx context.Context, network, phone, variationCode string, amountKobo int) (*VTUResponse, error) {
+	// Get active provider configuration
+	providerConfig, err := s.getActiveProvider(ctx, network, "DATA")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get provider config: %w", err)
+	}
+
+	// Convert kobo to naira for provider
+	amountNaira := amountKobo / 100
+
+	// Route to appropriate provider based on mode
+	startTime := time.Now()
+	var response *VTUResponse
+
+	switch providerConfig.ProviderMode {
+	case "VTU":
+		response, err = s.purchaseDataVTU(ctx, providerConfig, network, phone, variationCode, amountNaira)
+	case "DIRECT":
+		response, err = s.purchaseDataDirect(ctx, providerConfig, network, phone, variationCode, amountNaira)
+	case "SIMULATION":
+		response, err = s.purchaseDataSimulation(ctx, providerConfig, network, phone, variationCode, amountNaira)
+	default:
+		return nil, fmt.Errorf("unsupported provider mode: %s", providerConfig.ProviderMode)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Calculate response time
+	response.ResponseTimeMs = time.Since(startTime).Milliseconds()
+	response.ProviderMode = providerConfig.ProviderMode
+	response.ProviderName = providerConfig.ProviderName
+
+	return response, nil
+}
+
+// getActiveProvider retrieves the active provider configuration for a network and service type
+func (s *TelecomServiceIntegrated) getActiveProvider(ctx context.Context, network, serviceType string) (*ProviderConfig, error) {
+	query := `
+		SELECT id, network, service_type, provider_mode, provider_name, priority, config
+		FROM get_active_provider($1, $2)
+	`
+
+	var config ProviderConfig
+	var configJSON []byte
+
+	err := s.db.QueryRowContext(ctx, query, network, serviceType).Scan(
+		&config.ID,
+		&config.Network,
+		&config.ServiceType,
+		&config.ProviderMode,
+		&config.ProviderName,
+		&config.Priority,
+		&configJSON,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("no active provider configured for network=%s, service_type=%s", network, serviceType)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("database error: %w", err)
+	}
+
+	// Parse config JSON
+	if err := json.Unmarshal(configJSON, &config.Config); err != nil {
+		return nil, fmt.Errorf("failed to parse provider config: %w", err)
+	}
+
+	return &config, nil
+}
+
+// purchaseAirtimeVTU handles airtime purchase via VTU aggregator (VTPass)
+func (s *TelecomServiceIntegrated) purchaseAirtimeVTU(ctx context.Context, providerConfig *ProviderConfig, network, phone string, amountNaira int) (*VTUResponse, error) {
+	// Initialize VTPass service if not already done
+	if s.vtpassService == nil {
+		s.vtpassService = s.initializeVTPassService(providerConfig.Config)
+	}
+
+	// Call VTPass API
+	vtpassResp, err := s.vtpassService.PurchaseAirtime(ctx, network, phone, amountNaira)
+	if err != nil {
+		return &VTUResponse{
+			Success: false,
+			Status:  "FAILED",
+			Message: fmt.Sprintf("VTPass API error: %v", err),
+		}, nil // Don't return error, return failed response
+	}
+
+	// Convert VTPass response to unified response
+	return &VTUResponse{
+		Success:           vtpassResp.IsSuccessful(),
+		Status:            vtpassResp.GetStatus(),
+		ProviderReference: vtpassResp.GetProviderReference(),
+		Message:           vtpassResp.ResponseDescription,
+		Commission:        vtpassResp.GetCommission(),
+		RawResponse:       vtpassResp.RawResponse,
+	}, nil
+}
+
+// purchaseDataVTU handles data purchase via VTU aggregator (VTPass)
+func (s *TelecomServiceIntegrated) purchaseDataVTU(ctx context.Context, providerConfig *ProviderConfig, network, phone, variationCode string, amountNaira int) (*VTUResponse, error) {
+	// Initialize VTPass service if not already done
+	if s.vtpassService == nil {
+		s.vtpassService = s.initializeVTPassService(providerConfig.Config)
+	}
+
+	// Call VTPass API
+	vtpassResp, err := s.vtpassService.PurchaseData(ctx, network, phone, variationCode, amountNaira)
+	if err != nil {
+		return &VTUResponse{
+			Success: false,
+			Status:  "FAILED",
+			Message: fmt.Sprintf("VTPass API error: %v", err),
+		}, nil
+	}
+
+	// Convert VTPass response to unified response
+	return &VTUResponse{
+		Success:           vtpassResp.IsSuccessful(),
+		Status:            vtpassResp.GetStatus(),
+		ProviderReference: vtpassResp.GetProviderReference(),
+		Message:           vtpassResp.ResponseDescription,
+		Commission:        vtpassResp.GetCommission(),
+		RawResponse:       vtpassResp.RawResponse,
+	}, nil
+}
+
+// purchaseAirtimeDirect handles airtime purchase via direct network integration
+func (s *TelecomServiceIntegrated) purchaseAirtimeDirect(ctx context.Context, providerConfig *ProviderConfig, network, phone string, amountNaira int) (*VTUResponse, error) {
+	// TODO: Implement direct network integration when partnerships are signed
+	// For now, return not implemented
+	return &VTUResponse{
+		Success: false,
+		Status:  "FAILED",
+		Message: fmt.Sprintf("Direct %s integration not yet implemented", network),
+	}, nil
+}
+
+// purchaseDataDirect handles data purchase via direct network integration
+func (s *TelecomServiceIntegrated) purchaseDataDirect(ctx context.Context, providerConfig *ProviderConfig, network, phone, variationCode string, amountNaira int) (*VTUResponse, error) {
+	// TODO: Implement direct network integration when partnerships are signed
+	return &VTUResponse{
+		Success: false,
+		Status:  "FAILED",
+		Message: fmt.Sprintf("Direct %s integration not yet implemented", network),
+	}, nil
+}
+
+// purchaseAirtimeSimulation handles airtime purchase in simulation mode
+func (s *TelecomServiceIntegrated) purchaseAirtimeSimulation(ctx context.Context, providerConfig *ProviderConfig, network, phone string, amountNaira int) (*VTUResponse, error) {
+	// Simulate API delay
+	time.Sleep(time.Duration(500+rand.Intn(1500)) * time.Millisecond)
+
+	// Get success rate from config (default 95%)
+	successRate := 0.95
+	if rate, ok := providerConfig.Config["success_rate"].(float64); ok {
+		successRate = rate
+	}
+
+	// Simulate success/failure
+	success := rand.Float64() < successRate
+
+	if success {
+		return &VTUResponse{
+			Success:           true,
+			Status:            "COMPLETED",
+			ProviderReference: fmt.Sprintf("SIM-%d", time.Now().Unix()),
+			Message:           "Simulation: Transaction successful",
+			Commission:        float64(amountNaira) * 0.035, // 3.5% commission
+			RawResponse: map[string]interface{}{
+				"simulation": true,
+				"network":    network,
+				"phone":      phone,
+				"amount":     amountNaira,
+			},
+		}, nil
+	}
+
+	return &VTUResponse{
+		Success:           false,
+		Status:            "FAILED",
+		ProviderReference: fmt.Sprintf("SIM-%d", time.Now().Unix()),
+		Message:           "Simulation: Transaction failed",
+		RawResponse: map[string]interface{}{
+			"simulation": true,
+			"error":      "Simulated failure",
+		},
+	}, nil
+}
+
+// purchaseDataSimulation handles data purchase in simulation mode
+func (s *TelecomServiceIntegrated) purchaseDataSimulation(ctx context.Context, providerConfig *ProviderConfig, network, phone, variationCode string, amountNaira int) (*VTUResponse, error) {
+	// Simulate API delay
+	time.Sleep(time.Duration(500+rand.Intn(1500)) * time.Millisecond)
+
+	// Get success rate from config (default 95%)
+	successRate := 0.95
+	if rate, ok := providerConfig.Config["success_rate"].(float64); ok {
+		successRate = rate
+	}
+
+	// Simulate success/failure
+	success := rand.Float64() < successRate
+
+	if success {
+		return &VTUResponse{
+			Success:           true,
+			Status:            "COMPLETED",
+			ProviderReference: fmt.Sprintf("SIM-%d", time.Now().Unix()),
+			Message:           "Simulation: Data purchase successful",
+			Commission:        float64(amountNaira) * 0.03, // 3% commission for data
+			RawResponse: map[string]interface{}{
+				"simulation":     true,
+				"network":        network,
+				"phone":          phone,
+				"variation_code": variationCode,
+				"amount":         amountNaira,
+			},
+		}, nil
+	}
+
+	return &VTUResponse{
+		Success:           false,
+		Status:            "FAILED",
+		ProviderReference: fmt.Sprintf("SIM-%d", time.Now().Unix()),
+		Message:           "Simulation: Data purchase failed",
+		RawResponse: map[string]interface{}{
+			"simulation": true,
+			"error":      "Simulated failure",
+		},
+	}, nil
+}
+
+// initializeVTPassService creates a VTPass service from config
+func (s *TelecomServiceIntegrated) initializeVTPassService(config map[string]interface{}) *VTPassService {
+	apiKey, _ := config["api_key"].(string)
+	publicKey, _ := config["public_key"].(string)
+	secretKey, _ := config["secret_key"].(string)
+	isSandbox, _ := config["is_sandbox"].(bool)
+
+	return NewVTPassService(VTPassConfig{
+		APIKey:    apiKey,
+		PublicKey: publicKey,
+		SecretKey: secretKey,
+		IsSandbox: isSandbox,
+	})
+}
+
+// LogProviderTransaction logs a provider transaction to the database
+func (s *TelecomServiceIntegrated) LogProviderTransaction(ctx context.Context, transactionID int64, providerConfigID int64, response *VTUResponse, requestPayload map[string]interface{}) error {
+	requestJSON, _ := json.Marshal(requestPayload)
+	responseJSON, _ := json.Marshal(response.RawResponse)
+
+	query := `
+		SELECT log_provider_transaction($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`
+
+	var logID int64
+	err := s.db.QueryRowContext(
+		ctx,
+		query,
+		transactionID,
+		providerConfigID,
+		response.ProviderMode,
+		response.ProviderName,
+		requestJSON,
+		responseJSON,
+		response.Status,
+		response.Message,
+		response.ResponseTimeMs,
+	).Scan(&logID)
+
+	if err != nil {
+		return fmt.Errorf("failed to log provider transaction: %w", err)
+	}
+
+	return nil
+}

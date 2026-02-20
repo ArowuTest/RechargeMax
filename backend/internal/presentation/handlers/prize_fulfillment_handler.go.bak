@@ -1,0 +1,275 @@
+package handlers
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/google/uuid"
+	"github.com/gorilla/mux"
+
+	"rechargemax/internal/application/services"
+	"rechargemax/internal/errors"
+)
+
+// PrizeFulfillmentHandler handles prize fulfillment operations
+type PrizeFulfillmentHandler struct {
+	fulfillmentService *services.PrizeFulfillmentService
+	winnerService      *services.WinnerService
+}
+
+// NewPrizeFulfillmentHandler creates a new prize fulfillment handler
+func NewPrizeFulfillmentHandler(
+	fulfillmentService *services.PrizeFulfillmentService,
+	winnerService      *services.WinnerService,
+) *PrizeFulfillmentHandler {
+	return &PrizeFulfillmentHandler{
+		fulfillmentService: fulfillmentService,
+		winnerService:      winnerService,
+	}
+}
+
+// GetConfigs returns all prize fulfillment configurations (Admin only)
+func (h *PrizeFulfillmentHandler) GetConfigs(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	
+	// In production, fetch from database
+	// For now, return default configs
+	configs := []map[string]interface{}{
+		{
+			"id":                     uuid.New().String(),
+			"prizeType":              "airtime",
+			"fulfillmentMode":        "manual_claim",
+			"autoProvisionEnabled":   true,
+			"requireLoginToClaim":    true,
+			"claimDeadlineDays":      30,
+			"allowRetryOnFailure":    true,
+			"maxRetryAttempts":       3,
+			"isActive":               true,
+		},
+		{
+			"id":                     uuid.New().String(),
+			"prizeType":              "data",
+			"fulfillmentMode":        "manual_claim",
+			"autoProvisionEnabled":   true,
+			"requireLoginToClaim":    true,
+			"claimDeadlineDays":      30,
+			"allowRetryOnFailure":    true,
+			"maxRetryAttempts":       3,
+			"isActive":               true,
+		},
+		{
+			"id":                     uuid.New().String(),
+			"prizeType":              "cash",
+			"fulfillmentMode":        "manual_claim",
+			"autoProvisionEnabled":   false,
+			"requireLoginToClaim":    true,
+			"claimDeadlineDays":      30,
+			"allowRetryOnFailure":    false,
+			"maxRetryAttempts":       0,
+			"isActive":               true,
+		},
+		{
+			"id":                     uuid.New().String(),
+			"prizeType":              "goods",
+			"fulfillmentMode":        "manual_claim",
+			"autoProvisionEnabled":   false,
+			"requireLoginToClaim":    true,
+			"claimDeadlineDays":      30,
+			"allowRetryOnFailure":    false,
+			"maxRetryAttempts":       0,
+			"isActive":               true,
+		},
+		{
+			"id":                     uuid.New().String(),
+			"prizeType":              "points",
+			"fulfillmentMode":        "auto_provision",
+			"autoProvisionEnabled":   true,
+			"requireLoginToClaim":    false,
+			"claimDeadlineDays":      30,
+			"allowRetryOnFailure":    true,
+			"maxRetryAttempts":       3,
+			"isActive":               true,
+		},
+	}
+	
+	_ = ctx // Use context
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"configs": configs,
+	})
+}
+
+// UpdateConfig updates a prize fulfillment configuration (Admin only)
+func (h *PrizeFulfillmentHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	configID := vars["id"]
+	
+	if configID == "" {
+		errors.WriteError(w, errors.NewBadRequestError("Config ID is required"))
+		return
+	}
+	
+	var config map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
+		errors.WriteError(w, errors.NewBadRequestError("Invalid request body"))
+		return
+	}
+	
+	// In production, update database
+	// For now, just return success
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Configuration updated successfully",
+	})
+}
+
+// GetFailedProvisions returns all failed provisions (Admin only)
+func (h *PrizeFulfillmentHandler) GetFailedProvisions(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	
+	// In production, query database for failed provisions
+	// For now, return empty array
+	provisions := []map[string]interface{}{}
+	
+	_ = ctx // Use context
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"provisions": provisions,
+	})
+}
+
+// RetryProvision retries a failed provision (Admin only)
+func (h *PrizeFulfillmentHandler) RetryProvision(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	vars := mux.Vars(r)
+	winnerIDStr := vars["id"]
+	
+	winnerID, err := uuid.Parse(winnerIDStr)
+	if err != nil {
+		errors.WriteError(w, errors.NewBadRequestError("Invalid winner ID"))
+		return
+	}
+	
+	// Retry provision
+	err = h.fulfillmentService.RetryProvision(ctx, winnerID, "admin")
+	if err != nil {
+		errors.WriteError(w, errors.NewInternalServerError(err.Error()))
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Retry initiated successfully",
+	})
+}
+
+// RetryAllProvisions retries all failed provisions (Admin only)
+func (h *PrizeFulfillmentHandler) RetryAllProvisions(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	
+	// In production, query all failed provisions and retry them
+	// For now, return success
+	count := 0
+	
+	_ = ctx // Use context
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"count":   count,
+		"message": "Retry initiated for all failed provisions",
+	})
+}
+
+// GetUnclaimedPrizes returns all unclaimed prizes (Admin only)
+func (h *PrizeFulfillmentHandler) GetUnclaimedPrizes(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	
+	// In production, query database for unclaimed prizes
+	// For now, return empty array
+	prizes := []map[string]interface{}{}
+	
+	_ = ctx // Use context
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"prizes": prizes,
+	})
+}
+
+// SendReminders sends claim reminders to users (Admin only)
+func (h *PrizeFulfillmentHandler) SendReminders(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	
+	// In production, query unclaimed prizes and send reminders
+	// For now, return success
+	count := 0
+	
+	_ = ctx // Use context
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"count":   count,
+		"message": "Reminders sent successfully",
+	})
+}
+
+// GetMyPrizes returns current user's prizes
+func (h *PrizeFulfillmentHandler) GetMyPrizes(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	
+	// Get user MSISDN from context (set by auth middleware)
+	msisdn := ctx.Value("msisdn")
+	if msisdn == nil {
+		errors.WriteError(w, errors.NewUnauthorizedError("User not authenticated"))
+		return
+	}
+	
+	// In production, query database for user's prizes
+	// For now, return empty array
+	prizes := []map[string]interface{}{}
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"prizes": prizes,
+	})
+}
+
+// ClaimPrize allows user to claim their prize
+func (h *PrizeFulfillmentHandler) ClaimPrize(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	vars := mux.Vars(r)
+	winnerIDStr := vars["id"]
+	
+	// Get user MSISDN from context
+	msisdn := ctx.Value("msisdn")
+	if msisdn == nil {
+		errors.WriteError(w, errors.NewUnauthorizedError("User not authenticated"))
+		return
+	}
+	
+	winnerID, err := uuid.Parse(winnerIDStr)
+	if err != nil {
+		errors.WriteError(w, errors.NewBadRequestError("Invalid prize ID"))
+		return
+	}
+	
+	// Process claim
+	err = h.fulfillmentService.ProcessManualClaim(ctx, winnerID, msisdn.(string))
+	if err != nil {
+		errors.WriteError(w, errors.NewInternalServerError(err.Error()))
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Prize claimed successfully! Your reward will be delivered shortly.",
+	})
+}

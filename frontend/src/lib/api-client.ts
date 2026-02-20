@@ -1,0 +1,683 @@
+/**
+ * RechargeMax API Client
+ * Connects to Go backend API
+ */
+
+import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from 'axios';
+
+// API Configuration
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
+const API_TIMEOUT = parseInt(import.meta.env.VITE_API_TIMEOUT || '30000');
+
+// Create axios instance
+const apiClient: AxiosInstance = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: API_TIMEOUT,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Request interceptor - Add auth token
+apiClient.interceptors.request.use(
+  (config) => {
+    // Check if this is an admin API call
+    const isAdminCall = config.url?.includes('/admin/');
+    
+    // Use appropriate token based on the endpoint
+    const token = isAdminCall 
+      ? localStorage.getItem('rechargemax_admin_token')
+      : localStorage.getItem('rechargemax_token');
+    
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Response interceptor - Handle errors
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error: AxiosError) => {
+    if (error.response?.status === 401) {
+      // Unauthorized - clear token and redirect to login
+      localStorage.removeItem('rechargemax_token');
+      localStorage.removeItem('rechargemax_user');
+      window.location.href = '/#/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+export interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
+// ============================================================================
+// AUTHENTICATION API
+// ============================================================================
+
+export const authApi = {
+  // Send OTP to phone number
+  sendOTP: async (phoneNumber: string) => {
+    const response = await apiClient.post<ApiResponse>('/auth/send-otp', {
+      msisdn: phoneNumber,
+    });
+    return response.data;
+  },
+
+  // Verify OTP and login
+  verifyOTP: async (phoneNumber: string, otp: string) => {
+    const response = await apiClient.post<ApiResponse<{ token: string; user: any }>>('/auth/verify-otp', {
+      msisdn: phoneNumber,
+      otp: otp,
+    });
+    
+    // Store token and user
+    if (response.data.success && response.data.data) {
+      localStorage.setItem('rechargemax_token', response.data.data.token);
+      localStorage.setItem('rechargemax_user', JSON.stringify(response.data.data.user));
+    }
+    
+    return response.data;
+  },
+
+  // Logout
+  logout: async () => {
+    try {
+      await apiClient.post('/auth/logout');
+    } finally {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user');
+    }
+  },
+
+  // Get current user
+  getCurrentUser: () => {
+    const userStr = localStorage.getItem('user');
+    return userStr ? JSON.parse(userStr) : null;
+  },
+};
+
+// ============================================================================
+// ADMIN AUTHENTICATION API
+// ============================================================================
+
+export const adminAuthApi = {
+  // Admin login
+  login: async (email: string, password: string) => {
+    const response = await apiClient.post<ApiResponse<{ token: string; admin: any }>>('/admin/login', {
+      email,
+      password,
+    });
+    
+    if (response.data.success && response.data.data) {
+      localStorage.setItem('rechargemax_admin_token', response.data.data.token);
+      localStorage.setItem('rechargemax_admin_user', JSON.stringify(response.data.data.admin));
+    }
+    
+    return response.data;
+  },
+
+  // Admin logout
+  logout: async () => {
+    try {
+      await apiClient.post('/admin/logout');
+    } finally {
+      localStorage.removeItem('rechargemax_admin_token');
+      localStorage.removeItem('rechargemax_admin_user');
+    }
+  },
+};
+
+// ============================================================================
+// RECHARGE API
+// ============================================================================
+
+export const rechargeApi = {
+  // Get available networks
+  getNetworks: async () => {
+    const response = await apiClient.get<ApiResponse<any[]>>('/networks');
+    return response.data;
+  },
+
+  // Get data bundles for a network
+  getDataBundles: async (networkId: string) => {
+    const response = await apiClient.get<ApiResponse<any[]>>(`/networks/${networkId}/bundles`);
+    return response.data;
+  },
+
+  // Validate phone number network
+  validatePhoneNetwork: async (phoneNumber: string, expectedNetwork: string) => {
+    const response = await apiClient.post<ApiResponse<any>>('/networks/validate', {
+      phone_number: phoneNumber,
+      expected_network: expectedNetwork,
+    });
+    return response.data;
+  },
+
+  // Initialize airtime recharge
+  initiateAirtimeRecharge: async (data: {
+    phone_number: string;
+    network: string;
+    amount: number;
+  }) => {
+    const response = await apiClient.post<ApiResponse>('/recharge/airtime', data);
+    return response.data;
+  },
+
+  // Initialize data recharge
+  initiateDataRecharge: async (data: {
+    phone_number: string;
+    network: string;
+    bundle_id: string;
+  }) => {
+    const response = await apiClient.post<ApiResponse>('/recharge/data', data);
+    return response.data;
+  },
+};
+
+// ============================================================================
+// PAYMENT API
+// ============================================================================
+
+export const paymentApi = {
+  // Initialize payment
+  initializePayment: async (data: {
+    amount: number;
+    email: string;
+    phone_number: string;
+    transaction_type: string;
+    metadata?: any;
+  }) => {
+    const response = await apiClient.post<ApiResponse<{ authorization_url: string; reference: string }>>('/payment/initialize', data);
+    return response.data;
+  },
+
+  // Verify payment
+  verifyPayment: async (reference: string) => {
+    const response = await apiClient.get<ApiResponse>(`/payment/verify/${reference}`);
+    return response.data;
+  },
+};
+
+// ============================================================================
+// SPIN WHEEL API
+// ============================================================================
+
+export const spinApi = {
+  // Get spin eligibility
+  getEligibility: async () => {
+    const response = await apiClient.get<ApiResponse<{ available_spins: number; next_reset: string }>>('/spin/eligibility');
+    return response.data;
+  },
+
+  // Spin the wheel
+  spin: async () => {
+    const response = await apiClient.post<ApiResponse<{ prize: any }>>('/spin/play');
+    return response.data;
+  },
+
+  // Get spin history
+  getHistory: async () => {
+    const response = await apiClient.get<ApiResponse<any[]>>('/spin/history');
+    return response.data;
+  },
+};
+
+// ============================================================================
+// DRAW API
+// ============================================================================
+
+export const drawApi = {
+  // Get active draws
+  getActiveDraws: async () => {
+    const response = await apiClient.get<ApiResponse<any[]>>('/draws/active');
+    return response.data;
+  },
+
+  // Get draw details
+  getDrawDetails: async (drawId: string) => {
+    const response = await apiClient.get<ApiResponse>(`/draws/${drawId}`);
+    return response.data;
+  },
+
+  // Get user's draw entries
+  getMyEntries: async () => {
+    const response = await apiClient.get<ApiResponse<any[]>>('/draws/my-entries');
+    return response.data;
+  },
+
+  // Get draw winners
+  getWinners: async (drawId: string) => {
+    const response = await apiClient.get<ApiResponse<any[]>>(`/draws/${drawId}/winners`);
+    return response.data;
+  },
+};
+
+// ============================================================================
+// SUBSCRIPTION API
+// ============================================================================
+
+export const subscriptionApi = {
+  // Get subscription details
+  getDetails: async () => {
+    const response = await apiClient.get<ApiResponse>('/subscription');
+    return response.data;
+  },
+
+  // Subscribe
+  subscribe: async (data: { phone_number: string; network: string }) => {
+    const response = await apiClient.post<ApiResponse>('/subscription/subscribe', data);
+    return response.data;
+  },
+
+  // Unsubscribe
+  unsubscribe: async () => {
+    const response = await apiClient.post<ApiResponse>('/subscription/unsubscribe');
+    return response.data;
+  },
+
+  // Get subscription history
+  getHistory: async () => {
+    const response = await apiClient.get<ApiResponse<any[]>>('/subscription/history');
+    return response.data;
+  },
+};
+
+// ============================================================================
+// AFFILIATE API
+// ============================================================================
+
+export const affiliateApi = {
+  // Register as affiliate
+  register: async (data: {
+    business_name?: string;
+    bank_name: string;
+    account_number: string;
+    account_name: string;
+  }) => {
+    const response = await apiClient.post<ApiResponse>('/affiliate/register', data);
+    return response.data;
+  },
+
+  // Get affiliate dashboard
+  getDashboard: async () => {
+    const response = await apiClient.get<ApiResponse>('/affiliate/dashboard');
+    return response.data;
+  },
+
+  // Get referral link
+  getReferralLink: async () => {
+    const response = await apiClient.get<ApiResponse<{ referral_code: string; referral_link: string }>>('/affiliate/referral-link');
+    return response.data;
+  },
+
+  // Get commissions
+  getCommissions: async () => {
+    const response = await apiClient.get<ApiResponse<any[]>>('/affiliate/commissions');
+    return response.data;
+  },
+
+  // Request payout
+  requestPayout: async (amount: number) => {
+    const response = await apiClient.post<ApiResponse>('/affiliate/payout', { amount });
+    return response.data;
+  },
+
+  // Track affiliate click
+  trackClick: async () => {
+    const affiliateCode = sessionStorage.getItem('affiliate_code');
+    if (!affiliateCode) return { success: false };
+    
+    const response = await apiClient.post<ApiResponse>('/affiliate/track-click', {
+      affiliate_code: affiliateCode,
+      timestamp: new Date().toISOString(),
+      referrer: document.referrer,
+      landing_page: window.location.pathname
+    });
+    return response.data;
+  },
+};
+
+// ============================================================================
+// USER API
+// ============================================================================
+
+export const userApi = {
+  // Get user dashboard
+  getDashboard: async () => {
+    const response = await apiClient.get<ApiResponse>('/user/dashboard');
+    return response.data;
+  },
+
+  // Get user profile
+  getProfile: async () => {
+    const response = await apiClient.get<ApiResponse>('/user/profile');
+    return response.data;
+  },
+
+  // Update profile
+  updateProfile: async (data: { full_name?: string; email?: string }) => {
+    const response = await apiClient.post<ApiResponse>('/user/profile', data);
+    return response.data;
+  },
+
+  // Get transactions
+  getTransactions: async () => {
+    const response = await apiClient.get<ApiResponse<any[]>>('/user/transactions');
+    return response.data;
+  },
+
+  // Get prizes
+  getPrizes: async () => {
+    const response = await apiClient.get<ApiResponse<any[]>>('/user/prizes');
+    return response.data;
+  },
+
+  // Claim prize
+  claimPrize: async (prizeId: string, claimData: any) => {
+    const response = await apiClient.post<ApiResponse>(`/winner/${prizeId}/claim`, claimData);
+    return response.data;
+  },
+};
+
+// ============================================================================
+// ADMIN API
+// ============================================================================
+
+export const adminApi = {
+  // Dashboard stats
+  getStats: async () => {
+    const response = await apiClient.get<ApiResponse>('/admin/dashboard');
+    return response.data;
+  },
+
+  // Users management
+  users: {
+    getAll: async (page = 1, perPage = 50) => {
+      const response = await apiClient.get<ApiResponse<any>>(`/admin/users/all`);
+      return response.data;
+    },
+    getById: async (userId: string) => {
+      const response = await apiClient.get<ApiResponse>(`/admin/users/${userId}`);
+      return response.data;
+    },
+    update: async (userId: string, data: any) => {
+      const response = await apiClient.put<ApiResponse>(`/admin/users/${userId}`, data);
+      return response.data;
+    },
+  },
+
+  // Affiliates management
+  affiliates: {
+    getAll: async () => {
+      const response = await apiClient.get<ApiResponse<any[]>>('/admin/affiliates');
+      return response.data;
+    },
+    approve: async (affiliateId: string) => {
+      const response = await apiClient.post<ApiResponse>(`/admin/affiliates/${affiliateId}/approve`);
+      return response.data;
+    },
+    reject: async (affiliateId: string, reason: string) => {
+      const response = await apiClient.post<ApiResponse>(`/admin/affiliates/${affiliateId}/reject`, { reason });
+      return response.data;
+    },
+    suspend: async (affiliateId: string) => {
+      const response = await apiClient.post<ApiResponse>(`/admin/affiliates/${affiliateId}/suspend`);
+      return response.data;
+    },
+  },
+
+  // Subscriptions management
+  subscriptions: {
+    getAll: async () => {
+      const response = await apiClient.get<ApiResponse<any[]>>('/admin/daily-subscriptions');
+      return response.data;
+    },
+    getConfig: async () => {
+      const response = await apiClient.get<ApiResponse>('/admin/subscription-pricing/current');
+      return response.data;
+    },
+    updateConfig: async (data: any) => {
+      const response = await apiClient.post<ApiResponse>('/admin/subscription-pricing', data);
+      return response.data;
+    },
+  },
+
+  // Spin wheel management
+  spin: {
+    getConfig: async () => {
+      const response = await apiClient.get<ApiResponse>('/admin/spin/config');
+      return response.data;
+    },
+    updateConfig: async (data: any) => {
+      const response = await apiClient.put<ApiResponse>('/admin/spin/config', data);
+      return response.data;
+    },
+    getPrizes: async () => {
+      const response = await apiClient.get<ApiResponse<any[]>>('/admin/spin/prizes');
+      return response.data;
+    },
+    createPrize: async (data: any) => {
+      const response = await apiClient.post<ApiResponse>('/admin/spin/prizes', data);
+      return response.data;
+    },
+    updatePrize: async (prizeId: string, data: any) => {
+      const response = await apiClient.put<ApiResponse>(`/admin/spin/prizes/${prizeId}`, data);
+      return response.data;
+    },
+    deletePrize: async (prizeId: string) => {
+      const response = await apiClient.delete<ApiResponse>(`/admin/spin/prizes/${prizeId}`);
+      return response.data;
+    },
+  },
+
+  // Data bundles management
+  bundles: {
+    getAll: async () => {
+      // Get all data plans from the admin endpoint
+      const response = await apiClient.get<ApiResponse<any[]>>('/admin/recharge/data-plans');
+      return response.data;
+    },
+    create: async (data: any) => {
+      const response = await apiClient.post<ApiResponse>('/admin/bundles', data);
+      return response.data;
+    },
+    update: async (bundleId: string, data: any) => {
+      const response = await apiClient.put<ApiResponse>(`/admin/bundles/${bundleId}`, data);
+      return response.data;
+    },
+    delete: async (bundleId: string) => {
+      const response = await apiClient.delete<ApiResponse>(`/admin/bundles/${bundleId}`);
+      return response.data;
+    },
+  },
+
+  // Networks management
+  networks: {
+    getAll: async () => {
+      const response = await apiClient.get<ApiResponse<any[]>>('/admin/recharge/network-configs');
+      return response.data;
+    },
+    update: async (networkId: string, data: any) => {
+      const response = await apiClient.put<ApiResponse>(`/admin/networks/${networkId}`, data);
+      return response.data;
+    },
+  },
+
+  // Draws management
+  draws: {
+    getAll: async () => {
+      const response = await apiClient.get<ApiResponse<any[]>>('/admin/draws');
+      return response.data;
+    },
+    create: async (data: any) => {
+      const response = await apiClient.post<ApiResponse>('/admin/draws', data);
+      return response.data;
+    },
+    update: async (drawId: string, data: any) => {
+      const response = await apiClient.put<ApiResponse>(`/admin/draws/${drawId}`, data);
+      return response.data;
+    },
+    execute: async (drawId: string) => {
+      const response = await apiClient.post<ApiResponse>(`/admin/draws/${drawId}/execute`);
+      return response.data;
+    },
+  },
+
+  // Analytics
+  analytics: {
+    getOverview: async () => {
+      // Use dashboard endpoint for analytics overview
+      const response = await apiClient.get<ApiResponse>('/admin/dashboard');
+      return response.data;
+    },
+    getRevenue: async (startDate?: string, endDate?: string) => {
+      const params = new URLSearchParams();
+      if (startDate) params.append('start_date', startDate);
+      if (endDate) params.append('end_date', endDate);
+      const response = await apiClient.get<ApiResponse>(`/admin/analytics/revenue?${params}`);
+      return response.data;
+    },
+    getUsers: async () => {
+      const response = await apiClient.get<ApiResponse>('/admin/analytics/users');
+      return response.data;
+    },
+  },
+
+  // Configuration
+  config: {
+    get: async (key: string) => {
+      const response = await apiClient.get<ApiResponse>(`/admin/config/${key}`);
+      return response.data;
+    },
+    set: async (key: string, value: any) => {
+      const response = await apiClient.post<ApiResponse>('/admin/config', { key, value });
+      return response.data;
+    },
+    getCommissionRates: async () => {
+      const response = await apiClient.get<ApiResponse>('/admin/config/commission-rates');
+      return response.data;
+    },
+    setCommissionRates: async (rates: any) => {
+      const response = await apiClient.put<ApiResponse>('/admin/config/commission-rates', rates);
+      return response.data;
+    },
+  },
+
+  // Convenience methods for backward compatibility
+  getNetworks: async () => {
+    return await adminApi.networks.getAll();
+  },
+
+  getDataPlans: async () => {
+    return await adminApi.bundles.getAll();
+  },
+
+  getWheelPrizes: async () => {
+    return await adminApi.spin.getPrizes();
+  },
+
+  // Spin Prize Claims Management
+  getSpinClaims: async (params?: any) => {
+    const response = await apiClient.get<ApiResponse>('/admin/spin/claims', { params });
+    return response.data;
+  },
+
+  getSpinClaimDetails: async (claimId: string) => {
+    const response = await apiClient.get<ApiResponse>(`/admin/spin/claims/${claimId}`);
+    return response.data;
+  },
+
+  getPendingSpinClaims: async () => {
+    const response = await apiClient.get<ApiResponse>('/admin/spin/claims/pending');
+    return response.data;
+  },
+
+  getSpinClaimStatistics: async () => {
+    const response = await apiClient.get<ApiResponse>('/admin/spin/claims/statistics');
+    return response.data;
+  },
+
+  approveSpinClaim: async (claimId: string, data: { admin_notes?: string; payment_reference?: string }) => {
+    const response = await apiClient.post<ApiResponse>(`/admin/spin/claims/${claimId}/approve`, data);
+    return response.data;
+  },
+
+  rejectSpinClaim: async (claimId: string, data: { rejection_reason: string; admin_notes?: string }) => {
+    const response = await apiClient.post<ApiResponse>(`/admin/spin/claims/${claimId}/reject`, data);
+    return response.data;
+  },
+
+  exportSpinClaims: async (params?: any) => {
+    const response = await apiClient.get('/admin/spin/claims/export', {
+      params,
+      responseType: 'blob',
+    });
+    
+    // Create download link
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `spin_claims_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  },
+};
+
+// ============================================================================
+// HELPER FUNCTION (Legacy compatibility)
+// ============================================================================
+
+/**
+ * Legacy function for backward compatibility
+ * Replaces Supabase edge function calls
+ */
+export async function callEdgeFunction(
+  functionName: string,
+  payload: any
+): Promise<any> {
+  // Map old edge function names to new API endpoints
+  const endpointMap: Record<string, () => Promise<any>> = {
+    'send-otp': () => authApi.sendOTP(payload.phone_number),
+    'verify-otp': () => authApi.verifyOTP(payload.phone_number, payload.otp_code),
+    'initialize-payment': () => paymentApi.initializePayment(payload),
+    'verify-payment': () => paymentApi.verifyPayment(payload.reference),
+    'get-networks': () => rechargeApi.getNetworks(),
+    'get-data-bundles': () => rechargeApi.getDataBundles(payload.network_id),
+    'spin-wheel': () => spinApi.spin(),
+    'get-active-draws': () => drawApi.getActiveDraws(),
+    'admin-login': () => adminAuthApi.login(payload.email, payload.password),
+  };
+
+  const apiCall = endpointMap[functionName];
+  if (apiCall) {
+    return await apiCall();
+  }
+
+  // Fallback: make a generic POST request
+  const response = await apiClient.post(`/${functionName}`, payload);
+  return response.data;
+}
+
+export default apiClient;
+export { apiClient };

@@ -1,0 +1,254 @@
+package services
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"math/rand"
+	"time"
+
+	"github.com/google/uuid"
+	"rechargemax/internal/domain/entities"
+	"rechargemax/internal/domain/repositories"
+)
+
+// SpinService handles spin wheel gamification logic
+type SpinService struct {
+	spinRepo        repositories.SpinRepository
+	prizeRepo       repositories.PrizeRepository
+	transactionRepo repositories.TransactionRepository
+	userRepo        repositories.UserRepository
+	walletRepo      repositories.WalletTransactionRepository
+}
+
+// NewSpinService creates a new spin service instance
+func NewSpinService(
+	spinRepo repositories.SpinRepository,
+	prizeRepo repositories.PrizeRepository,
+	transactionRepo repositories.TransactionRepository,
+	userRepo repositories.UserRepository,
+	walletRepo repositories.WalletTransactionRepository,
+) *SpinService {
+	rand.Seed(time.Now().UnixNano())
+	return &SpinService{
+		spinRepo:        spinRepo,
+		prizeRepo:       prizeRepo,
+		transactionRepo: transactionRepo,
+		userRepo:        userRepo,
+		walletRepo:      walletRepo,
+	}
+}
+
+// SpinEligibilityResponse represents spin eligibility check response
+type SpinEligibilityResponse struct {
+	Eligible          bool    `json:"eligible"`
+	AvailableSpins    int     `json:"available_spins"`
+	Message           string  `json:"message"`
+	MinRechargeAmount float64 `json:"min_recharge_amount"`
+}
+
+// SpinResultResponse represents spin result
+type SpinResultResponse struct {
+	Success      bool      `json:"success"`
+	SpinID       uuid.UUID `json:"spin_id"`
+	PrizeName    string    `json:"prize_name"`
+	PrizeType    string    `json:"prize_type"`
+	PrizeValue   float64   `json:"prize_value"`
+	Message      string    `json:"message"`
+	AutoCredited bool      `json:"auto_credited"`
+}
+
+// CheckSpinEligibility checks if user is eligible to spin
+func (s *SpinService) CheckSpinEligibility(ctx context.Context, userID uuid.UUID) (*SpinEligibilityResponse, error) {
+	// Get user
+	_, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, errors.New("user not found")
+	}
+
+	// Check for eligible transactions (₦1000+ recharges without spin)
+	eligibleCount, err := s.transactionRepo.CountEligibleForSpin(ctx, userID)
+	if err != nil {
+		eligibleCount = 0
+	}
+
+	if eligibleCount > 0 {
+		return &SpinEligibilityResponse{
+			Eligible:          true,
+			AvailableSpins:    int(eligibleCount),
+			Message:           fmt.Sprintf("You have %d spin(s) available!", eligibleCount),
+			MinRechargeAmount: 1000,
+		}, nil
+	}
+
+	return &SpinEligibilityResponse{
+		Eligible:          false,
+		AvailableSpins:    0,
+		Message:           "Recharge ₦1,000 or more to earn a spin!",
+		MinRechargeAmount: 1000,
+	}, nil
+}
+
+// PlaySpin processes a spin wheel play
+func (s *SpinService) PlaySpin(ctx context.Context, userID uuid.UUID) (*SpinResultResponse, error) {
+	// Check eligibility
+	eligibility, err := s.CheckSpinEligibility(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if !eligibility.Eligible {
+		return nil, errors.New("no spins available")
+	}
+
+	// Get eligible transaction
+	transaction, err := s.transactionRepo.FindEligibleForSpin(ctx, userID)
+	if err != nil {
+		return nil, errors.New("no eligible transaction found")
+	}
+
+	// Get active prizes
+	prizes, err := s.prizeRepo.FindActive(ctx)
+	if err != nil || len(prizes) == 0 {
+		return nil, errors.New("no prizes available")
+	}
+
+	// Select prize using weighted random
+	selectedPrize := s.selectPrizeWeighted(prizes)
+
+	// Create spin result
+	spinResult := &entities.SpinResults{
+		Id:            uuid.New(),
+		UserId:        &userID,
+		TransactionId: &transaction.Id,
+		PrizeId:       &selectedPrize.Id,
+		Msisdn:        transaction.Msisdn,
+		PrizeName:     selectedPrize.PrizeName,
+		PrizeType:     selectedPrize.PrizeType,
+		PrizeValue:    selectedPrize.PrizeValue,
+		ClaimStatus:   "PENDING",
+		CreatedAt:     time.Now(),
+	}
+
+	// Auto-credit for points, manual for cash/airtime
+	autoCredited := false
+	if selectedPrize.PrizeType == "POINTS" {
+		spinResult.ClaimStatus = "CLAIMED"
+		claimedAt := time.Now()
+		spinResult.ClaimedAt = &claimedAt
+		autoCredited = true
+
+		// Credit points to user
+		s.creditUserPoints(ctx, userID, int(selectedPrize.PrizeValue))
+	} else if selectedPrize.PrizeType == "CASH" {
+		// Auto-credit cash to wallet
+		spinResult.ClaimStatus = "CLAIMED"
+		claimedAt := time.Now()
+		spinResult.ClaimedAt = &claimedAt
+		autoCredited = true
+
+		// Credit wallet
+		s.creditUserWalletFromSpin(ctx, userID, selectedPrize.PrizeValue, spinResult.Id)
+	}
+
+	if err := s.spinRepo.Create(ctx, spinResult); err != nil {
+		return nil, fmt.Errorf("failed to record spin: %w", err)
+	}
+
+	// Mark transaction as spun
+	transaction.SpinEligible = false
+	s.transactionRepo.Update(ctx, transaction)
+
+	message := fmt.Sprintf("Congratulations! You won %s!", selectedPrize.PrizeName)
+	if !autoCredited {
+		message += " Please contact support to claim your prize."
+	}
+
+	return &SpinResultResponse{
+		Success:      true,
+		SpinID:       spinResult.Id,
+		PrizeName:    selectedPrize.PrizeName,
+		PrizeType:    selectedPrize.PrizeType,
+		PrizeValue:   selectedPrize.PrizeValue,
+		Message:      message,
+		AutoCredited: autoCredited,
+	}, nil
+}
+
+// GetSpinHistory gets user's spin history
+func (s *SpinService) GetSpinHistory(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*entities.SpinResults, int, error) {
+	spins, err := s.spinRepo.FindByUserID(ctx, userID, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	total, err := s.spinRepo.CountByUserID(ctx, userID)
+	if err != nil {
+		total = 0
+	}
+
+	return spins, int(total), nil
+}
+
+// selectPrizeWeighted selects a prize using weighted random selection
+func (s *SpinService) selectPrizeWeighted(prizes []*entities.WheelPrizes) *entities.WheelPrizes {
+	// Calculate total weight
+	totalWeight := 0.0
+	for _, prize := range prizes {
+		totalWeight += prize.Probability
+	}
+
+	// Generate random number
+	random := rand.Float64() * totalWeight
+
+	// Select prize based on weight
+	cumulative := 0.0
+	for _, prize := range prizes {
+		cumulative += prize.Probability
+		if random <= cumulative {
+			return prize
+		}
+	}
+
+	// Fallback to first prize
+	return prizes[0]
+}
+
+// creditUserPoints credits loyalty points to user
+func (s *SpinService) creditUserPoints(ctx context.Context, userID uuid.UUID, points int) error {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	currentPoints := 0
+	if user.TotalPoints != nil {
+		currentPoints = *user.TotalPoints
+	}
+	newPoints := currentPoints + points
+	user.TotalPoints = &newPoints
+
+	return s.userRepo.Update(ctx, user)
+}
+
+// creditUserWalletFromSpin credits wallet from spin win
+func (s *SpinService) creditUserWalletFromSpin(ctx context.Context, userID uuid.UUID, amount float64, spinID uuid.UUID) error {
+	currentBalance, _ := s.walletRepo.GetUserBalance(ctx, userID)
+
+	reference := fmt.Sprintf("SPIN_WIN_%d_%s", time.Now().Unix(), uuid.New().String()[:8])
+	walletTx := &entities.WalletTransactions{
+		Id:              uuid.New(),
+		UserId:          userID,
+		TransactionType: "CREDIT",
+		Amount:          amount,
+		BalanceBefore:   currentBalance,
+		BalanceAfter:    currentBalance + amount,
+		Source:          "SPIN_WIN",
+		Reference:       reference,
+		Description:     fmt.Sprintf("Spin wheel win - ₦%.2f", amount),
+		Status:          "COMPLETED",
+		CreatedAt:       time.Now(),
+	}
+
+	return s.walletRepo.Create(ctx, walletTx)
+}

@@ -672,7 +672,8 @@ func setupRouter(hdlrs *Handlers, svcs *Services) *gin.Engine {
 			}
 
 			// Spin routes (public - supports both guest and authenticated users)
-			spin := v1.Group("/spin")
+			// Uses optional auth middleware to extract JWT if present
+			spin := v1.Group("/spin", middleware.OptionalAuthMiddleware())
 			{
 				spin.POST("/play", hdlrs.Spin.PlaySpin) // Guest & auth spin support
 				spin.GET("/eligibility", hdlrs.Spin.CheckEligibility) // Check spin eligibility
@@ -680,7 +681,8 @@ func setupRouter(hdlrs *Handlers, svcs *Services) *gin.Engine {
 			}
 
 			// Spin tiers routes (public - for displaying prizes and progress)
-			spins := v1.Group("/spins")
+			// Uses optional auth middleware to extract JWT if present
+			spins := v1.Group("/spins", middleware.OptionalAuthMiddleware())
 			{
 				spins.GET("/tiers", hdlrs.Spin.GetTiers) // Get all spin tiers
 				spins.GET("/tier-progress", hdlrs.Spin.GetTierProgress) // Get user's tier progress

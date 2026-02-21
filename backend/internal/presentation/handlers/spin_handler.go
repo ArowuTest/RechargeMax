@@ -61,9 +61,14 @@ func (h *SpinHandler) PlaySpin(c *gin.Context) {
 	})
 	
 	// Support both authenticated users (JWT) and guest users (request body)
+	// OptionalAuthMiddleware sets msisdn in context if JWT is present
 	msisdn := c.GetString("msisdn")
+	errors.Info("MSISDN from context", map[string]interface{}{
+		"msisdn": msisdn,
+		"has_auth_header": c.GetHeader("Authorization") != "",
+	})
 	
-	// If no MSISDN from JWT, try to get from request body (guest spin)
+	// If no MSISDN from JWT context, try to get from request body (guest spin)
 	if msisdn == "" {
 		var req struct {
 			MSISDN string `json:"msisdn" binding:"required"`
@@ -72,13 +77,17 @@ func (h *SpinHandler) PlaySpin(c *gin.Context) {
 			errors.Info("Failed to bind JSON", map[string]interface{}{
 				"error": err.Error(),
 			})
-			middleware.RespondWithError(c, errors.BadRequest("MSISDN required for guest spin"))
+			middleware.RespondWithError(c, errors.BadRequest("MSISDN required for spin"))
 			return
 		}
 		errors.Info("Guest spin request", map[string]interface{}{
 			"msisdn": req.MSISDN,
 		})
 		msisdn = req.MSISDN
+	} else {
+		errors.Info("Authenticated spin request", map[string]interface{}{
+			"msisdn": msisdn,
+		})
 	}
 
 	// Service will validate spin eligibility

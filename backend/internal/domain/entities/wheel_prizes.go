@@ -12,7 +12,7 @@ type WheelPrizes struct {
 	PrizeCode          string     `json:"prize_code" gorm:"column:prize_code;uniqueIndex;size:20"`
 	PrizeName          string     `json:"prize_name" gorm:"column:prize_name;not null" validate:"required"`
 	PrizeType          string     `json:"prize_type" gorm:"column:prize_type;not null" validate:"required,oneof=CASH AIRTIME DATA POINTS"`
-	PrizeValue         int64      `json:"prize_value" gorm:"column:prize_value;type:bigint;not null" validate:"required"`
+	PrizeValue         int64      `json:"prize_value" gorm:"column:prize_value;type:bigint;not null" validate:"required"` // Value in kobo
 	Probability        float64    `json:"probability" gorm:"column:probability;not null" validate:"required"`
 	MinimumRecharge    *float64   `json:"minimum_recharge" gorm:"column:minimum_recharge"`
 	IsActive           *bool      `json:"is_active" gorm:"column:is_active"`

@@ -19,7 +19,7 @@ type SpinResults struct {
 	PrizeID    *uuid.UUID `json:"prize_id" gorm:"column:prize_id"` // Reference to wheel_prizes
 	PrizeName  string     `json:"prize_name" gorm:"column:prize_name;not null" validate:"required"`
 	PrizeType  string     `json:"prize_type" gorm:"column:prize_type;not null" validate:"required"`
-	PrizeValue int64      `json:"prize_value" gorm:"column:prize_value;type:bigint;not null" validate:"required"`
+	PrizeValue int64      `json:"prize_value" gorm:"column:prize_value;type:bigint;not null" validate:"required"` // Value in kobo
 
 	// Claim status
 	ClaimStatus    string     `json:"claim_status" gorm:"column:claim_status;default:PENDING;check:claim_status IN ('PENDING','CLAIMED','EXPIRED','PENDING_ADMIN_REVIEW','APPROVED','REJECTED')" validate:"oneof=PENDING CLAIMED EXPIRED PENDING_ADMIN_REVIEW APPROVED REJECTED"`

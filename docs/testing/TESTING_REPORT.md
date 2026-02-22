@@ -336,8 +336,7 @@ RechargeMax_Production_Ready_20260212.zip (43 MB)
 ├── database/                   # Database files
 │   ├── seeds/                  # Seed data
 │   │   └── MASTER_PRODUCTION_SEED_CORRECTED.sql
-│   ├── migrations/             # Empty (for future use)
-│   └── archived_supabase_migrations/  # Old files
+│   └── migrations/             # Legacy location (mostly empty)
 ├── DEPLOYMENT_GUIDE.md         # Comprehensive deployment guide
 ├── TESTING_REPORT.md           # This document
 └── README.md                   # Project overview

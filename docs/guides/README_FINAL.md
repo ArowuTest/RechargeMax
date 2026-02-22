@@ -182,8 +182,7 @@ RechargeMax_Updated/
 ├── database/
 │   ├── seeds/                 # Production seed data
 │   │   └── MASTER_PRODUCTION_SEED_CORRECTED.sql
-│   ├── migrations/            # Empty (for future use)
-│   └── archived_supabase_migrations/  # Old files (archived)
+│   └── migrations/            # Legacy location (mostly empty)
 │
 ├── DEPLOYMENT_GUIDE.md        # Deployment instructions
 ├── TESTING_REPORT.md          # Testing report

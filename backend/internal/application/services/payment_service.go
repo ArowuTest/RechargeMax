@@ -128,7 +128,7 @@ func (s *PaymentService) InitializePayment(ctx context.Context, req PaymentReque
 // initializePaystack initializes payment with Paystack
 func (s *PaymentService) initializePaystack(ctx context.Context, req PaymentRequest) (string, error) {
 	paystackReq := PaystackInitRequest{
-		Amount:      req.Amount, // Paystack expects amount in kobo
+		Amount:      req.Amount * 100, // Convert naira to kobo for Paystack
 		Email:       req.Email,
 		Reference:   req.Reference,
 		CallbackURL: req.CallbackURL,

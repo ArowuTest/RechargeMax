@@ -147,11 +147,12 @@ func (s *RechargeService) CreateRecharge(ctx context.Context, req CreateRecharge
 		email = user.Email
 	}
 
+	// Callback goes to BACKEND endpoint which verifies payment and redirects to frontend
 	paymentURL, err := s.paymentService.InitializePayment(ctx, PaymentRequest{
 		Amount:      req.Amount,
 		Email:       email,
 		Reference:   paymentRef,
-			CallbackURL: fmt.Sprintf("%s/payment/success?reference=%s&gateway=paystack", s.frontendURL, paymentRef),
+		CallbackURL: fmt.Sprintf("%s/api/v1/payment/callback?reference=%s&gateway=paystack", s.backendURL, paymentRef),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize payment: %w", err)

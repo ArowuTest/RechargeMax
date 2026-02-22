@@ -357,7 +357,7 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
         response = await rechargeApi.initiateAirtimeRecharge({
           phone_number: formData.phoneNumber,
           network: formData.networkProvider,
-          amount: formData.amount
+          amount: formData.amount * 100 // Convert naira to kobo
         });
       } else {
         response = await rechargeApi.initiateDataRecharge({

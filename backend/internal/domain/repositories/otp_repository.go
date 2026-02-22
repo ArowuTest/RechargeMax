@@ -20,6 +20,9 @@ type OTPRepository interface {
 	// FindValidOTP finds a valid (not used, not expired) OTP for a given MSISDN and code
 	FindValidOTP(ctx context.Context, msisdn, code string) (*entities.OTP, error)
 
+	// FindValidOTPWithPurpose finds a valid OTP with matching purpose
+	FindValidOTPWithPurpose(ctx context.Context, msisdn, code, purpose string) (*entities.OTP, error)
+
 	// FindRecentOTPs finds OTPs created after a given time for rate limiting
 	FindRecentOTPs(ctx context.Context, msisdn string, since time.Time) ([]*entities.OTP, error)
 

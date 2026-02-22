@@ -411,7 +411,8 @@ func ValidateRequest(req interface{}) error {
 
 // Auth Requests
 type SendOTPRequest struct {
-	MSISDN string `json:"msisdn"`
+	MSISDN  string `json:"msisdn"`
+	Purpose string `json:"purpose"` // REGISTRATION, LOGIN, PASSWORD_RESET
 }
 
 func (r *SendOTPRequest) Validate() error {
@@ -426,8 +427,9 @@ func (r *SendOTPRequest) Validate() error {
 }
 
 type VerifyOTPRequest struct {
-	MSISDN string `json:"msisdn"`
-	OTP    string `json:"otp"`
+	MSISDN  string `json:"msisdn"`
+	OTP     string `json:"otp"`
+	Purpose string `json:"purpose"` // REGISTRATION, LOGIN, PASSWORD_RESET
 }
 
 func (r *VerifyOTPRequest) Validate() error {

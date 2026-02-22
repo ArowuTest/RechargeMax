@@ -50,6 +50,20 @@ func (r *OTPRepositoryGORM) FindValidOTP(ctx context.Context, msisdn, code strin
 	return &otp, nil
 }
 
+// FindValidOTPWithPurpose finds a valid OTP with matching purpose
+func (r *OTPRepositoryGORM) FindValidOTPWithPurpose(ctx context.Context, msisdn, code, purpose string) (*entities.OTP, error) {
+	var otp entities.OTP
+	err := r.db.WithContext(ctx).
+		Where("msisdn = ? AND code = ? AND purpose = ? AND is_used = ? AND expires_at > ?",
+			msisdn, code, purpose, false, time.Now()).
+		Order("created_at DESC").
+		First(&otp).Error
+	if err != nil {
+		return nil, err
+	}
+	return &otp, nil
+}
+
 // FindRecentOTPs finds OTPs created after a given time for rate limiting
 func (r *OTPRepositoryGORM) FindRecentOTPs(ctx context.Context, msisdn string, since time.Time) ([]*entities.OTP, error) {
 	var otps []*entities.OTP

@@ -46,8 +46,12 @@ func (h *AuthHandler) SendOTP(c *gin.Context) {
 		return
 	}
 
-	// Send OTP
-	if err := h.authService.SendOTP(c.Request.Context(), req.MSISDN); err != nil {
+	// Send OTP with purpose
+	purpose := req.Purpose
+	if purpose == "" {
+		purpose = "login" // Default to login if not specified
+	}
+	if err := h.authService.SendOTP(c.Request.Context(), req.MSISDN, purpose); err != nil {
 		middleware.RespondWithError(c, err)
 		return
 	}
@@ -86,8 +90,12 @@ func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 		return
 	}
 
-	// Verify OTP
-	token, user, isNew, err := h.authService.VerifyOTP(c.Request.Context(), req.MSISDN, req.OTP)
+	// Verify OTP with purpose
+	purpose := req.Purpose
+	if purpose == "" {
+		purpose = "login" // Default to login if not specified
+	}
+	token, user, isNew, err := h.authService.VerifyOTP(c.Request.Context(), req.MSISDN, req.OTP, purpose)
 	if err != nil {
 		middleware.RespondWithError(c, err)
 		return

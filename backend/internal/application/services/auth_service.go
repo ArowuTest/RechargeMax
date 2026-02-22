@@ -54,7 +54,7 @@ func NewAuthService(
 }
 
 // SendOTP sends an OTP to the user's phone number
-func (s *AuthService) SendOTP(ctx context.Context, msisdn string) error {
+func (s *AuthService) SendOTP(ctx context.Context, msisdn string, purpose string) error {
 	// Validate MSISDN format
 	if len(msisdn) < 10 {
 		return fmt.Errorf("invalid phone number format")
@@ -82,7 +82,7 @@ func (s *AuthService) SendOTP(ctx context.Context, msisdn string) error {
 		ID:        uuid.New(),
 		Msisdn:    msisdn,
 		Code:      otpCode,
-		Purpose:   "login",
+		Purpose:   purpose,
 		ExpiresAt: time.Now().Add(10 * time.Minute), // 10 minutes expiry
 		IsUsed:    false,
 	}
@@ -101,15 +101,15 @@ func (s *AuthService) SendOTP(ctx context.Context, msisdn string) error {
 }
 
 // VerifyOTP verifies an OTP and returns authentication tokens and user info
-func (s *AuthService) VerifyOTP(ctx context.Context, msisdn, code string) (string, *entities.User, bool, error) {
+func (s *AuthService) VerifyOTP(ctx context.Context, msisdn, code, purpose string) (string, *entities.User, bool, error) {
 	// Normalize MSISDN to format 234XXXXXXXXXX
 	normalizedMSISDN, err := validation.NormalizeMSISDN(msisdn)
 	if err != nil {
 		return "", nil, false, fmt.Errorf("invalid phone number format: %w", err)
 	}
 	
-	// Find valid OTP (using original msisdn for OTP lookup)
-	otp, err := s.otpRepo.FindValidOTP(ctx, msisdn, code)
+	// Find valid OTP with matching purpose (using original msisdn for OTP lookup)
+	otp, err := s.otpRepo.FindValidOTPWithPurpose(ctx, msisdn, code, purpose)
 	if err != nil {
 		return "", nil, false, fmt.Errorf("invalid or expired OTP")
 	}

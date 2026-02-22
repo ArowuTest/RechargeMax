@@ -149,14 +149,14 @@ func ValidateInt(value int, fieldName string, min, max int) error {
 }
 
 
-// ValidateRechargeAmount validates recharge amounts (in kobo)
+// ValidateRechargeAmount validates recharge amounts (in naira)
 func ValidateRechargeAmount(amount float64) error {
-	// Amount is in kobo (1 naira = 100 kobo)
-	if amount < 10000 { // Minimum ₦100 (10,000 kobo)
+	// Amount is in naira (frontend sends naira, handler converts to kobo)
+	if amount < 100 { // Minimum ₦100
 		return fmt.Errorf("recharge amount must be at least ₦100")
 	}
 	
-	if amount > 10000000 { // Maximum ₦100,000 (10,000,000 kobo)
+	if amount > 100000 { // Maximum ₦100,000
 		return fmt.Errorf("recharge amount must not exceed ₦100,000")
 	}
 	

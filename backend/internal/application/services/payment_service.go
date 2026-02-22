@@ -128,13 +128,15 @@ func (s *PaymentService) InitializePayment(ctx context.Context, req PaymentReque
 // initializePaystack initializes payment with Paystack
 func (s *PaymentService) initializePaystack(ctx context.Context, req PaymentRequest) (string, error) {
 	paystackReq := PaystackInitRequest{
-		Amount:      req.Amount * 100, // Convert naira to kobo for Paystack
+		Amount:      req.Amount, // Already in kobo from handler
 		Email:       req.Email,
 		Reference:   req.Reference,
 		CallbackURL: req.CallbackURL,
 		Metadata:    req.Metadata,
 		Currency:    "NGN",
 	}
+
+	fmt.Printf("[DEBUG] Paystack Request - Amount in kobo: %d (= ₦%.2f)\n", paystackReq.Amount, float64(paystackReq.Amount)/100)
 
 	jsonData, err := json.Marshal(paystackReq)
 	if err != nil {

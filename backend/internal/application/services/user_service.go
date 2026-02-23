@@ -559,7 +559,7 @@ func (s *UserService) GetUserPrizes(ctx context.Context, msisdn string) ([]Prize
 			ID:          spin.ID,
 			PrizeName:   spin.PrizeName,
 			PrizeType:   spin.PrizeType,
-			PrizeValue:  fmt.Sprintf("%.2f", spin.PrizeValue),
+			PrizeValue:  fmt.Sprintf("%.2f", float64(spin.PrizeValue)/100.0), // Convert kobo to naira
 			WonAt:       spin.CreatedAt,
 			Status:      spin.ClaimStatus,
 			ClaimedAt:   spin.ClaimedAt,

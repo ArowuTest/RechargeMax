@@ -81,8 +81,12 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 		}
 	}
 
+	// Generate unique subscription code
+	subscriptionCode := fmt.Sprintf("SUB_%s_%d", req.MSISDN[len(req.MSISDN)-4:], time.Now().Unix())
+
 	subscription := &entities.Subscription{
 		Id:               uuid.New(),
+		SubscriptionCode: subscriptionCode,
 		Msisdn:           req.MSISDN,
 		SubscriptionDate: time.Now(),
 		Amount:           20.00, // ₦20 daily

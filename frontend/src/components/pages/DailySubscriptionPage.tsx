@@ -25,7 +25,12 @@ const DailySubscriptionPage: React.FC = () => {
       }
     } catch (err: any) {
       console.error('Subscription error:', err);
-      setError(err.response?.data?.error || 'Failed to subscribe. Please try again.');
+      // Properly extract error message
+      const errorMessage = err.response?.data?.error?.message || 
+                          err.response?.data?.message || 
+                          err.message || 
+                          'Failed to subscribe. Please try again.';
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }

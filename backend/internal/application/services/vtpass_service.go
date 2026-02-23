@@ -141,7 +141,12 @@ func NewVTPassService(config VTPassConfig) *VTPassService {
 	fmt.Printf("🔧 Initializing VTPassService with:\n")
 	fmt.Printf("   API Key: %s\n", config.APIKey)
 	fmt.Printf("   Public Key: %s\n", config.PublicKey)
-	fmt.Printf("   Secret Key: %s...\n", config.SecretKey[:20])
+	// Only show first 20 chars of secret if it's long enough
+	if len(config.SecretKey) > 20 {
+		fmt.Printf("   Secret Key: %s...\n", config.SecretKey[:20])
+	} else {
+		fmt.Printf("   Secret Key: %s\n", config.SecretKey)
+	}
 	fmt.Printf("   Base URL: %s\n", baseURL)
 	fmt.Printf("   Is Sandbox: %v\n", config.IsSandbox)
 	

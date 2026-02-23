@@ -741,7 +741,7 @@ func (s *UserService) getTotalAmountRecharged(ctx context.Context, userID uuid.U
 	for _, r := range recharges {
 		total += int64(r.Amount)
 	}
-	return total
+	return total / 100 // Convert kobo to naira
 }
 
 // getSubscriptionStats calculates subscription statistics
@@ -815,7 +815,7 @@ func (s *UserService) getRecentTransactions(ctx context.Context, userID uuid.UUI
 			CreatedAt:       t.CreatedAt,
 			NetworkProvider: t.NetworkProvider,
 			RechargeType:    t.RechargeType,
-			Amount:          t.Amount,
+			Amount:          t.Amount / 100, // Convert kobo to naira
 			PointsEarned:    int64(t.PointsEarned),
 			Status:          t.Status,
 		})
@@ -837,7 +837,7 @@ func (s *UserService) getUserPrizes(ctx context.Context, userID uuid.UUID) []Pri
 			ID:          spin.ID,
 			PrizeName:   spin.PrizeName,
 			PrizeType:   spin.PrizeType,
-			PrizeValue:  int64(spin.PrizeValue),
+			PrizeValue:  int64(spin.PrizeValue) / 100, // Convert kobo to naira
 			Status:      spin.ClaimStatus,
 			WonAt:       spin.CreatedAt,
 			WonDate:     spin.CreatedAt.Format("2006-01-02 15:04:05"),

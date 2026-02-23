@@ -81,6 +81,7 @@ func (h *WinnerHandler) ClaimPrize(c *gin.Context) {
 		BankAccountID string `json:"bank_account_id,omitempty"`
 		AccountNumber string `json:"account_number,omitempty"`
 		BankCode      string `json:"bank_code,omitempty"`
+		BankName      string `json:"bank_name,omitempty"`
 		AccountName   string `json:"account_name,omitempty"`
 		Address       string `json:"address,omitempty"`
 		PhoneNumber   string `json:"phone_number,omitempty"`
@@ -91,7 +92,22 @@ func (h *WinnerHandler) ClaimPrize(c *gin.Context) {
 		return
 	}
 
-	// Process claim with details
+	// Try to claim as spin prize first
+	spinErr := h.winnerService.ClaimSpinPrize(c.Request.Context(), winnerIDUUID, msisdn, req.AccountNumber, req.AccountName, req.BankName)
+	
+	if spinErr == nil {
+		// Successfully claimed as spin prize
+		errors.Info("Spin prize claimed", map[string]interface{}{
+			"msisdn":    msisdn,
+			"prize_id": winnerID,
+		})
+		middleware.RespondWithSuccess(c, map[string]interface{}{
+			"message": "Prize claim submitted successfully. Your bank details have been saved and will be reviewed by our team.",
+		})
+		return
+	}
+	
+	// If not a spin prize, try as draw prize
 	claimDetails := map[string]interface{}{
 		"bank_code":      req.BankCode,
 		"account_number": req.AccountNumber,

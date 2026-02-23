@@ -16,6 +16,7 @@ type WinnerService struct {
 	winnerRepo        repositories.WinnerRepository
 	drawRepo          repositories.DrawRepository
 	userRepo          repositories.UserRepository
+	spinRepo          repositories.SpinRepository
 	hlrService        *HLRService
 	notificationService *NotificationService
 }
@@ -44,6 +45,7 @@ func NewWinnerService(
 	winnerRepo repositories.WinnerRepository,
 	drawRepo repositories.DrawRepository,
 	userRepo repositories.UserRepository,
+	spinRepo repositories.SpinRepository,
 	hlrService *HLRService,
 	notificationService *NotificationService,
 ) *WinnerService {
@@ -51,6 +53,7 @@ func NewWinnerService(
 		winnerRepo:          winnerRepo,
 		drawRepo:            drawRepo,
 		userRepo:            userRepo,
+		spinRepo:            spinRepo,
 		hlrService:          hlrService,
 		notificationService: notificationService,
 	}
@@ -997,4 +1000,56 @@ func (s *WinnerService) GetPendingClaimsCount(ctx context.Context) (int64, error
 	}
 	
 	return count, nil
+}
+
+// ClaimSpinPrize processes a spin prize claim with bank details
+func (s *WinnerService) ClaimSpinPrize(ctx context.Context, prizeID uuid.UUID, msisdn string, accountNumber string, accountName string, bankName string) error {
+	// 1. Get spin prize record
+	spinPrize, err := s.spinRepo.FindByID(ctx, prizeID)
+	if err != nil {
+		return fmt.Errorf("spin prize not found: %w", err)
+	}
+	
+	// 2. Verify ownership
+	if spinPrize.Msisdn != msisdn {
+		return fmt.Errorf("unauthorized: prize does not belong to this user")
+	}
+	
+	// 3. Check if already claimed or under review
+	if spinPrize.ClaimStatus == "CLAIMED" || spinPrize.ClaimStatus == "PENDING_ADMIN_REVIEW" || spinPrize.ClaimStatus == "APPROVED" {
+		return fmt.Errorf("prize already claimed or under review")
+	}
+	
+	// 4. Check if expired
+	if spinPrize.IsExpired() {
+		return fmt.Errorf("prize claim period has expired")
+	}
+	
+	// 5. Validate bank details for cash prizes
+	if spinPrize.PrizeType == "CASH" {
+		if accountNumber == "" || accountName == "" || bankName == "" {
+			return fmt.Errorf("bank details required: account_number, account_name, bank_name")
+		}
+		
+		// Update spin prize with bank details
+		spinPrize.BankAccountNumber = accountNumber
+		spinPrize.BankAccountName = accountName
+		spinPrize.BankName = bankName
+		spinPrize.ClaimStatus = "PENDING_ADMIN_REVIEW"
+		now := time.Now()
+		spinPrize.ClaimedAt = &now
+		
+		// Save updated spin prize
+		err = s.spinRepo.Update(ctx, spinPrize)
+		if err != nil {
+			return fmt.Errorf("failed to update spin prize: %w", err)
+		}
+		
+		// TODO: Send notification to user about claim submission
+		
+		return nil
+	}
+	
+	// For non-cash prizes (airtime, data, points), they should be auto-provisioned
+	return fmt.Errorf("this prize type does not require claiming - it was automatically provisioned")
 }

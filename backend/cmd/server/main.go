@@ -409,6 +409,7 @@ func initServices(repos *Repositories, config *Config, db *gorm.DB) *Services {
 		repos.Winner,
 		repos.Draw,
 		repos.User,
+		repos.Spin,
 		hlrService,
 		notificationService,
 	)

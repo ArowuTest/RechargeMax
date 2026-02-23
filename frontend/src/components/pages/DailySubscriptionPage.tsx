@@ -18,8 +18,15 @@ const DailySubscriptionPage: React.FC = () => {
       const result = await subscriptionApi.subscribe(phoneNumber || undefined);
       
       if (result.success) {
-        alert('✅ Subscription successful! You are now subscribed to the daily draw for ₦20/day.');
-        navigate('/dashboard');
+        // Check if payment URL is provided (for Paystack payment)
+        if (result.data?.payment_url) {
+          // Redirect to Paystack payment page
+          window.location.href = result.data.payment_url;
+        } else {
+          // MTN DCB - subscription activated immediately
+          alert('✅ Subscription successful! You are now subscribed to the daily draw for ₦20/day.');
+          navigate('/dashboard');
+        }
       } else {
         setError(result.error || 'Failed to subscribe. Please try again.');
       }

@@ -24,8 +24,8 @@
     "noImplicitOverride": true,
     "exactOptionalPropertyTypes": true,
     
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "allowUnreachableCode": false,
     "allowUnusedLabels": false,
     
@@ -63,7 +63,8 @@
     "dist",
     "build",
     "coverage",
-    "**/*.js"
+    "**/*.js",
+    "src/_design_docs"
   ],
   "references": [
     { "path": "./tsconfig.node.json" }

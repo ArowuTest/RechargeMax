@@ -282,7 +282,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
     }
   };
 
-  const callAdminAPI = async (action: string, data?: any) => {
+  const callAdminAPI = async (action: string, data?: any): Promise<any> => {
     if (!sessionToken) throw new Error('Admin session required');
 
     // Route actions to appropriate adminApi methods

@@ -127,6 +127,7 @@ func (s *RechargeService) CreateRecharge(ctx context.Context, req CreateRecharge
 	// Create recharge record
 	recharge := &entities.Recharge{
 		ID:              uuid.New(),
+		UserID:          &user.ID, // Link transaction to user
 		TransactionCode: transactionCode,
 		Msisdn:          normalizedMSISDN, // Use normalized format for database
 		Amount:          req.Amount,
@@ -490,20 +491,11 @@ func (s *RechargeService) ProcessTelecomConfirmation(ctx context.Context, refere
 		return nil // Already processed, idempotent
 	}
 	
-	// Update status based on telecom response
+		// Update status based on telecom response
 	switch status {
 	case "success", "completed", "successful":
 		recharge.Status = "SUCCESS"
-		
-		// Award points to user (₦200 = 1 point)
-		pointsEarned := int64(recharge.Amount) / 20000
-		if pointsEarned > 0 {
-			user, err := s.userRepo.FindByMSISDN(ctx, recharge.Msisdn)
-			if err == nil {
-				user.TotalPoints += int(pointsEarned)
-				s.userRepo.Update(ctx, user)
-			}
-		}
+		// Note: Points are already awarded in ProcessSuccessfulPayment, no need to duplicate here
 		
 	case "failed", "error":
 		recharge.Status = "FAILED"

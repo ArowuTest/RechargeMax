@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { subscriptionApi } from '../../lib/api-client';
 
 const DailySubscriptionPage: React.FC = () => {
   const navigate = useNavigate();
@@ -13,11 +14,18 @@ const DailySubscriptionPage: React.FC = () => {
     setIsLoading(true);
 
     try {
-      // TODO: Implement actual subscription API call
-      // For now, just show success message
-      alert('Daily subscription feature coming soon!');
-    } catch (err) {
-      setError('Failed to subscribe. Please try again.');
+      // Call subscription API
+      const result = await subscriptionApi.subscribe(phoneNumber || undefined);
+      
+      if (result.success) {
+        alert('✅ Subscription successful! You are now subscribed to the daily draw for ₦20/day.');
+        navigate('/dashboard');
+      } else {
+        setError(result.error || 'Failed to subscribe. Please try again.');
+      }
+    } catch (err: any) {
+      console.error('Subscription error:', err);
+      setError(err.response?.data?.error || 'Failed to subscribe. Please try again.');
     } finally {
       setIsLoading(false);
     }

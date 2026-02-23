@@ -277,21 +277,21 @@ export const drawApi = {
 // ============================================================================
 
 export const subscriptionApi = {
-  // Get subscription details
-  getDetails: async () => {
-    const response = await apiClient.get<ApiResponse>('/subscription');
+  // Get subscription status
+  getStatus: async () => {
+    const response = await apiClient.get<ApiResponse>('/subscription/status');
     return response.data;
   },
 
-  // Subscribe
-  subscribe: async (data: { phone_number: string; network: string }) => {
-    const response = await apiClient.post<ApiResponse>('/subscription/subscribe', data);
+  // Subscribe (Create Subscription)
+  subscribe: async (msisdn?: string) => {
+    const response = await apiClient.post<ApiResponse>('/subscription/create', { msisdn });
     return response.data;
   },
 
-  // Unsubscribe
-  unsubscribe: async () => {
-    const response = await apiClient.post<ApiResponse>('/subscription/unsubscribe');
+  // Cancel Subscription
+  cancel: async () => {
+    const response = await apiClient.post<ApiResponse>('/subscription/cancel');
     return response.data;
   },
 

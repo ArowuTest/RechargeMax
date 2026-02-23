@@ -136,7 +136,6 @@ func (s *PaymentService) initializePaystack(ctx context.Context, req PaymentRequ
 		Currency:    "NGN",
 	}
 
-	fmt.Printf("[DEBUG] Paystack Request - Amount in kobo: %d (= ₦%.2f)\n", paystackReq.Amount, float64(paystackReq.Amount)/100)
 
 	jsonData, err := json.Marshal(paystackReq)
 	if err != nil {
@@ -379,21 +378,9 @@ func (s *PaymentService) verifyWebhookSignature(payload []byte, signature, gatew
 
 	// Paystack uses SHA512 HMAC
 	if gateway == "paystack" {
-		// Debug logging
-		fmt.Printf("DEBUG: Payload length: %d\n", len(payload))
-		if len(payload) > 100 {
-			fmt.Printf("DEBUG: Payload (first 100 chars): %s\n", string(payload[:100]))
-		} else {
-			fmt.Printf("DEBUG: Payload: %s\n", string(payload))
-		}
-		fmt.Printf("DEBUG: Secret key: %s\n", secret)
-		fmt.Printf("DEBUG: Received signature: %s\n", signature)
-		
 		h := hmac.New(sha512.New, []byte(secret))
 		h.Write(payload)
 		expectedSignature := hex.EncodeToString(h.Sum(nil))
-		fmt.Printf("DEBUG: Expected signature: %s\n", expectedSignature)
-		fmt.Printf("DEBUG: Signatures match: %v\n", hmac.Equal([]byte(signature), []byte(expectedSignature)))
 		return hmac.Equal([]byte(signature), []byte(expectedSignature))
 	}
 

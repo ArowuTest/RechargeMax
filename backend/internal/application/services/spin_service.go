@@ -17,12 +17,14 @@ import (
 
 // SpinService handles wheel spin operations
 type SpinService struct {
-	spinRepo    repositories.SpinRepository
-	prizeRepo   repositories.WheelPrizeRepository
-	userRepo    repositories.UserRepository
-	rechargeRepo repositories.RechargeRepository
-	hlrService  *HLRService
-	db          *gorm.DB // Database connection for advisory locks
+	spinRepo        repositories.SpinRepository
+	prizeRepo       repositories.WheelPrizeRepository
+	userRepo        repositories.UserRepository
+	rechargeRepo    repositories.RechargeRepository
+	hlrService      *HLRService
+	telecomService  *TelecomServiceIntegrated
+	configService   *PrizeFulfillmentConfigService
+	db              *gorm.DB // Database connection for advisory locks
 }
 
 // SpinEligibilityResponse represents spin eligibility check response
@@ -50,15 +52,19 @@ func NewSpinService(
 	userRepo repositories.UserRepository,
 	rechargeRepo repositories.RechargeRepository,
 	hlrService *HLRService,
+	telecomService *TelecomServiceIntegrated,
+	configService *PrizeFulfillmentConfigService,
 	db *gorm.DB, // Database connection for advisory locks
 ) *SpinService {
 	return &SpinService{
-		spinRepo:     spinRepo,
-		prizeRepo:    prizeRepo,
-		userRepo:     userRepo,
-		rechargeRepo: rechargeRepo,
-		hlrService:   hlrService,
-		db:           db,
+		spinRepo:        spinRepo,
+		prizeRepo:       prizeRepo,
+		userRepo:        userRepo,
+		rechargeRepo:    rechargeRepo,
+		hlrService:      hlrService,
+		telecomService:  telecomService,
+		configService:   configService,
+		db:              db,
 	}
 }
 
@@ -224,16 +230,40 @@ return nil, fmt.Errorf("no prizes available")
 			return fmt.Errorf("failed to create spin record: %w", err)
 		}
 	
-		// Auto-provision if data or airtime
-		if selectedPrize.PrizeType == "DATA" || selectedPrize.PrizeType == "AIRTIME" {
-			err := s.provisionPrize(ctx, spin)
+		// Check fulfillment mode for this prize type
+		config, err := s.configService.GetConfig(ctx, selectedPrize.PrizeType)
+		if err != nil {
+			return fmt.Errorf("failed to get fulfillment config: %w", err)
+		}
+
+		// Set fulfillment mode on spin result
+		spin.FulfillmentMode = config.FulfillmentMode
+
+		// Auto-provision if mode is AUTO and prize is airtime/data
+		if config.FulfillmentMode == "AUTO" && 
+		   (selectedPrize.PrizeType == "DATA" || selectedPrize.PrizeType == "AIRTIME") {
+			
+			err := s.provisionPrizeWithRetry(ctx, spin, config)
+			
 			if err != nil {
-				spin.ClaimStatus = "EXPIRED" // Mark as expired if provisioning failed
-				// Rollback transaction on provisioning failure
-				return fmt.Errorf("failed to provision prize: %w", err)
+				// Log the error
+				s.logFulfillmentAttempt(ctx, spin, "FAILED", err.Error())
+				
+				// Check if we should fallback to manual
+				if config.FallbackToManual {
+					spin.ClaimStatus = "PENDING"
+					spin.FulfillmentMode = "MANUAL"
+					spin.CanRetry = true
+					fmt.Printf("⚠️ Auto-provision failed, falling back to manual claim for spin %s\n", spin.ID)
+				} else {
+					spin.ClaimStatus = "EXPIRED"
+					spin.CanRetry = false
+				}
 			} else {
 				spin.ClaimStatus = "CLAIMED"
+				s.logFulfillmentAttempt(ctx, spin, "SUCCESS", "")
 			}
+			
 			// Update spin status within transaction
 			if err := tx.Save(spin).Error; err != nil {
 				return fmt.Errorf("failed to update spin status: %w", err)
@@ -297,46 +327,199 @@ func (s *SpinService) selectPrizeByProbability(prizes []*entities.WheelPrizes) *
 }
 
 // provisionPrize provisions data or airtime prize
+// ============================================================================
+// ENTERPRISE-GRADE FULFILLMENT METHODS
+// ============================================================================
+
+// provisionPrizeWithRetry provisions a prize with automatic retry logic
+func (s *SpinService) provisionPrizeWithRetry(ctx context.Context, spin *entities.WheelSpin, config *FulfillmentConfig) error {
+	startTime := time.Now()
+	spin.ProvisionStartedAt = &startTime
+	
+	var lastErr error
+	maxAttempts := 1
+	if config.AutoRetryEnabled {
+		maxAttempts = config.MaxRetryAttempts + 1 // +1 for initial attempt
+	}
+	
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		spin.FulfillmentAttempts = attempt
+		now := time.Now()
+		spin.LastFulfillmentAttempt = &now
+		
+		fmt.Printf("🔄 Provisioning attempt %d/%d for spin %s\n", attempt, maxAttempts, spin.ID)
+		
+		err := s.provisionPrize(ctx, spin)
+		
+		if err == nil {
+			// Success!
+			completedAt := time.Now()
+			spin.ProvisionCompletedAt = &completedAt
+			fmt.Printf("✅ Prize provisioned successfully on attempt %d\n", attempt)
+			return nil
+		}
+		
+		lastErr = err
+		spin.FulfillmentError = err.Error()
+		
+		// If this isn't the last attempt, wait before retrying
+		if attempt < maxAttempts {
+			retryDelay := time.Duration(config.RetryDelaySeconds) * time.Second
+			fmt.Printf("⚠️  Attempt %d failed: %v. Retrying in %v...\n", attempt, err, retryDelay)
+			time.Sleep(retryDelay)
+		}
+	}
+	
+	// All attempts failed
+	fmt.Printf("❌ All %d provision attempts failed for spin %s\n", maxAttempts, spin.ID)
+	return fmt.Errorf("all %d provision attempts failed: %w", maxAttempts, lastErr)
+}
+
+// provisionPrize provisions a single prize (one attempt)
 func (s *SpinService) provisionPrize(ctx context.Context, spin *entities.WheelSpin) error {
 	// Detect network
 	networkHint := ""
-	network, err := s.hlrService.DetectNetwork(ctx, spin.Msisdn, &networkHint)
+	networkResult, err := s.hlrService.DetectNetwork(ctx, spin.Msisdn, &networkHint)
 	if err != nil {
 		return fmt.Errorf("failed to detect network: %w", err)
 	}
+	network := networkResult.Network
 	
-	// Provision prize based on type
-	// This integrates with TelecomService for direct network provisioning
-	// 
-	// In production, this would:
-	// 1. Call TelecomService.PurchaseAirtime() for airtime prizes
-	// 2. Call TelecomService.PurchaseData() for data prizes
-	// 3. Handle async confirmation via webhook
-	// 4. Update spin status based on provisioning result
-	//
-	// Example implementation:
-	// if spin.PrizeType == "airtime" {
-	//     amount := spin.PrizeValue // Amount in kobo
-	//     err := s.telecomService.PurchaseAirtime(ctx, spin.Msisdn, network, amount)
-	//     if err != nil {
-	//         return fmt.Errorf("failed to provision airtime: %w", err)
-	//     }
-	// } else if spin.PrizeType == "data" {
-	//     dataPackage := spin.PrizeDescription // e.g., "1GB_DAILY"
-	//     err := s.telecomService.PurchaseData(ctx, spin.Msisdn, network, dataPackage)
-	//     if err != nil {
-	//         return fmt.Errorf("failed to provision data: %w", err)
-	//     }
-	// }
-	//
-	// For cash prizes, no provisioning needed - handled via bank transfer
-	// For physical prizes, no provisioning needed - handled via admin
+	// Provision based on prize type
+	switch spin.PrizeType {
+	case "AIRTIME":
+		return s.provisionAirtime(ctx, spin, network)
+	case "DATA":
+		return s.provisionData(ctx, spin, network)
+	case "POINTS":
+		// Points are auto-credited, no external provisioning needed
+		return nil
+	default:
+		// CASH, PHYSICAL prizes require manual handling
+		return fmt.Errorf("prize type %s requires manual fulfillment", spin.PrizeType)
+	}
+}
+
+// provisionAirtime provisions airtime via VTPass
+func (s *SpinService) provisionAirtime(ctx context.Context, spin *entities.WheelSpin, network string) error {
+	if s.telecomService == nil {
+		return fmt.Errorf("telecom service not initialized")
+	}
 	
-	// For now, acknowledge the provisioning requirement
-	_ = network
+	fmt.Printf("📞 Provisioning ₦%d airtime to %s on %s network\n", spin.PrizeValue/100, spin.Msisdn, network)
 	
-	// In production, this would return success only after actual provisioning
+	// Call VTPass to purchase airtime (amount in kobo)
+	response, err := s.telecomService.PurchaseAirtime(ctx, network, spin.Msisdn, int(spin.PrizeValue))
+	if err != nil {
+		return fmt.Errorf("VTPass airtime purchase failed: %w", err)
+	}
+	
+	// Store provider reference
+	if response != nil {
+		spin.ClaimReference = response.ProviderReference
+		fmt.Printf("✅ Airtime provisioned successfully. Reference: %s, Status: %s\n", 
+			response.ProviderReference, response.Status)
+	}
+	
 	return nil
+}
+
+// provisionData provisions data via VTPass
+func (s *SpinService) provisionData(ctx context.Context, spin *entities.WheelSpin, network string) error {
+	if s.telecomService == nil {
+		return fmt.Errorf("telecom service not initialized")
+	}
+	
+	// Get data variation code from prize description or value
+	variationCode := s.getDataVariationCode(spin.PrizeValue, network)
+	if variationCode == "" {
+		return fmt.Errorf("no data variation code found for value %d on %s", spin.PrizeValue, network)
+	}
+	
+	fmt.Printf("📱 Provisioning data (%s) to %s on %s network\n", variationCode, spin.Msisdn, network)
+	
+	// Call VTPass to purchase data (amount in kobo)
+	response, err := s.telecomService.PurchaseData(ctx, network, spin.Msisdn, variationCode, int(spin.PrizeValue))
+	if err != nil {
+		return fmt.Errorf("VTPass data purchase failed: %w", err)
+	}
+	
+	// Store provider reference
+	if response != nil {
+		spin.ClaimReference = response.ProviderReference
+		fmt.Printf("✅ Data provisioned successfully. Reference: %s, Status: %s\n", 
+			response.ProviderReference, response.Status)
+	}
+	
+	return nil
+}
+
+// getDataVariationCode maps prize value to VTPass variation code
+func (s *SpinService) getDataVariationCode(prizeValue int64, network string) string {
+	// TODO: This should be stored in database (wheel_prizes.variation_code)
+	// For now, hardcode common mappings
+	
+	// Map based on network and common data sizes
+	// Prize value is in kobo, so 50000 = 500MB, 100000 = 1GB, etc.
+	
+	switch network {
+	case "MTN":
+		switch prizeValue {
+		case 50000: // 500MB
+			return "mtn-20mb-100"
+		case 100000: // 1GB
+			return "mtn-1gb-500"
+		case 200000: // 2GB
+			return "mtn-2gb-1000"
+		}
+	case "GLO":
+		switch prizeValue {
+		case 50000:
+			return "glo-200mb-200"
+		case 100000:
+			return "glo-1gb-500"
+		case 200000:
+			return "glo-2gb-1000"
+		}
+	case "AIRTEL":
+		switch prizeValue {
+		case 50000:
+			return "airtel-750mb-500"
+		case 100000:
+			return "airtel-1gb-500"
+		case 200000:
+			return "airtel-2gb-1000"
+		}
+	case "9MOBILE":
+		switch prizeValue {
+		case 50000:
+			return "etisalat-500mb-500"
+		case 100000:
+			return "etisalat-1gb-1000"
+		case 200000:
+			return "etisalat-2gb-2000"
+		}
+	}
+	
+	return "" // No matching variation code
+}
+
+// logFulfillmentAttempt logs a fulfillment attempt to the audit trail
+func (s *SpinService) logFulfillmentAttempt(ctx context.Context, spin *entities.WheelSpin, status string, errorMsg string) {
+	// This would insert into prize_fulfillment_logs table
+	// For now, just log to console
+	fmt.Printf("📝 Fulfillment log: spin=%s, attempt=%d, status=%s, error=%s\n",
+		spin.ID, spin.FulfillmentAttempts, status, errorMsg)
+	
+	// TODO: Insert into database
+	// query := `
+	//     INSERT INTO prize_fulfillment_logs (
+	//         spin_result_id, attempt_number, fulfillment_mode, status,
+	//         error_message, detected_network, msisdn
+	//     ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+	// `
+	// s.db.ExecContext(ctx, query, spin.ID, spin.FulfillmentAttempts,
+	//     spin.FulfillmentMode, status, errorMsg, network, spin.Msisdn)
 }
 
 // GetSpinHistory gets user's spin history

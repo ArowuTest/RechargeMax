@@ -38,6 +38,15 @@ type SpinResults struct {
 	BankAccountName   string `json:"bank_account_name" gorm:"column:bank_account_name"`
 	BankName          string `json:"bank_name" gorm:"column:bank_name"`
 
+	// Fulfillment tracking fields
+	FulfillmentMode         string     `json:"fulfillment_mode" gorm:"column:fulfillment_mode;default:AUTO;check:fulfillment_mode IN ('AUTO','MANUAL')"`
+	FulfillmentAttempts     int        `json:"fulfillment_attempts" gorm:"column:fulfillment_attempts;default:0"`
+	LastFulfillmentAttempt  *time.Time `json:"last_fulfillment_attempt" gorm:"column:last_fulfillment_attempt"`
+	FulfillmentError        string     `json:"fulfillment_error" gorm:"column:fulfillment_error"`
+	CanRetry                bool       `json:"can_retry" gorm:"column:can_retry;default:true"`
+	ProvisionStartedAt      *time.Time `json:"provision_started_at" gorm:"column:provision_started_at"`
+	ProvisionCompletedAt    *time.Time `json:"provision_completed_at" gorm:"column:provision_completed_at"` 
+
 	// Timestamps
 	CreatedAt time.Time      `json:"created_at" gorm:"column:created_at;autoCreateTime"`
 	ExpiresAt *time.Time     `json:"expires_at" gorm:"column:expires_at"` // Default NOW() + 30 days

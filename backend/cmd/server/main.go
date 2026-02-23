@@ -372,12 +372,17 @@ func initServices(repos *Repositories, config *Config, db *gorm.DB) *Services {
 		hlrService,
 	)
 
+	// Prize Fulfillment Config Service
+	prizeFulfillmentConfigService := services.NewPrizeFulfillmentConfigService(sqlDB)
+
 	spinService := services.NewSpinService(
 		repos.Spin,
 		repos.WheelPrize, // WheelPrizeRepository
 		repos.User,
 		repos.Transaction,
 		hlrService,
+		telecomServiceIntegrated,
+		prizeFulfillmentConfigService,
 		db, // Database connection for advisory locks
 	)
 
@@ -411,6 +416,7 @@ func initServices(repos *Repositories, config *Config, db *gorm.DB) *Services {
 		repos.User,
 		repos.Spin,
 		hlrService,
+		telecomServiceIntegrated,
 		notificationService,
 	)
 

@@ -13,11 +13,12 @@ import (
 
 // WinnerService handles winner management and prize provisioning
 type WinnerService struct {
-	winnerRepo        repositories.WinnerRepository
-	drawRepo          repositories.DrawRepository
-	userRepo          repositories.UserRepository
-	spinRepo          repositories.SpinRepository
-	hlrService        *HLRService
+	winnerRepo          repositories.WinnerRepository
+	drawRepo            repositories.DrawRepository
+	userRepo            repositories.UserRepository
+	spinRepo            repositories.SpinRepository
+	hlrService          *HLRService
+	telecomService      *TelecomServiceIntegrated
 	notificationService *NotificationService
 }
 
@@ -47,6 +48,7 @@ func NewWinnerService(
 	userRepo repositories.UserRepository,
 	spinRepo repositories.SpinRepository,
 	hlrService *HLRService,
+	telecomService *TelecomServiceIntegrated,
 	notificationService *NotificationService,
 ) *WinnerService {
 	return &WinnerService{
@@ -55,6 +57,7 @@ func NewWinnerService(
 		userRepo:            userRepo,
 		spinRepo:            spinRepo,
 		hlrService:          hlrService,
+		telecomService:      telecomService,
 		notificationService: notificationService,
 	}
 }
@@ -1050,6 +1053,184 @@ func (s *WinnerService) ClaimSpinPrize(ctx context.Context, prizeID uuid.UUID, m
 		return nil
 	}
 	
-	// For non-cash prizes (airtime, data, points), they should be auto-provisioned
-	return fmt.Errorf("this prize type does not require claiming - it was automatically provisioned")
+	// For non-cash prizes (airtime, data, points) in MANUAL mode
+	if spinPrize.PrizeType == "AIRTIME" || spinPrize.PrizeType == "DATA" {
+		// Check if this is in manual fulfillment mode
+		if spinPrize.FulfillmentMode != "MANUAL" {
+			return fmt.Errorf("this prize was auto-provisioned and does not require claiming")
+		}
+		
+		// Check if user can retry (for failed auto-provision)
+		if !spinPrize.CanRetry {
+			return fmt.Errorf("this prize cannot be claimed - provisioning failed permanently")
+		}
+		
+		// Trigger manual fulfillment
+		err = s.triggerManualFulfillment(ctx, spinPrize)
+		if err != nil {
+			return fmt.Errorf("failed to provision prize: %w", err)
+		}
+		
+		return nil
+	}
+	
+	// Points prizes don't require claiming
+	if spinPrize.PrizeType == "POINTS" {
+		return fmt.Errorf("points prizes are automatically credited")
+	}
+	
+	return fmt.Errorf("unsupported prize type for claiming")
+}
+
+// triggerManualFulfillment triggers manual fulfillment for airtime/data prizes
+func (s *WinnerService) triggerManualFulfillment(ctx context.Context, spinPrize *entities.SpinResults) error {
+	fmt.Printf("🔄 Triggering manual fulfillment for spin %s\n", spinPrize.ID)
+	
+	// Detect network
+	networkHint := ""
+	networkResult, err := s.hlrService.DetectNetwork(ctx, spinPrize.Msisdn, &networkHint)
+	if err != nil {
+		return fmt.Errorf("failed to detect network: %w", err)
+	}
+	network := networkResult.Network
+	
+	// Increment fulfillment attempts
+	spinPrize.FulfillmentAttempts++
+	now := time.Now()
+	spinPrize.LastFulfillmentAttempt = &now
+	
+	// Provision based on prize type
+	var provisionErr error
+	switch spinPrize.PrizeType {
+	case "AIRTIME":
+		provisionErr = s.provisionAirtimeManual(ctx, spinPrize, network)
+	case "DATA":
+		provisionErr = s.provisionDataManual(ctx, spinPrize, network)
+	default:
+		return fmt.Errorf("unsupported prize type for manual fulfillment: %s", spinPrize.PrizeType)
+	}
+	
+	if provisionErr != nil {
+		// Update error details
+		spinPrize.FulfillmentError = provisionErr.Error()
+		s.spinRepo.Update(ctx, spinPrize)
+		return provisionErr
+	}
+	
+	// Success! Update status
+	spinPrize.ClaimStatus = "CLAIMED"
+	completedAt := time.Now()
+	spinPrize.ProvisionCompletedAt = &completedAt
+	spinPrize.ClaimedAt = &completedAt
+	spinPrize.FulfillmentError = ""
+	
+	err = s.spinRepo.Update(ctx, spinPrize)
+	if err != nil {
+		return fmt.Errorf("failed to update spin prize status: %w", err)
+	}
+	
+	fmt.Printf("✅ Manual fulfillment successful for spin %s\n", spinPrize.ID)
+	return nil
+}
+
+// provisionAirtimeManual provisions airtime via VTPass (manual trigger)
+func (s *WinnerService) provisionAirtimeManual(ctx context.Context, spinPrize *entities.SpinResults, network string) error {
+	if s.telecomService == nil {
+		return fmt.Errorf("telecom service not initialized")
+	}
+	
+	fmt.Printf("📞 [Manual] Provisioning ₦%d airtime to %s on %s network\n", 
+		spinPrize.PrizeValue/100, spinPrize.Msisdn, network)
+	
+	// Call VTPass (amount in kobo)
+	response, err := s.telecomService.PurchaseAirtime(ctx, network, spinPrize.Msisdn, int(spinPrize.PrizeValue))
+	if err != nil {
+		return fmt.Errorf("VTPass airtime purchase failed: %w", err)
+	}
+	
+	// Store provider reference
+	if response != nil {
+		spinPrize.ClaimReference = response.ProviderReference
+		fmt.Printf("✅ [Manual] Airtime provisioned successfully. Reference: %s, Status: %s\n", 
+			response.ProviderReference, response.Status)
+	}
+	
+	return nil
+}
+
+// provisionDataManual provisions data via VTPass (manual trigger)
+func (s *WinnerService) provisionDataManual(ctx context.Context, spinPrize *entities.SpinResults, network string) error {
+	if s.telecomService == nil {
+		return fmt.Errorf("telecom service not initialized")
+	}
+	
+	// Get data variation code
+	variationCode := s.getDataVariationCode(spinPrize.PrizeValue, network)
+	if variationCode == "" {
+		return fmt.Errorf("no data variation code found for value %d on %s", spinPrize.PrizeValue, network)
+	}
+	
+	fmt.Printf("📱 [Manual] Provisioning data (%s) to %s on %s network\n", variationCode, spinPrize.Msisdn, network)
+	
+	// Call VTPass (amount in kobo)
+	response, err := s.telecomService.PurchaseData(ctx, network, spinPrize.Msisdn, variationCode, int(spinPrize.PrizeValue))
+	if err != nil {
+		return fmt.Errorf("VTPass data purchase failed: %w", err)
+	}
+	
+	// Store provider reference
+	if response != nil {
+		spinPrize.ClaimReference = response.ProviderReference
+		fmt.Printf("✅ [Manual] Data provisioned successfully. Reference: %s, Status: %s\n", 
+			response.ProviderReference, response.Status)
+	}
+	
+	return nil
+}
+
+// getDataVariationCode maps prize value to VTPass variation code
+func (s *WinnerService) getDataVariationCode(prizeValue int64, network string) string {
+	// TODO: This should be stored in database (wheel_prizes.variation_code)
+	// For now, hardcode common mappings
+	
+	switch network {
+	case "MTN":
+		switch prizeValue {
+		case 50000: // 500MB
+			return "mtn-20mb-100"
+		case 100000: // 1GB
+			return "mtn-1gb-500"
+		case 200000: // 2GB
+			return "mtn-2gb-1000"
+		}
+	case "GLO":
+		switch prizeValue {
+		case 50000:
+			return "glo-200mb-200"
+		case 100000:
+			return "glo-1gb-500"
+		case 200000:
+			return "glo-2gb-1000"
+		}
+	case "AIRTEL":
+		switch prizeValue {
+		case 50000:
+			return "airtel-750mb-500"
+		case 100000:
+			return "airtel-1gb-500"
+		case 200000:
+			return "airtel-2gb-1000"
+		}
+	case "9MOBILE":
+		switch prizeValue {
+		case 50000:
+			return "etisalat-500mb-500"
+		case 100000:
+			return "etisalat-1gb-1000"
+		case 200000:
+			return "etisalat-2gb-2000"
+		}
+	}
+	
+	return "" // No matching variation code
 }

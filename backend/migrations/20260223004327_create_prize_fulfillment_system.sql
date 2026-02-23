@@ -88,3 +88,19 @@ INSERT INTO prize_fulfillment_config (prize_type, fulfillment_mode, auto_retry_e
     ('POINTS', 'AUTO', FALSE, 0, 0, FALSE, FALSE, 10, TRUE, 'SYSTEM'),
     ('PHYSICAL', 'MANUAL', FALSE, 0, 0, FALSE, FALSE, 60, TRUE, 'SYSTEM')
 ON CONFLICT (prize_type) DO NOTHING;
+
+-- GRANT PERMISSIONS
+-- Grant permissions to both possible database users for flexibility
+GRANT ALL PRIVILEGES ON TABLE prize_fulfillment_config TO rechargemax;
+GRANT ALL PRIVILEGES ON TABLE prize_fulfillment_logs TO rechargemax;
+GRANT USAGE, SELECT ON SEQUENCE prize_fulfillment_logs_id_seq TO rechargemax;
+
+-- Also grant to rechargemax_user if it exists (for different deployment scenarios)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'rechargemax_user') THEN
+        GRANT ALL PRIVILEGES ON TABLE prize_fulfillment_config TO rechargemax_user;
+        GRANT ALL PRIVILEGES ON TABLE prize_fulfillment_logs TO rechargemax_user;
+        GRANT USAGE, SELECT ON SEQUENCE prize_fulfillment_logs_id_seq TO rechargemax_user;
+    END IF;
+END $$;

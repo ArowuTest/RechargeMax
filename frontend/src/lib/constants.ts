@@ -26,14 +26,14 @@ export const TRANSACTION_STATUS = {
 } as const;
 
 export const SPIN_PRIZES = [
-  { name: '₦100 Airtime', type: 'AIRTIME', amount: 100, probability: 25, color: '#10b981' },
-  { name: '₦200 Airtime', type: 'AIRTIME', amount: 200, probability: 20, color: '#3b82f6' },
-  { name: '₦500 Airtime', type: 'AIRTIME', amount: 500, probability: 15, color: '#8b5cf6' },
-  { name: '1GB Data', type: 'DATA', amount: 1024, probability: 15, color: '#f59e0b' },
-  { name: '2GB Data', type: 'DATA', amount: 2048, probability: 10, color: '#ef4444' },
-  { name: '₦1,000 Cash', type: 'CASH', amount: 1000, probability: 8, color: '#ec4899' },
-  { name: '₦5,000 Cash', type: 'CASH', amount: 5000, probability: 2, color: '#fbbf24' },
-  { name: 'Better Luck', type: 'NONE', amount: 0, probability: 5, color: '#6b7280' },
+  { name: '₦100 Airtime', type: 'AIRTIME', value: 10000, probability: 25, color: '#10b981' },
+  { name: '₦200 Airtime', type: 'AIRTIME', value: 20000, probability: 20, color: '#3b82f6' },
+  { name: '500MB Data', type: 'DATA', value: 50000, probability: 15, color: '#8b5cf6' },
+  { name: '1GB Data', type: 'DATA', value: 100000, probability: 15, color: '#f59e0b' },
+  { name: '₦100 Cash Prize', type: 'CASH', value: 10000, probability: 10, color: '#ef4444' },
+  { name: '₦200 Cash Prize', type: 'CASH', value: 20000, probability: 8, color: '#ec4899' },
+  { name: '₦500 Cash Prize', type: 'CASH', value: 50000, probability: 5, color: '#fbbf24' },
+  { name: '₦1000 Cash Prize', type: 'CASH', value: 100000, probability: 2, color: '#6b7280' },
 ] as const;
 
 export const DRAW_PRIZES = {

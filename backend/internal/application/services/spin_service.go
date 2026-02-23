@@ -202,9 +202,15 @@ return nil, fmt.Errorf("no prizes available")
 	// If any operation fails, all changes are rolled back
 	var spin *entities.WheelSpin
 	err = s.db.Transaction(func(tx *gorm.DB) error {
+		// Generate unique spin code
+		timestamp := time.Now().Unix()
+		last4Digits := msisdn[len(msisdn)-4:]
+		spinCode := fmt.Sprintf("SPIN_%s_%d", last4Digits, timestamp)
+		
 		// Create spin record
 		spin = &entities.WheelSpin{
 			ID:          uuid.New(),
+			SpinCode:    spinCode,
 			UserID:      &user.ID,
 			Msisdn:      msisdn,
 			PrizeID:     &selectedPrize.ID,

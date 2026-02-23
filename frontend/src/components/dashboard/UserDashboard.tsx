@@ -793,11 +793,37 @@ export const UserDashboard: React.FC = () => {
                       {dashboardData.prizes.map((prize, index) => (
                         <div key={prize?.id || index} className="border rounded p-4 space-y-3">
                           <div className="flex justify-between items-start">
-                            <div>
+                            <div className="flex-1">
                               <p className="font-semibold text-lg">{prize?.prize_name || 'Unknown Prize'}</p>
                               <p className="text-sm text-gray-600">Won on {prize?.won_date ? formatDate(prize.won_date) : 'N/A'}</p>
                               {prize?.claim_date && (
                                 <p className="text-sm text-green-600">Claimed on {formatDate(prize.claim_date)}</p>
+                              )}
+                              
+                              {/* Fulfillment Status for Airtime/Data */}
+                              {(prize?.prize_type === 'AIRTIME' || prize?.prize_type === 'DATA') && (
+                                <div className="mt-2 space-y-1">
+                                  {prize?.fulfillment_mode && (
+                                    <p className="text-xs text-gray-500">
+                                      Mode: <span className="font-medium">{prize.fulfillment_mode}</span>
+                                    </p>
+                                  )}
+                                  {prize?.fulfillment_attempts > 0 && (
+                                    <p className="text-xs text-gray-500">
+                                      Provisioning attempts: <span className="font-medium">{prize.fulfillment_attempts}</span>
+                                    </p>
+                                  )}
+                                  {prize?.fulfillment_error && (
+                                    <p className="text-xs text-red-600 bg-red-50 p-2 rounded">
+                                      ⚠️ {prize.fulfillment_error}
+                                    </p>
+                                  )}
+                                  {prize?.claim_reference && (
+                                    <p className="text-xs text-green-600">
+                                      Ref: {prize.claim_reference}
+                                    </p>
+                                  )}
+                                </div>
                               )}
                             </div>
                             <div className="text-right">

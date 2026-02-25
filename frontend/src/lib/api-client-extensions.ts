@@ -103,10 +103,26 @@ export interface DailySubscription {
   total_entries: number;
   price_per_entry: number;
   daily_amount: number;
+  daily_cost?: number;  // Alternative field name
+  entries_per_day?: number;  // Number of entries per day
+  start_date?: string;  // Subscription start date
   status: 'active' | 'paused' | 'cancelled' | 'failed';
   next_billing_date: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface SubscriptionStatistics {
+  total_subscriptions: number;
+  active_subscriptions: number;
+  paused_subscriptions: number;
+  cancelled_subscriptions: number;
+  total_revenue: number;
+  monthly_revenue: number;
+  total_billings: number;
+  successful_billings: number;
+  failed_billings: number;
+  average_subscription_value: number;
 }
 
 export interface SubscriptionBilling {
@@ -538,7 +554,7 @@ export interface VTPassStatus {
   last_check: string;
 }
 
-export const rechargeMonitoringApi = {
+export const rechargeMonitoringApi: any = {
   // Get all recharge transactions with filters
   getTransactions: async (params?: {
     page?: number;
@@ -584,6 +600,35 @@ export const rechargeMonitoringApi = {
   // Get network configurations
   getNetworkConfigs: async () => {
     const response = await apiClient.get<ApiResponse<NetworkConfig[]>>('/admin/recharge/network-configs');
+    return response.data;
+  },
+
+  // Get transaction details
+  getTransactionDetails: async (transactionId: string) => {
+    const response = await apiClient.get<ApiResponse>(`/admin/recharge/transactions/${transactionId}`);
+    return response.data;
+  },
+
+  // Retry transaction (alias)
+  retryTransaction: async (transactionId: string) => {
+    return rechargeMonitoringApi.retry(transactionId);
+  },
+
+  // Refund transaction
+  refundTransaction: async (transactionId: string, reason?: string) => {
+    const response = await apiClient.post<ApiResponse>(`/admin/recharge/${transactionId}/refund`, { reason });
+    return response.data;
+  },
+
+  // Mark transaction as success
+  markSuccess: async (transactionId: string) => {
+    const response = await apiClient.post<ApiResponse>(`/admin/recharge/${transactionId}/mark-success`);
+    return response.data;
+  },
+
+  // Mark transaction as failed
+  markFailed: async (transactionId: string, reason?: string) => {
+    const response = await apiClient.post<ApiResponse>(`/admin/recharge/${transactionId}/mark-failed`, { reason });
     return response.data;
   },
 };

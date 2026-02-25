@@ -119,12 +119,25 @@ export interface SubscriptionStatistics {
   cancelled_subscriptions: number;
   total_revenue: number;
   monthly_revenue: number;
+  daily_revenue?: number;  // Revenue for today
   total_billings: number;
   successful_billings: number;
   failed_billings: number;
   average_subscription_value: number;
   total_entries?: number;  // Total draw entries allocated
   churn_rate?: number;  // Subscription churn rate percentage
+  subscription_growth?: {  // Subscription growth metrics
+    new_subscriptions: number;
+    cancelled_subscriptions: number;
+    net_growth: number;
+    growth_rate: number;
+  };
+  revenue_growth?: {  // Revenue growth metrics
+    current_period: number;
+    previous_period: number;
+    growth_amount: number;
+    growth_rate: number;
+  };
   tier_performance?: Array<{  // Performance by tier
     tier_id: string;
     tier_name: string;
@@ -248,8 +261,16 @@ export interface USSDStatistics {
   failed_recharges: number;
   total_amount: number;
   total_points_earned: number;
+  total_points?: number;  // Alternative field name
   average_amount: number;
+  success_rate?: number;  // Success rate percentage
   recharges_by_network: Record<string, number>;
+  network_breakdown?: Array<{  // Detailed network breakdown
+    network: string;
+    count: number;
+    amount: number;
+    points: number;
+  }>;
 }
 
 export interface USSDWebhookLog {
@@ -299,6 +320,11 @@ export const ussdRechargeApi = {
   // Get recharges (alias for getAll)
   getRecharges: async (page = 1, perPage = 50, network?: string, status?: string) => {
     return ussdRechargeApi.getAll(page, perPage, network, status);
+  },
+
+  // Get statistics (alias for getStats)
+  getStatistics: async () => {
+    return ussdRechargeApi.getStats();
   },
 };
 

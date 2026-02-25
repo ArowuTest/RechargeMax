@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { adminApi } from '@/lib/api-client';
+import type { NetworkConfig, DataPlan, WheelPrize, DailySubscription } from '@/types/admin-api.types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -207,7 +208,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
   const [showPrizeDialog, setShowPrizeDialog] = useState(false);
   const [showDataPlanDialog, setShowDataPlanDialog] = useState(false);
   const [showNetworkDialog, setShowNetworkDialog] = useState(false);
-  const [editingNetwork, setEditingNetwork] = useState<Network | null>(null);
+  const [editingNetwork, setEditingNetwork] = useState<NetworkConfig | null>(null);
 
   useEffect(() => {
     if (admin) {
@@ -232,7 +233,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
       console.log('🔍 State Monitor - dailySubscription changed:', dailySubscription);
       
       // Check for suspicious values that indicate corruption
-      if (dailySubscription.amount === 80 && dailySubscription.draw_entries_earned === 4) {
+      if (dailySubscription?.amount === 80 && dailySubscription?.draw_entries_earned === 4) {
         console.log('❌ CORRUPTION DETECTED! Resetting to correct values');
         setDailySubscription({
           id: dailySubscription.id || 'corrected',
@@ -314,8 +315,9 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
         console.log('🟢 callAdminAPI: get_networks called');
         const networks = await adminApi.getNetworks();
         console.log('🟢 adminApi.getNetworks() response:', networks);
-        console.log('🟢 networks.data:', networks.data);
-        const networksResult = { success: true, networks: networks.data };
+        const networksData = networks.success ? networks.data : [];
+        console.log('🟢 networks.data:', networksData);
+        const networksResult = { success: true, networks: networksData };
         console.log('🟢 Returning:', networksResult);
         return networksResult;
       
@@ -323,21 +325,23 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
         console.log('🟢 callAdminAPI: get_data_plans called');
         const plans = await adminApi.getDataPlans();
         console.log('🟢 adminApi.getDataPlans() response:', plans);
-        console.log('🟢 plans.data:', plans.data);
-        const plansResult = { success: true, data_plans: plans.data };
+        const plansData = plans.success ? plans.data : [];
+        console.log('🟢 plans.data:', plansData);
+        const plansResult = { success: true, data_plans: plansData };
         console.log('🟢 Returning:', plansResult);
         return plansResult;
       
       case 'get_wheel_prizes':
         const prizes = await adminApi.getWheelPrizes();
-        return { success: true, wheel_prizes: prizes.data };
+        return { success: true, wheel_prizes: prizes.success ? prizes.data : [] };
       
       case 'get_users':
         console.log('🟢 callAdminAPI: get_users called');
         const users = await adminApi.users.getAll();
         console.log('🟢 adminApi.users.getAll() response:', users);
-        console.log('🟢 users.data:', users.data);
-        const result = { success: true, users: users.data || [] };
+        const usersData = users.success ? users.data : [];
+        console.log('🟢 users.data:', usersData);
+        const result = { success: true, users: usersData || [] };
         console.log('🟢 Returning:', result);
         return result;
       
@@ -347,7 +351,8 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
       
       case 'get_affiliates':
         const affiliates = await adminApi.affiliates.getAll();
-        return { success: true, affiliates: affiliates.data?.data || [] };
+        const affiliatesData = affiliates.success && affiliates.data ? affiliates.data.data : [];
+        return { success: true, affiliates: affiliatesData || [] };
       
       case 'get_transactions':
         // TODO: Implement backend endpoint for transactions

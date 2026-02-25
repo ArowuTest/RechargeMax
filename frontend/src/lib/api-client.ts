@@ -4,6 +4,21 @@
  */
 
 import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from 'axios';
+import type {
+  ApiResponse,
+  ApiSuccessResponse,
+  ApiErrorResponse,
+  PaginatedResponse,
+  NetworkConfig,
+  DataPlan,
+  WheelPrize,
+  User,
+  Transaction,
+  Affiliate,
+  DailySubscription,
+  isApiSuccess,
+  hasData,
+} from '@/types/admin-api.types';
 
 // API Configuration
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
@@ -52,23 +67,24 @@ apiClient.interceptors.response.use(
 );
 
 // ============================================================================
-// TYPES
+// TYPES (Re-exported from admin-api.types.ts)
 // ============================================================================
 
-export interface ApiResponse<T = any> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
-}
+export type {
+  ApiResponse,
+  ApiSuccessResponse,
+  ApiErrorResponse,
+  PaginatedResponse,
+  NetworkConfig,
+  DataPlan,
+  WheelPrize,
+  User,
+  Transaction,
+  Affiliate,
+  DailySubscription,
+} from '@/types/admin-api.types';
 
-export interface PaginatedResponse<T> {
-  data: T[];
-  total: number;
-  page: number;
-  per_page: number;
-  total_pages: number;
-}
+export { isApiSuccess, hasData } from '@/types/admin-api.types';
 
 // ============================================================================
 // AUTHENTICATION API

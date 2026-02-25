@@ -245,9 +245,11 @@ export interface USSDRecharge {
   network: string;
   amount: number;
   points_earned: number;
+  points_allocated?: number;  // Points allocated to user
   transaction_reference: string;
+  transaction_id?: string;  // Transaction ID
   transaction_date: string;
-  status: 'pending' | 'completed' | 'failed';
+  status: 'pending' | 'completed' | 'failed' | 'duplicate';  // Added duplicate status
   webhook_received_at: string;
   processed_at?: string;
   error_message?: string;
@@ -326,6 +328,23 @@ export const ussdRechargeApi = {
   getStatistics: async () => {
     return ussdRechargeApi.getStats();
   },
+
+  // Retry failed recharge
+  retryRecharge: async (rechargeId: string) => {
+    const response = await apiClient.post<ApiResponse>(`/admin/ussd-recharges/${rechargeId}/retry`);
+    return response.data;
+  },
+
+  // Export recharges to CSV
+  exportRecharges: async (filters?: { network?: string; status?: string; date_from?: string; date_to?: string }) => {
+    let url = '/admin/ussd-recharges/export?';
+    if (filters?.network) url += `network=${filters.network}&`;
+    if (filters?.status) url += `status=${filters.status}&`;
+    if (filters?.date_from) url += `date_from=${filters.date_from}&`;
+    if (filters?.date_to) url += `date_to=${filters.date_to}&`;
+    const response = await apiClient.get<ApiResponse<{ export_url: string }>>(url);
+    return response.data;
+  },
 };
 
 // ============================================================================
@@ -401,6 +420,7 @@ export const drawCSVApi = {
 export interface ClaimApprovalRequest {
   winner_id: string;
   approved: boolean;
+  action?: string;  // Action type (approve/reject)
   reason?: string;
 }
 
@@ -408,12 +428,14 @@ export interface PayoutRequest {
   winner_id: string;
   payout_reference: string;
   amount: number;
+  payout_method?: string;  // Payment method (bank_transfer, mobile_money, etc.)
 }
 
 export interface ShippingUpdateRequest {
   winner_id: string;
   tracking_number: string;
   carrier?: string;
+  courier_service?: string;  // Courier service name
   estimated_delivery?: string;
 }
 
@@ -424,7 +446,7 @@ export interface Winner {
   prize_name: string;
   prize_type: 'airtime' | 'data' | 'points' | 'cash' | 'physical_goods';
   prize_value: number;
-  claim_status: 'unclaimed' | 'claim_submitted' | 'processing' | 'paid' | 'shipped' | 'rejected';
+  claim_status: 'unclaimed' | 'claim_submitted' | 'processing' | 'paid' | 'shipped' | 'rejected' | 'pending' | 'approved';
   claim_submitted_at?: string;
   bank_name?: string;
   bank_code?: string;

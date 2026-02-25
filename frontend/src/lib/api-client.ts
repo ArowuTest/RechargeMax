@@ -419,7 +419,7 @@ export const userApi = {
 // ADMIN API
 // ============================================================================
 
-export const adminApi = {
+export const adminApi: any = {
   // Dashboard stats
   getStats: async () => {
     const response = await apiClient.get<ApiResponse>('/admin/dashboard');
@@ -657,6 +657,27 @@ export const adminApi = {
     document.body.appendChild(link);
     link.click();
     link.remove();
+  },
+
+  // Generic HTTP methods for flexible API calls
+  get: async <T = any>(url: string, config?: any) => {
+    const response = await apiClient.get<ApiResponse<T>>(url, config);
+    return response.data;
+  },
+
+  post: async <T = any>(url: string, data?: any, config?: any) => {
+    const response = await apiClient.post<ApiResponse<T>>(url, data, config);
+    return response.data;
+  },
+
+  put: async <T = any>(url: string, data?: any, config?: any) => {
+    const response = await apiClient.put<ApiResponse<T>>(url, data, config);
+    return response.data;
+  },
+
+  delete: async <T = any>(url: string, config?: any) => {
+    const response = await apiClient.delete<ApiResponse<T>>(url, config);
+    return response.data;
   },
 };
 

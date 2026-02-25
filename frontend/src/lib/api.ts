@@ -382,3 +382,26 @@ export const getDrawResults = async (drawId: string) => {
   const response = await drawApi.getDrawResults(drawId);
   return response;
 };
+
+// ============================================================================
+// DAILY SUBSCRIPTION OPERATIONS
+// ============================================================================
+
+export const processDailySubscription = async (subscriptionData: {
+  msisdn: string;
+  tier_id?: string;
+  payment_method?: 'paystack' | 'mtn_dcb';
+}) => {
+  const response = await apiClient.post('/subscriptions/daily', subscriptionData);
+  return response.data;
+};
+
+export const getDailySubscriptionStatus = async (msisdn: string) => {
+  const response = await apiClient.get(`/subscriptions/daily/status?msisdn=${msisdn}`);
+  return response.data;
+};
+
+export const cancelDailySubscription = async (subscriptionId: string) => {
+  const response = await apiClient.post(`/subscriptions/daily/${subscriptionId}/cancel`);
+  return response.data;
+};

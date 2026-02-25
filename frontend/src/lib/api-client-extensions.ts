@@ -123,6 +123,14 @@ export interface SubscriptionStatistics {
   successful_billings: number;
   failed_billings: number;
   average_subscription_value: number;
+  total_entries?: number;  // Total draw entries allocated
+  churn_rate?: number;  // Subscription churn rate percentage
+  tier_performance?: Array<{  // Performance by tier
+    tier_id: string;
+    tier_name: string;
+    subscriber_count: number;
+    revenue: number;
+  }>;
 }
 
 export interface SubscriptionBilling {
@@ -233,6 +241,17 @@ export interface USSDRecharge {
   created_at: string;
 }
 
+export interface USSDStatistics {
+  total_recharges: number;
+  completed_recharges: number;
+  pending_recharges: number;
+  failed_recharges: number;
+  total_amount: number;
+  total_points_earned: number;
+  average_amount: number;
+  recharges_by_network: Record<string, number>;
+}
+
 export interface USSDWebhookLog {
   id: string;
   network: string;
@@ -275,6 +294,11 @@ export const ussdRechargeApi = {
   getStats: async () => {
     const response = await apiClient.get<ApiResponse>('/admin/ussd-recharges/stats');
     return response.data;
+  },
+
+  // Get recharges (alias for getAll)
+  getRecharges: async (page = 1, perPage = 50, network?: string, status?: string) => {
+    return ussdRechargeApi.getAll(page, perPage, network, status);
   },
 };
 
@@ -347,6 +371,25 @@ export const drawCSVApi = {
 // ============================================================================
 // WINNER CLAIM PROCESSING
 // ============================================================================
+
+export interface ClaimApprovalRequest {
+  winner_id: string;
+  approved: boolean;
+  reason?: string;
+}
+
+export interface PayoutRequest {
+  winner_id: string;
+  payout_reference: string;
+  amount: number;
+}
+
+export interface ShippingUpdateRequest {
+  winner_id: string;
+  tracking_number: string;
+  carrier?: string;
+  estimated_delivery?: string;
+}
 
 export interface Winner {
   id: string;

@@ -54,11 +54,18 @@ export interface PaginatedResponse<T> {
 export interface NetworkConfig {
   id: string;
   name: string;
+  network_name?: string;  // Alternative field name
   code: string;
+  network_code?: string;  // Alternative field name
   logo: string;
   is_active: boolean;
   support_data: boolean;
+  data_enabled?: boolean;  // Alternative field name
   support_airtime: boolean;
+  airtime_enabled?: boolean;  // Alternative field name
+  commission_rate?: number;
+  minimum_amount?: number;
+  maximum_amount?: number;
 }
 
 /**
@@ -69,12 +76,19 @@ export interface DataPlan {
   plan_code: string;
   plan_name: string;
   network_code: string;
+  network_id?: string;  // Alternative field name
   network_provider?: string;  // Alternative field name
   data_amount: string;
   validity: string;
+  validity_days?: number;  // Alternative field name (numeric)
   price: number;
   is_active: boolean;
   display_order: number;
+  sort_order?: number;  // Alternative field name
+  network_configs_2025_11_10_13_30?: {  // Relation field
+    network_name: string;
+    network_code: string;
+  };
   created_at: string;
   updated_at: string;
 }
@@ -92,10 +106,15 @@ export interface WheelPrize {
   prize_type: 'airtime' | 'data' | 'points' | 'cash' | 'physical_goods';
   prize_value: number;
   probability_weight: number;
+  probability?: number;  // Alternative field name (percentage)
+  minimum_recharge?: number;
   is_active: boolean;
   display_order: number;
+  sort_order?: number;  // Alternative field name
   color: string;
+  color_scheme?: string;  // Alternative field name
   icon?: string;
+  icon_name?: string;  // Alternative field name
   description?: string;
   created_at: string;
   updated_at: string;

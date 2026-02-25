@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { adminApi } from '@/lib/api-client';
-import type { NetworkConfig, DataPlan, WheelPrize, DailySubscription } from '@/types/admin-api.types';
+import type { NetworkConfig, DataPlan, WheelPrize, DailySubscription, PlatformSetting } from '@/types/admin-api.types';
 import { getErrorMessage } from '@/utils/error-utils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -70,64 +70,7 @@ interface AdminStats {
   total_commissions: number;
 }
 
-interface NetworkConfig {
-  id: string;
-  network_name: string;
-  network_code: string;
-  is_active: boolean;
-  airtime_enabled: boolean;
-  data_enabled: boolean;
-  commission_rate: number;
-  minimum_amount: number;
-  maximum_amount: number;
-}
-
-interface DataPlan {
-  id: string;
-  network_id: string;
-  plan_name: string;
-  data_amount: string;
-  price: number;
-  validity_days: number;
-  plan_code: string;
-  is_active: boolean;
-  sort_order: number;
-  network_configs_2025_11_10_13_30?: {
-    network_name: string;
-    network_code: string;
-  };
-}
-
-interface WheelPrize {
-  id: string;
-  prize_name: string;
-  prize_type: string;
-  prize_value: number;
-  probability: number;
-  minimum_recharge: number;
-  is_active: boolean;
-  icon_name: string;
-  color_scheme: string;
-  sort_order: number;
-}
-
-interface DailySubscription {
-  id: string;
-  subscription_name: string;
-  daily_amount: number;
-  description: string;
-  benefits: string[];
-  is_active: boolean;
-  max_subscribers: number;
-  current_subscribers: number;
-}
-
-interface PlatformSetting {
-  id: string;
-  setting_key: string;
-  setting_value: any;
-  description: string;
-}
+// Types imported from @/types/admin-api.types - no local declarations needed
 
 interface ComprehensiveAdminPortalProps {
   adminSession?: {

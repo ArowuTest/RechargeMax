@@ -116,13 +116,15 @@ export interface SubscriptionBilling {
   billing_date: string;
   amount: number;
   status: 'pending' | 'success' | 'failed';
+  billing_status?: 'pending' | 'success' | 'failed';  // Alternative field name
   payment_reference?: string;
   error_message?: string;
   retry_count: number;
+  entries_allocated?: number;  // Number of entries allocated for this billing
   created_at: string;
 }
 
-export const dailySubscriptionApi = {
+export const dailySubscriptionApi: any = {
   // Get all subscriptions
   getAll: async (page = 1, perPage = 50, status?: string) => {
     let url = `/admin/daily-subscriptions?page=${page}&per_page=${perPage}`;
@@ -170,6 +172,28 @@ export const dailySubscriptionApi = {
   // Get subscription statistics
   getStats: async () => {
     const response = await apiClient.get<ApiResponse>('/admin/daily-subscriptions/stats');
+    return response.data;
+  },
+
+  // Get subscriptions (alias for getAll)
+  getSubscriptions: async (page = 1, perPage = 50, status?: string) => {
+    return dailySubscriptionApi.getAll(page, perPage, status);
+  },
+
+  // Get statistics (alias)
+  getStatistics: async () => {
+    return dailySubscriptionApi.getStats();
+  },
+
+  // Export subscriptions
+  exportSubscriptions: async (filters?: any) => {
+    const response = await apiClient.get<ApiResponse>('/admin/daily-subscriptions/export', { params: filters });
+    return response.data;
+  },
+
+  // Export billings
+  exportBillings: async (filters?: any) => {
+    const response = await apiClient.get<ApiResponse>('/admin/subscription-billings/export', { params: filters });
     return response.data;
   },
 };
@@ -326,11 +350,13 @@ export interface Winner {
   payout_status?: string;
   payout_reference?: string;
   notification_sent: boolean;
+  tracking_number?: string;  // Shipping tracking number
+  draw_date?: string;  // Date of the draw
   created_at: string;
   updated_at: string;
 }
 
-export const winnerClaimApi = {
+export const winnerClaimApi: any = {
   // Get all winners
   getAll: async (page = 1, perPage = 50, claimStatus?: string, prizeType?: string) => {
     let url = `/admin/winners?page=${page}&per_page=${perPage}`;
@@ -379,6 +405,32 @@ export const winnerClaimApi = {
   // Get claim statistics
   getStats: async () => {
     const response = await apiClient.get<ApiResponse>('/admin/winners/stats');
+    return response.data;
+  },
+
+  // Get winners (alias for getAll)
+  getWinners: async (page = 1, perPage = 50, claimStatus?: string, prizeType?: string) => {
+    return winnerClaimApi.getAll(page, perPage, claimStatus, prizeType);
+  },
+
+  // Get winner details (alias for getById)
+  getWinnerDetails: async (winnerId: string) => {
+    return winnerClaimApi.getById(winnerId);
+  },
+
+  // Get claim statistics (alias)
+  getClaimStatistics: async () => {
+    return winnerClaimApi.getStats();
+  },
+
+  // Update shipping information
+  updateShipping: async (winnerId: string, trackingNumber: string) => {
+    return winnerClaimApi.markShipped(winnerId, trackingNumber);
+  },
+
+  // Invoke runner-up (placeholder - needs backend implementation)
+  invokeRunnerUp: async (winnerId: string) => {
+    const response = await apiClient.post<ApiResponse>(`/admin/winners/${winnerId}/invoke-runner-up`);
     return response.data;
   },
 };

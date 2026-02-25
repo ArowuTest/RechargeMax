@@ -332,6 +332,9 @@ export interface DailySubscription {
   draw_entries_earned?: number;
   is_paid?: boolean;
   subscription_code?: string;
+  daily_cost?: number;  // Alternative field name for daily_amount
+  entries_per_day?: number;  // Number of entries allocated per day
+  start_date?: string;  // Subscription start date
 }
 
 /**

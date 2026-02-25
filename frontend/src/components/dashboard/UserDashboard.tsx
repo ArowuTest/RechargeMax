@@ -85,6 +85,10 @@ interface DashboardData {
     won_date: string;
     claim_date?: string;
     status: string;
+    fulfillment_mode?: string;  // AUTO or MANUAL
+    fulfillment_attempts?: number;  // Number of provisioning attempts
+    fulfillment_error?: string;  // Error message if fulfillment failed
+    claim_reference?: string;  // Reference number for the claim
   }>;
 }
 

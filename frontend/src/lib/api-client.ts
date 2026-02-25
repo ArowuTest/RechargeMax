@@ -286,6 +286,11 @@ export const drawApi = {
     const response = await apiClient.get<ApiResponse<any[]>>(`/draws/${drawId}/winners`);
     return response.data;
   },
+
+  // Get draw results (alias for getWinners)
+  getDrawResults: async (drawId: string) => {
+    return drawApi.getWinners(drawId);
+  },
 };
 
 // ============================================================================

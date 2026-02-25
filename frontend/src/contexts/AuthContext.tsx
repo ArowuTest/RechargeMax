@@ -8,6 +8,7 @@ interface User {
   full_name?: string;
   loyalty_tier: string;
   total_recharge_amount: number;
+  total_points?: number;  // Total loyalty points earned
   created_at: string;
 }
 

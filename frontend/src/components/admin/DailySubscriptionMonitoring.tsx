@@ -216,7 +216,7 @@ export default function DailySubscriptionMonitoring() {
     );
   };
 
-  const getBillingStatusBadge = (status: string) => {
+  const getBillingStatusBadge = (status: string | undefined) => {
     const statusConfig = {
       success: { variant: 'default' as const, icon: CheckCircle2, label: 'Success' },
       failed: { variant: 'destructive' as const, icon: XCircle, label: 'Failed' },
@@ -301,13 +301,13 @@ export default function DailySubscriptionMonitoring() {
                 <Users className="h-8 w-8 text-blue-600" />
               </div>
               <div className="flex items-center gap-1 mt-2 text-sm">
-                {statistics.subscription_growth >= 0 ? (
+                {(statistics.subscription_growth?.growth_rate ?? 0) >= 0 ? (
                   <TrendingUp className="h-4 w-4 text-green-600" />
                 ) : (
                   <TrendingDown className="h-4 w-4 text-red-600" />
                 )}
-                <span className={statistics.subscription_growth >= 0 ? 'text-green-600' : 'text-red-600'}>
-                  {Math.abs(statistics.subscription_growth)}%
+                <span className={(statistics.subscription_growth?.growth_rate ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}>
+                  {Math.abs(statistics.subscription_growth?.growth_rate ?? 0)}%
                 </span>
                 <span className="text-muted-foreground">vs last period</span>
               </div>
@@ -328,13 +328,13 @@ export default function DailySubscriptionMonitoring() {
                 <DollarSign className="h-8 w-8 text-green-600" />
               </div>
               <div className="flex items-center gap-1 mt-2 text-sm">
-                {statistics.revenue_growth >= 0 ? (
+                {(statistics.revenue_growth?.growth_rate ?? 0) >= 0 ? (
                   <TrendingUp className="h-4 w-4 text-green-600" />
                 ) : (
                   <TrendingDown className="h-4 w-4 text-red-600" />
                 )}
-                <span className={statistics.revenue_growth >= 0 ? 'text-green-600' : 'text-red-600'}>
-                  {Math.abs(statistics.revenue_growth)}%
+                <span className={(statistics.revenue_growth?.growth_rate ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}>
+                  {Math.abs(statistics.revenue_growth?.growth_rate ?? 0)}%
                 </span>
                 <span className="text-muted-foreground">vs last period</span>
               </div>
@@ -367,7 +367,7 @@ export default function DailySubscriptionMonitoring() {
             <CardContent>
               <div className="flex items-center justify-between">
                 <p className="text-2xl font-bold">{statistics.churn_rate?.toFixed(1)}%</p>
-                {statistics.churn_rate > 10 ? (
+                {(statistics.churn_rate ?? 0) > 10 ? (
                   <AlertTriangle className="h-8 w-8 text-orange-600" />
                 ) : (
                   <CheckCircle2 className="h-8 w-8 text-green-600" />
@@ -577,7 +577,7 @@ export default function DailySubscriptionMonitoring() {
                           {getStatusBadge(subscription.status)}
                         </TableCell>
                         <TableCell>
-                          {new Date(subscription.start_date).toLocaleDateString()}
+                          {subscription.start_date ? new Date(subscription.start_date).toLocaleDateString() : 'N/A'}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">

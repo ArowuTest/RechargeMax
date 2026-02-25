@@ -12,7 +12,7 @@
 /**
  * Successful API response with data
  */
-export interface ApiSuccessResponse<T> {
+export interface ApiSuccessResponse<T = any> {
   success: true;
   data: T;
   message?: string;
@@ -29,8 +29,9 @@ export interface ApiErrorResponse {
 
 /**
  * Discriminated union type for all API responses
+ * Can be used as ApiResponse<T> where T is the data type
  */
-export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
+export type ApiResponse<T = any> = ApiSuccessResponse<T> | ApiErrorResponse;
 
 /**
  * Paginated response wrapper
@@ -68,6 +69,7 @@ export interface DataPlan {
   plan_code: string;
   plan_name: string;
   network_code: string;
+  network_provider?: string;  // Alternative field name
   data_amount: string;
   validity: string;
   price: number;
@@ -242,6 +244,7 @@ export interface AdminUser {
   id: string;
   username: string;
   email: string;
+  full_name?: string;
   role: 'SUPER_ADMIN' | 'ADMIN' | 'SUPPORT' | 'VIEWER';
   is_active: boolean;
   permissions: string[];
@@ -276,6 +279,11 @@ export interface SystemSettings {
   updated_at: string;
   updated_by: string;
 }
+
+/**
+ * Platform settings (alias for SystemSettings)
+ */
+export type PlatformSetting = SystemSettings;
 
 // ============================================================================
 // DAILY SUBSCRIPTION TYPES

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { adminApi } from '@/lib/api-client';
 import type { NetworkConfig, DataPlan, WheelPrize, DailySubscription } from '@/types/admin-api.types';
+import { getErrorMessage } from '@/utils/error-utils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -361,7 +362,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
       case 'get_prizes':
         // Get wheel prizes (same as get_wheel_prizes)
         const allPrizes = await adminApi.getWheelPrizes();
-        return { success: true, prizes: allPrizes.data };
+        return { success: true, prizes: allPrizes.success ? allPrizes.data : [] };
       
       case 'get_settings':
         // TODO: Implement backend endpoint for settings
@@ -370,7 +371,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
       case 'get_daily_subscription':
         try {
           const config = await adminApi.subscriptions.getConfig();
-          return { success: true, daily_subscription: config.data };
+          return { success: true, daily_subscription: config.success ? config.data : null };
         } catch (error) {
           return { success: true, daily_subscription: null };
         }
@@ -378,7 +379,8 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
       case 'get_all_daily_subscriptions':
         try {
           const subs = await adminApi.subscriptions.getAll();
-          return { success: true, data: { subscriptions: subs.data || [] } };
+          const subsData = subs.success ? subs.data : [];
+          return { success: true, data: { subscriptions: subsData || [] } };
         } catch (error) {
           return { success: true, data: { subscriptions: [] } };
         }
@@ -619,7 +621,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
   const handleNetworkUpdate = async (networkId: string, updates: Partial<NetworkConfig>) => {
     try {
       setActionLoading(networkId);
-      await callAdminAPI('update_network', { network_id: networkId, updates }, sessionToken);
+      await callAdminAPI('update_network', { network_id: networkId, updates });
       await fetchNetworks();
       toast({
         title: "Success",
@@ -628,7 +630,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
     } catch (error) {
       toast({
         title: "Update Failed",
-        description: error.message,
+        description: getErrorMessage(error),
         variant: "destructive"
       });
     } finally {
@@ -650,7 +652,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
           description: "Network updated successfully",
         });
       } else {
-        await callAdminAPI('create_network', networkData, sessionToken);
+        await callAdminAPI('create_network', networkData);
         toast({
           title: "Success",
           description: "Network created successfully",
@@ -662,7 +664,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
     } catch (error) {
       toast({
         title: editingNetwork ? "Update Failed" : "Creation Failed",
-        description: error.message,
+        description: getErrorMessage(error),
         variant: "destructive"
       });
     } finally {
@@ -685,7 +687,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
     } catch (error) {
       toast({
         title: "Update Failed",
-        description: error.message,
+        description: getErrorMessage(error),
         variant: "destructive"
       });
     } finally {
@@ -706,7 +708,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
           description: "Data plan updated successfully",
         });
       } else {
-        await callAdminAPI('create_data_plan', { plan: planData }, sessionToken);
+        await callAdminAPI('create_data_plan', { plan: planData });
         toast({
           title: "Success",
           description: "Data plan created successfully",
@@ -718,7 +720,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
     } catch (error) {
       toast({
         title: editingDataPlan ? "Update Failed" : "Creation Failed",
-        description: error.message,
+        description: getErrorMessage(error),
         variant: "destructive"
       });
     } finally {
@@ -765,7 +767,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
     } catch (error) {
       toast({
         title: editingPrize ? "Update Failed" : "Creation Failed",
-        description: error.message,
+        description: getErrorMessage(error),
         variant: "destructive"
       });
     } finally {
@@ -794,7 +796,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
     } catch (error) {
       toast({
         title: "Update Failed",
-        description: error.message,
+        description: getErrorMessage(error),
         variant: "destructive"
       });
     } finally {
@@ -826,7 +828,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
     } catch (error) {
       toast({
         title: "Update Failed",
-        description: error.message,
+        description: getErrorMessage(error),
         variant: "destructive"
       });
     } finally {
@@ -847,7 +849,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
     } catch (error) {
       toast({
         title: "Creation Failed",
-        description: error.message,
+        description: getErrorMessage(error),
         variant: "destructive"
       });
     } finally {
@@ -868,7 +870,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
     } catch (error) {
       toast({
         title: "Action Failed",
-        description: error.message,
+        description: getErrorMessage(error),
         variant: "destructive"
       });
     } finally {
@@ -889,7 +891,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
     } catch (error) {
       toast({
         title: "Update Failed",
-        description: error.message,
+        description: getErrorMessage(error),
         variant: "destructive"
       });
     } finally {
@@ -909,7 +911,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
     } catch (error) {
       toast({
         title: "Deactivation Failed",
-        description: error.message,
+        description: getErrorMessage(error),
         variant: "destructive"
       });
     } finally {
@@ -1917,7 +1919,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
                     const form = document.querySelector('[data-prize-form]') as HTMLFormElement;
                     if (form) {
                       const formData = new FormData(form);
-                      handleWheelPrizeUpdate({
+                      handleWheelPrizeSave({
                         prize_name: (document.getElementById('prize_name') as HTMLInputElement).value,
                         prize_type: (document.querySelector('[name="prize_type"]') as HTMLSelectElement)?.value || 'CASH',
                         prize_value: parseFloat((document.getElementById('prize_value') as HTMLInputElement).value),

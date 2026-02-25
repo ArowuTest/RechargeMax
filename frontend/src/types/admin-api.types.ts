@@ -103,7 +103,7 @@ export interface DataPlan {
 export interface WheelPrize {
   id: string;
   prize_name: string;
-  prize_type: 'airtime' | 'data' | 'points' | 'cash' | 'physical_goods';
+  prize_type: 'airtime' | 'data' | 'points' | 'cash' | 'physical_goods' | 'AIRTIME' | 'DATA' | 'POINTS' | 'CASH' | 'PHYSICAL_GOODS';
   prize_value: number;
   probability_weight: number;
   probability?: number;  // Alternative field name (percentage)
@@ -293,7 +293,9 @@ export interface CreateAdminRequest {
 export interface SystemSettings {
   id: string;
   key: string;
+  setting_key?: string;  // Alternative field name
   value: string;
+  setting_value?: any;  // Alternative field name (can be any type)
   description?: string;
   updated_at: string;
   updated_by: string;

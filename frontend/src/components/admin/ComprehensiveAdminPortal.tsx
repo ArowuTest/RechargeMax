@@ -589,7 +589,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
         await callAdminAPI('update_network', {
           network_id: editingNetwork.id, 
           updates: networkData 
-        }, sessionToken);
+        });
         toast({
           title: "Success",
           description: "Network updated successfully",
@@ -645,7 +645,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
         await callAdminAPI('update_data_plan', {
           plan_id: editingDataPlan.id, 
           updates: planData 
-        }, sessionToken);
+        });
         toast({
           title: "Success",
           description: "Data plan updated successfully",

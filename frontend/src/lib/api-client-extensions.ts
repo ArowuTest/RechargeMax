@@ -249,7 +249,7 @@ export interface USSDRecharge {
   transaction_id?: string;  // Alternative field name for transaction_reference
   transaction_reference: string;
   transaction_date: string;
-  status: 'pending' | 'completed' | 'failed';
+  status: 'pending' | 'completed' | 'failed' | 'duplicate' | 'success';
   webhook_received_at: string;
   processed_at?: string;
   error_message?: string;
@@ -320,13 +320,26 @@ export const ussdRechargeApi = {
   },
 
   // Get recharges (alias for getAll)
-  getRecharges: async (page = 1, perPage = 50, network?: string, status?: string) => {
+  getRecharges: async (filters?: { network?: string; status?: string; date_from?: string; date_to?: string; page?: number; perPage?: number }) => {
+    const { page = 1, perPage = 50, network, status } = filters || {};
     return ussdRechargeApi.getAll(page, perPage, network, status);
   },
 
   // Get statistics (alias for getStats)
-  getStatistics: async () => {
+  getStatistics: async (filters?: { date_from?: string; date_to?: string }) => {
     return ussdRechargeApi.getStats();
+  },
+
+  // Retry failed recharge
+  retryRecharge: async (rechargeId: string) => {
+    const response = await apiClient.post<ApiResponse>(`/admin/ussd-recharges/${rechargeId}/retry`);
+    return response.data;
+  },
+
+  // Export recharges to CSV
+  exportRecharges: async (filters?: { network?: string; status?: string; date_from?: string; date_to?: string }) => {
+    const response = await apiClient.get<ApiResponse>('/admin/ussd-recharges/export', { params: filters });
+    return response.data;
   },
 };
 

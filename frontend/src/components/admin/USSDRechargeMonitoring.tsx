@@ -95,7 +95,9 @@ export default function USSDRechargeMonitoring() {
       });
 
       if (rechargesResponse.success && rechargesResponse.data) {
-        setRecharges(rechargesResponse.data);
+        // Extract data array from paginated response
+        const data = rechargesResponse.data as any;
+        setRecharges(data.data || data);
       }
 
       // Fetch statistics
@@ -210,7 +212,8 @@ export default function USSDRechargeMonitoring() {
       const search = searchTerm.toLowerCase();
       return (
         recharge.msisdn.includes(search) ||
-        recharge.transaction_id.toLowerCase().includes(search) ||
+        recharge.transaction_id?.toLowerCase().includes(search) ||
+        recharge.transaction_reference?.toLowerCase().includes(search) ||
         recharge.network.toLowerCase().includes(search)
       );
     }

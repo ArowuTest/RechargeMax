@@ -146,8 +146,8 @@ export default function SubscriptionPricingConfig() {
   const getPriceChange = (): { percentage: number; direction: 'up' | 'down' | 'same' } | null => {
     if (pricingHistory.length < 2) return null;
 
-    const current = pricingHistory[0].price_per_entry;
-    const previous = pricingHistory[1].price_per_entry;
+    const current = pricingHistory[0]?.price_per_entry ?? 0;
+    const previous = pricingHistory[1]?.price_per_entry ?? 0;
     const percentage = ((current - previous) / previous) * 100;
 
     return {
@@ -392,18 +392,18 @@ export default function SubscriptionPricingConfig() {
                     )}
                     {index > 0 && pricingHistory[index - 1] && (
                       <div className="flex items-center gap-1">
-                        {pricing.price_per_entry < pricingHistory[index - 1].price_per_entry ? (
+                        {pricing.price_per_entry < (pricingHistory[index - 1]?.price_per_entry ?? 0) ? (
                           <>
                             <TrendingDown className="h-4 w-4 text-red-500" />
                             <span className="text-sm text-red-500">
-                              {(((pricingHistory[index - 1].price_per_entry - pricing.price_per_entry) / pricing.price_per_entry) * 100).toFixed(1)}% decrease
+                              {((((pricingHistory[index - 1]?.price_per_entry ?? 0) - pricing.price_per_entry) / pricing.price_per_entry) * 100).toFixed(1)}% decrease
                             </span>
                           </>
-                        ) : pricing.price_per_entry > pricingHistory[index - 1].price_per_entry ? (
+                        ) : pricing.price_per_entry > (pricingHistory[index - 1]?.price_per_entry ?? 0) ? (
                           <>
                             <TrendingUp className="h-4 w-4 text-green-500" />
                             <span className="text-sm text-green-500">
-                              {(((pricing.price_per_entry - pricingHistory[index - 1].price_per_entry) / pricingHistory[index - 1].price_per_entry) * 100).toFixed(1)}% increase
+                              {(((pricing.price_per_entry - (pricingHistory[index - 1]?.price_per_entry ?? 0)) / (pricingHistory[index - 1]?.price_per_entry ?? 1)) * 100).toFixed(1)}% increase
                             </span>
                           </>
                         ) : null}

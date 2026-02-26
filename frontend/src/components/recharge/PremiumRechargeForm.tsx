@@ -326,7 +326,10 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
     const startTime = Date.now();
     
     if (!validateForm()) {
-      await logError('Form validation failed', 'recharge_form', 'LOW', {
+      await logError({
+        message: 'Form validation failed',
+        component: 'recharge_form',
+        severity: 'LOW',
         errors: validationErrors,
         formData: { ...formData, phoneNumber: 'REDACTED' }
       });
@@ -363,14 +366,14 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
         response = await rechargeApi.initiateDataRecharge({
           phone_number: formData.phoneNumber,
           network: formData.networkProvider,
-          data_plan_id: formData.dataBundle!
+          bundle_id: formData.dataBundle!
         });
       }
 
       setProcessingProgress(60);
 
       if (!response.success) {
-        throw new Error(response.error?.message || 'Recharge initiation failed');
+        throw new Error(response.error || 'Recharge initiation failed');
       }
 
       // Step 3: Process payment
@@ -397,7 +400,10 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
       console.error('Recharge error:', error);
       const duration = Date.now() - startTime;
       
-      await logError(error, 'recharge_form', 'HIGH', {
+      await logError({
+        error,
+        component: 'recharge_form',
+        severity: 'HIGH',
         formData: { ...formData, phoneNumber: 'REDACTED' },
         processingStep,
         duration,
@@ -413,18 +419,18 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
     } finally {
       const duration = Date.now() - startTime;
       
-      await logPerformance(
-        '/api/recharge/initialize',
-        'POST',
+      await logPerformance({
+        endpoint: '/api/recharge/initialize',
+        method: 'POST',
         duration,
-        isProcessing ? 200 : 500,
-        {
+        status: isProcessing ? 200 : 500,
+        metadata: {
           rechargeType: formData.rechargeType,
           networkProvider: formData.networkProvider,
           amount: formData.amount,
           validationSource: networkValidation?.validation_source
         }
-      );
+      });
       
       setIsProcessing(false);
       setProcessingStep('');

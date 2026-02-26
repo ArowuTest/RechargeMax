@@ -403,20 +403,24 @@ export const drawCSVApi = {
 export interface ClaimApprovalRequest {
   winner_id: string;
   approved: boolean;
+  action?: 'approve' | 'reject';  // Alternative field name
   reason?: string;
+  notes?: string;  // Additional notes
 }
 
 export interface PayoutRequest {
   winner_id: string;
   payout_reference: string;
   amount: number;
+  payout_method?: string;  // Payment method used
 }
 
 export interface ShippingUpdateRequest {
   winner_id: string;
   tracking_number: string;
-  carrier?: string;
-  estimated_delivery?: string;
+  shipping_status: string;
+  courier_service?: string;  // Courier service provider
+  estimated_delivery?: string;  // Estimated delivery date
 }
 
 export interface Winner {
@@ -426,7 +430,7 @@ export interface Winner {
   prize_name: string;
   prize_type: 'airtime' | 'data' | 'points' | 'cash' | 'physical_goods';
   prize_value: number;
-  claim_status: 'unclaimed' | 'claim_submitted' | 'processing' | 'paid' | 'shipped' | 'rejected';
+  claim_status: 'unclaimed' | 'claim_submitted' | 'processing' | 'paid' | 'shipped' | 'rejected' | 'pending' | 'approved';
   claim_submitted_at?: string;
   bank_name?: string;
   bank_code?: string;

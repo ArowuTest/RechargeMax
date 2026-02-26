@@ -85,6 +85,10 @@ interface DashboardData {
     won_date: string;
     claim_date?: string;
     status: string;
+    fulfillment_mode?: string;
+    fulfillment_attempts?: number;
+    fulfillment_error?: string;
+    claim_reference?: string;
   }>;
 }
 
@@ -132,7 +136,7 @@ export const UserDashboard: React.FC = () => {
       if (response.success && response.data) {
         setDashboardData(response.data);
       } else {
-        setError(response.error || 'Failed to load dashboard');
+        setError(!response.success ? response.error : 'Failed to load dashboard');
       }
     } catch (err: any) {
       console.error('Dashboard fetch error:', err);

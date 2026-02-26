@@ -417,7 +417,7 @@ export const EnterpriseHomePage: React.FC = () => {
       // Get platform statistics from Go backend
       const statsResponse = await getPlatformStatistics();
       
-      if (statsResponse.success && statsResponse.data) {
+      if ('success' in statsResponse && statsResponse.success && statsResponse.data) {
         setStats({
           totalUsers: statsResponse.data.totalUsers || 0,
           totalRecharges: statsResponse.data.totalTransactions || 0,
@@ -429,7 +429,7 @@ export const EnterpriseHomePage: React.FC = () => {
       // Get recent winners from Go backend
       const winnersResponse = await getRecentWinners(4);
 
-      if (winnersResponse.success && winnersResponse.data && winnersResponse.data.length > 0) {
+      if ('success' in winnersResponse && winnersResponse.success && winnersResponse.data && winnersResponse.data.length > 0) {
         setRecentWinners(winnersResponse.data.map((winner: any, index: number) => ({
           id: `real_${index}`,
           name: winner.full_name,

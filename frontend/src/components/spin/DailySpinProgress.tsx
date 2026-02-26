@@ -44,14 +44,14 @@ export function DailySpinProgress({ msisdn, onSpinsUpdate }: DailySpinProgressPr
         getSpinTiers()
       ])
 
-      if (progressResponse.success) {
+      if ('success' in progressResponse && progressResponse.success) {
         setProgress(progressResponse.data)
         onSpinsUpdate?.(progressResponse.data.spinsAvailable)
       } else {
         setError('Failed to load progress')
       }
 
-      if (tiersResponse.success) {
+      if ('success' in tiersResponse && tiersResponse.success) {
         setTiers(tiersResponse.data)
       }
     } catch (err) {

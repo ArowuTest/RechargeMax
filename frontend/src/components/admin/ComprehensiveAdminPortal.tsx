@@ -1892,7 +1892,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
         <NetworkDialog
           open={showNetworkDialog}
           onOpenChange={setShowNetworkDialog}
-          network={editingNetwork}
+          network={editingNetwork ?? undefined}
           onSave={handleNetworkSave}
           loading={actionLoading === 'network_save'}
         />
@@ -1900,7 +1900,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
         <DataPlanDialog
           open={showDataPlanDialog}
           onOpenChange={setShowDataPlanDialog}
-          dataPlan={editingDataPlan}
+          dataPlan={editingDataPlan ?? undefined}
           networks={networks}
           onSave={handleDataPlanSave}
           loading={actionLoading === 'plan_save'}

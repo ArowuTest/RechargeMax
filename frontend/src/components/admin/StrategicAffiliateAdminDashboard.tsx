@@ -76,7 +76,7 @@ interface CommissionTier {
 }
 
 interface StrategicAffiliateAdminDashboardProps {
-  sessionToken: string;
+  sessionToken?: string;
 }
 
 const COMMISSION_TIERS: CommissionTier[] = [
@@ -119,7 +119,7 @@ const StrategicAffiliateAdminDashboard: React.FC<StrategicAffiliateAdminDashboar
       const response = await affiliateManagementApi.getAll({ page: 1, limit: 100 });
 
       if (response.success) {
-        setAffiliates(response.data || []);
+        setAffiliates((response.data || []) as StrategicAffiliate[]);
         setStats((response as any).stats || {
           total_affiliates: 0,
           pending_approvals: 0,

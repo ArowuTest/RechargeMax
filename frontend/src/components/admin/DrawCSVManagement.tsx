@@ -203,8 +203,8 @@ export default function DrawCSVManagement() {
 
       setExportConfig({
         ...exportConfig,
-        start_date: startDate.toISOString().split('T')[0],
-        end_date: endDate.toISOString().split('T')[0],
+        start_date: startDate.toISOString().split('T')[0] || '',
+        end_date: endDate.toISOString().split('T')[0] || '',
       });
     }
 

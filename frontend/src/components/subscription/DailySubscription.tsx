@@ -194,10 +194,10 @@ export function DailySubscription() {
         return
       }
       
-      if (networkValidationResult.detectedNetwork !== formData.networkProvider) {
+      if ((networkValidationResult as any).detectedNetwork !== formData.networkProvider) {
         toast({
           title: "Network Mismatch",
-          description: `Phone number ${formData.phoneNumber} belongs to ${networkValidationResult.detectedNetwork}, but you selected ${formData.networkProvider}. Please select the correct network.`,
+          description: `Phone number ${formData.phoneNumber} belongs to ${(networkValidationResult as any).detectedNetwork}, but you selected ${formData.networkProvider}. Please select the correct network.`,
           variant: "destructive"
         })
         return

@@ -15,7 +15,7 @@ interface WheelPrizeDialogProps {
   onOpenChange: (open: boolean) => void;
   prize?: WheelPrize | null;
   existingPrizes: WheelPrize[];
-  onSave: (prizeData: Omit<WheelPrize, 'id'>) => Promise<void>;
+  onSave: (prizeData: Omit<WheelPrize, 'id' | 'created_at' | 'updated_at'>) => Promise<void>;
   loading?: boolean;
 }
 
@@ -104,10 +104,10 @@ export const WheelPrizeDialog: React.FC<WheelPrizeDialogProps> = ({
 
   useEffect(() => {
     // Check probability totals when probability changes
-    if (formData.probability > 0) {
+    if ((formData.probability ?? 0) > 0) {
       const otherPrizes = existingPrizes.filter(p => p.id !== prize?.id && p.is_active);
-      const totalOtherProbability = otherPrizes.reduce((sum, p) => sum + p.probability, 0);
-      const newTotal = totalOtherProbability + formData.probability;
+      const totalOtherProbability = otherPrizes.reduce((sum, p) => sum + (p.probability ?? 0), 0);
+      const newTotal = totalOtherProbability + (formData.probability ?? 0);
       
       if (newTotal > 100) {
         setProbabilityWarning(`Total probability will be ${newTotal.toFixed(1)}% (exceeds 100%)`);
@@ -130,15 +130,15 @@ export const WheelPrizeDialog: React.FC<WheelPrizeDialogProps> = ({
       newErrors.prize_value = 'Prize value must be greater than 0';
     }
 
-    if (formData.probability <= 0 || formData.probability > 100) {
+    if ((formData.probability ?? 0) <= 0 || (formData.probability ?? 0) > 100) {
       newErrors.probability = 'Probability must be between 0.1 and 100';
     }
 
-    if (formData.minimum_recharge < 0) {
+    if ((formData.minimum_recharge ?? 0) < 0) {
       newErrors.minimum_recharge = 'Minimum recharge cannot be negative';
     }
 
-    if (formData.sort_order < 1) {
+    if ((formData.sort_order ?? 0) < 1) {
       newErrors.sort_order = 'Sort order must be at least 1';
     }
 
@@ -266,7 +266,6 @@ export const WheelPrizeDialog: React.FC<WheelPrizeDialogProps> = ({
               {formData.prize_type === 'AIRTIME' && ' (₦)'}
               {formData.prize_type === 'DATA' && ' (MB)'}
               {formData.prize_type === 'POINTS' && ' (Points)'}
-              {formData.prize_type === 'TICKETS' && ' (Tickets)'}
             </Label>
             <Input
               id="prize_value"
@@ -411,9 +410,9 @@ export const WheelPrizeDialog: React.FC<WheelPrizeDialogProps> = ({
                     <Badge variant="outline">
                       {formData.probability}% chance
                     </Badge>
-                    {formData.minimum_recharge > 0 && (
+                    {(formData.minimum_recharge ?? 0) > 0 && (
                       <div className="text-xs text-gray-500 mt-1">
-                        Min: ₦{formData.minimum_recharge.toLocaleString()}
+                        Min: ₦{(formData.minimum_recharge ?? 0).toLocaleString()}
                       </div>
                     )}
                   </div>

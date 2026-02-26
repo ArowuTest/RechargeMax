@@ -250,7 +250,11 @@ const PrizeTemplateManagement: React.FC = () => {
   const moveCategoryUp = (index: number) => {
     if (index === 0) return;
     const categories = [...(formData.categories || [])];
-    [categories[index - 1], categories[index]] = [categories[index], categories[index - 1]];
+    const temp = categories[index - 1];
+    if (temp && categories[index]) {
+      categories[index - 1] = categories[index]!;
+      categories[index] = temp;
+    }
     setFormData({
       ...formData,
       categories: categories.map((cat, i) => ({ ...cat, display_order: i + 1 }))
@@ -261,7 +265,11 @@ const PrizeTemplateManagement: React.FC = () => {
     const categories = formData.categories || [];
     if (index === categories.length - 1) return;
     const newCategories = [...categories];
-    [newCategories[index], newCategories[index + 1]] = [newCategories[index + 1], newCategories[index]];
+    const temp = newCategories[index];
+    if (temp && newCategories[index + 1]) {
+      newCategories[index] = newCategories[index + 1]!;
+      newCategories[index + 1] = temp;
+    }
     setFormData({
       ...formData,
       categories: newCategories.map((cat, i) => ({ ...cat, display_order: i + 1 }))

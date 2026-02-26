@@ -115,7 +115,13 @@ export default function DrawCSVManagement() {
   const [showHistoryDialog, setShowHistoryDialog] = useState(false);
 
   // Export state
-  const [exportConfig, setExportConfig] = useState({
+  const [exportConfig, setExportConfig] = useState<{
+    start_date: string;
+    end_date: string;
+    include_subscription_points: boolean;
+    include_ussd_points: boolean;
+    include_wheel_points: boolean;
+  }>({
     start_date: '',
     end_date: '',
     include_subscription_points: true,
@@ -397,7 +403,7 @@ export default function DrawCSVManagement() {
         }
 
         // Validate header
-        const header = lines[0].toLowerCase();
+        const header = lines[0]?.toLowerCase() ?? '';
         const requiredColumns = ['msisdn', 'prize_name', 'prize_type', 'prize_value'];
         const missingColumns = requiredColumns.filter(
           (col) => !header.includes(col)
@@ -427,7 +433,7 @@ export default function DrawCSVManagement() {
           }
 
           // Validate MSISDN format (Nigerian format: 234XXXXXXXXXX or 0XXXXXXXXXX)
-          const msisdn = columns[0].trim();
+          const msisdn = columns[0]?.trim() ?? '';
           if (!/^(234\d{10}|0\d{10})$/.test(msisdn)) {
             errors.push({
               row,
@@ -437,7 +443,7 @@ export default function DrawCSVManagement() {
           }
 
           // Validate prize_type
-          const prizeType = columns[2].trim().toLowerCase();
+          const prizeType = columns[2]?.trim().toLowerCase() ?? '';
           const validPrizeTypes = ['airtime', 'data', 'points', 'cash', 'physical_goods'];
           if (!validPrizeTypes.includes(prizeType)) {
             errors.push({
@@ -448,7 +454,7 @@ export default function DrawCSVManagement() {
           }
 
           // Validate prize_value (must be a positive number)
-          const prizeValue = parseFloat(columns[3].trim());
+          const prizeValue = parseFloat(columns[3]?.trim() ?? '0');
           if (isNaN(prizeValue) || prizeValue <= 0) {
             errors.push({
               row,

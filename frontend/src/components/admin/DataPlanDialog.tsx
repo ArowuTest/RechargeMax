@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Smartphone } from 'lucide-react';
+import type { NetworkConfig } from '@/types/admin-api.types';
 
 interface DataPlan {
   id?: string;
@@ -18,13 +19,6 @@ interface DataPlan {
   plan_code: string;
   is_active: boolean;
   sort_order: number;
-}
-
-interface NetworkConfig {
-  id: string;
-  network_name: string;
-  network_code: string;
-  is_active: boolean;
 }
 
 interface DataPlanDialogProps {

@@ -52,8 +52,8 @@ export const DrawsList: React.FC<DrawsListProps> = ({ onLoginRequired }) => {
     try {
       const response = await getActiveDraws();
       
-      if (response && response.draws) {
-        setDraws(response.draws);
+      if (response && response.success && response.data) {
+        setDraws(response.data);
       } else {
         setDraws([]);
       }
@@ -80,8 +80,8 @@ export const DrawsList: React.FC<DrawsListProps> = ({ onLoginRequired }) => {
     try {
       const response = await getRecentWinners(10);
       
-      if (response && response.winners) {
-        setWinners(response.winners);
+      if (response && response.data) {
+        setWinners(response.data);
       } else {
         setWinners([]);
       }

@@ -8,19 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Gift, DollarSign, Phone, Wifi, Star, Ticket, AlertTriangle } from 'lucide-react';
-
-interface WheelPrize {
-  id?: string;
-  prize_name: string;
-  prize_type: string;
-  prize_value: number;
-  probability: number;
-  minimum_recharge: number;
-  is_active: boolean;
-  icon_name: string;
-  color_scheme: string;
-  sort_order: number;
-}
+import type { WheelPrize } from '@/types/admin-api.types';
 
 interface WheelPrizeDialogProps {
   open: boolean;
@@ -58,16 +46,20 @@ export const WheelPrizeDialog: React.FC<WheelPrizeDialogProps> = ({
   onSave,
   loading = false
 }) => {
-  const [formData, setFormData] = useState<Omit<WheelPrize, 'id'>>({
+  const [formData, setFormData] = useState<Omit<WheelPrize, 'id' | 'created_at' | 'updated_at'>>({
     prize_name: '',
     prize_type: 'CASH',
     prize_value: 0,
+    probability_weight: 0,
     probability: 0,
     minimum_recharge: 1000,
     is_active: true,
-    icon_name: 'gift',
+    display_order: 1,
+    sort_order: 1,
+    color: 'green',
     color_scheme: 'green',
-    sort_order: 1
+    icon: 'gift',
+    icon_name: 'gift'
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -79,24 +71,32 @@ export const WheelPrizeDialog: React.FC<WheelPrizeDialogProps> = ({
         prize_name: prize.prize_name,
         prize_type: prize.prize_type,
         prize_value: prize.prize_value,
+        probability_weight: prize.probability_weight,
         probability: prize.probability,
         minimum_recharge: prize.minimum_recharge,
         is_active: prize.is_active,
-        icon_name: prize.icon_name,
+        display_order: prize.display_order,
+        sort_order: prize.sort_order,
+        color: prize.color,
         color_scheme: prize.color_scheme,
-        sort_order: prize.sort_order
+        icon: prize.icon,
+        icon_name: prize.icon_name
       });
     } else {
       setFormData({
         prize_name: '',
         prize_type: 'CASH',
         prize_value: 0,
+        probability_weight: 0,
         probability: 0,
         minimum_recharge: 1000,
         is_active: true,
-        icon_name: 'gift',
+        display_order: 1,
+        sort_order: 1,
+        color: 'green',
         color_scheme: 'green',
-        sort_order: 1
+        icon: 'gift',
+        icon_name: 'gift'
       });
     }
     setErrors({});

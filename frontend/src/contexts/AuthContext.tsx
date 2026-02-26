@@ -7,16 +7,17 @@ interface User {
   email?: string;
   full_name?: string;
   loyalty_tier: string;
+  total_points?: number;
   total_recharge_amount: number;
   created_at: string;
 }
 
 interface AuthContextType {
   user: User | null;
-  loading: boolean;
+  isLoading: boolean;
   isAuthenticated: boolean;
-  login: (user: User) => void;
-  logout: () => void;
+  login: (user: User, token?: string) => void;
+  logout: () => Promise<void>;
   updateUser: (userData: Partial<User>) => void;
 }
 

@@ -245,6 +245,8 @@ export interface USSDRecharge {
   network: string;
   amount: number;
   points_earned: number;
+  points_allocated?: number;  // Alternative field name
+  transaction_id?: string;  // Alternative field name for transaction_reference
   transaction_reference: string;
   transaction_date: string;
   status: 'pending' | 'completed' | 'failed';

@@ -25,6 +25,7 @@ export interface ApiErrorResponse {
   success: false;
   error: string;
   message?: string;
+  status?: number;  // HTTP status code
 }
 
 /**
@@ -154,12 +155,15 @@ export interface User {
   email?: string;
   full_name?: string;
   points: number;
+  total_points?: number;  // Alternative field name for points
   total_recharges: number;
   total_spent: number;
   is_active: boolean;
   created_at: string;
   updated_at: string;
   last_login?: string;
+  msisdn?: string;  // Alternative field name for phone_number
+  loyalty_tier?: string;  // Loyalty tier information
 }
 
 /**

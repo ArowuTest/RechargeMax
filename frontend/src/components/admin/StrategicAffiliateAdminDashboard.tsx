@@ -116,11 +116,11 @@ const StrategicAffiliateAdminDashboard: React.FC<StrategicAffiliateAdminDashboar
     try {
       setLoading(true);
       
-      const response = await affiliateManagementApi.getAll({ page: 1, per_page: 100 });
+      const response = await affiliateManagementApi.getAll({ page: 1, limit: 100 });
 
       if (response.success) {
-        setAffiliates(response.affiliates || []);
-        setStats(response.stats || {
+        setAffiliates(response.data || []);
+        setStats((response as any).stats || {
           total_affiliates: 0,
           pending_approvals: 0,
           active_affiliates: 0,
@@ -199,14 +199,14 @@ const StrategicAffiliateAdminDashboard: React.FC<StrategicAffiliateAdminDashboar
       
       const response = await affiliateManagementApi.getAll({ 
         page: 1, 
-        per_page: 1000,
+        limit: 1000,
         status: filterStatus !== 'ALL' ? filterStatus : undefined
       });
 
-      if (response.success && response.export_url) {
+      if (response.success && (response as any).export_url) {
         // Create download link
         const link = document.createElement('a');
-        link.href = response.export_url;
+        link.href = (response as any).export_url;
         link.download = `affiliates_export_${new Date().toISOString().split('T')[0]}.csv`;
         document.body.appendChild(link);
         link.click();
@@ -217,7 +217,7 @@ const StrategicAffiliateAdminDashboard: React.FC<StrategicAffiliateAdminDashboar
           description: "Affiliate data has been exported successfully",
         });
       } else {
-        throw new Error(response.error || 'Export failed');
+        throw new Error('error' in response ? response.error : 'Export failed');
       }
     } catch (error) {
       console.error('Failed to export data:', error);

@@ -148,11 +148,11 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
   
   // Dialog states
   const [editingPrize, setEditingPrize] = useState<WheelPrize | null>(null);
-  const [editingDataPlan, setEditingDataPlan] = useState<DataPlan | null>(null);
+  const [editingDataPlan, setEditingDataPlan] = useState<DataPlan | null | undefined>(null);
   const [showPrizeDialog, setShowPrizeDialog] = useState(false);
   const [showDataPlanDialog, setShowDataPlanDialog] = useState(false);
   const [showNetworkDialog, setShowNetworkDialog] = useState(false);
-  const [editingNetwork, setEditingNetwork] = useState<NetworkConfig | null>(null);
+  const [editingNetwork, setEditingNetwork] = useState<NetworkConfig | null | undefined>(null);
 
   useEffect(() => {
     if (admin) {
@@ -1892,7 +1892,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
         <NetworkDialog
           open={showNetworkDialog}
           onOpenChange={setShowNetworkDialog}
-          network={editingNetwork ?? undefined}
+          network={(editingNetwork ?? undefined) as any}
           onSave={handleNetworkSave}
           loading={actionLoading === 'network_save'}
         />
@@ -1900,7 +1900,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
         <DataPlanDialog
           open={showDataPlanDialog}
           onOpenChange={setShowDataPlanDialog}
-          dataPlan={editingDataPlan ?? undefined}
+          dataPlan={(editingDataPlan ?? undefined) as any}
           networks={networks}
           onSave={handleDataPlanSave}
           loading={actionLoading === 'plan_save'}

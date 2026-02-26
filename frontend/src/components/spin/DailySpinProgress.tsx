@@ -45,8 +45,8 @@ export function DailySpinProgress({ msisdn, onSpinsUpdate }: DailySpinProgressPr
       ])
 
       if ('success' in progressResponse && progressResponse.success) {
-        setProgress(progressResponse.data)
-        onSpinsUpdate?.(progressResponse.data.spinsAvailable)
+        setProgress(progressResponse.data as unknown as TierProgressData)
+        onSpinsUpdate?.((progressResponse.data as unknown as TierProgressData).spinsAvailable)
       } else {
         setError('Failed to load progress')
       }

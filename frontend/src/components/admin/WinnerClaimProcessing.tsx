@@ -445,7 +445,7 @@ export default function WinnerClaimProcessing() {
     const Icon = config.icon;
 
     return (
-      <Badge variant={config.variant} className="flex items-center gap-1">
+      <Badge variant={config.variant as any} className="flex items-center gap-1">
         <Icon className="h-3 w-3" />
         {config.label}
       </Badge>
@@ -666,7 +666,7 @@ export default function WinnerClaimProcessing() {
                           {getClaimStatusBadge(winner.claim_status || 'pending')}
                         </TableCell>
                         <TableCell>
-                          {new Date(winner.draw_date).toLocaleDateString()}
+                          {winner.draw_date ? new Date(winner.draw_date).toLocaleDateString() : 'N/A'}
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
@@ -767,7 +767,7 @@ export default function WinnerClaimProcessing() {
                 </div>
                 <div>
                   <Label className="text-muted-foreground">Draw Date</Label>
-                  <p>{new Date(selectedWinner.draw_date).toLocaleDateString()}</p>
+                  <p>{selectedWinner.draw_date ? new Date(selectedWinner.draw_date).toLocaleDateString() : 'N/A'}</p>
                 </div>
               </div>
 

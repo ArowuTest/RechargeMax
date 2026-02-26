@@ -415,7 +415,7 @@ export const drawCSVApi = {
 
 export interface ClaimApprovalRequest {
   winner_id: string;
-  approved: boolean;
+  approved?: boolean;  // Can be derived from action
   action?: 'approve' | 'reject';  // Alternative field name
   reason?: string;
   notes?: string;  // Additional notes
@@ -424,7 +424,8 @@ export interface ClaimApprovalRequest {
 export interface PayoutRequest {
   winner_id: string;
   payout_reference: string;
-  amount: number;
+  amount?: number;  // Payout amount
+  payout_amount?: number;  // Alternative field name
   payout_method?: string;  // Payment method used
 }
 
@@ -434,6 +435,7 @@ export interface ShippingUpdateRequest {
   shipping_status: string;
   courier_service?: string;  // Courier service provider
   estimated_delivery?: string;  // Estimated delivery date
+  notes?: string;  // Additional shipping notes
 }
 
 export interface Winner {

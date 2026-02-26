@@ -24,7 +24,7 @@ interface DataPlan {
 interface DataPlanDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  dataPlan?: DataPlan | null;
+  dataPlan?: DataPlan | null | undefined;
   networks: NetworkConfig[];
   onSave: (planData: Omit<DataPlan, 'id'>) => Promise<void>;
   loading?: boolean;

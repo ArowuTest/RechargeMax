@@ -21,7 +21,7 @@ interface NetworkConfig {
 interface NetworkDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  network?: NetworkConfig | null;
+  network?: NetworkConfig | null | undefined;
   onSave: (networkData: Omit<NetworkConfig, 'id'>) => Promise<void>;
   loading?: boolean;
 }

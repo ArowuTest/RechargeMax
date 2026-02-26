@@ -110,7 +110,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
   
   // Use the appropriate permission function
   const permissionCheck = adminSession ? checkPermission : hasPermission;
-  const [actionLoading, setActionLoading] = useState<string>('');
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
   
   // Determine first available tab based on permissions
   const getFirstAvailableTab = (): string => {
@@ -945,7 +945,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Admin Portal</h1>
-            <p className="text-gray-600">Welcome, {admin?.full_name} ({admin?.role})</p>
+            <p className="text-gray-600">Welcome, {(admin as any)?.full_name || admin?.email} ({admin?.role})</p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => window.location.href = '/#/'}>
@@ -1141,8 +1141,8 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
                           <TableCell>{network.commission_rate}%</TableCell>
                           <TableCell>
                             <div className="text-sm">
-                              <div>Min: {formatCurrency(network.minimum_amount)}</div>
-                              <div>Max: {formatCurrency(network.maximum_amount)}</div>
+                              <div>Min: {formatCurrency(network.minimum_amount ?? 0)}</div>
+                              <div>Max: {formatCurrency(network.maximum_amount ?? 0)}</div>
                             </div>
                           </TableCell>
                           <TableCell>
@@ -1312,7 +1312,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
                            `${prize.prize_value}`}
                         </TableCell>
                         <TableCell>{prize.probability}%</TableCell>
-                        <TableCell>{formatCurrency(prize.minimum_recharge)}</TableCell>
+                        <TableCell>{formatCurrency(prize.minimum_recharge ?? 0)}</TableCell>
                         <TableCell>
                           <Badge variant={prize.is_active ? "default" : "secondary"}>
                             {prize.is_active ? "Active" : "Inactive"}
@@ -1388,10 +1388,10 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
                             // Force correct minimum value
                             return amount >= 20 ? amount : 30;
                           })()}
-                          onChange={(e) => setDailySubscription(prev => ({
+                          onChange={(e) => setDailySubscription(prev => prev ? ({
                             ...prev,
                             amount: parseFloat(e.target.value) || 20
-                          }))}
+                          }) : null)}
                         />
                         <p className="text-xs text-gray-500 mt-1">Amount users pay for daily subscription access</p>
                       </div>
@@ -1407,10 +1407,10 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
                             console.log('🔍 UI Display - entries being shown:', entries);
                             return entries >= 1 ? entries : 1;
                           })()}
-                          onChange={(e) => setDailySubscription(prev => ({
+                          onChange={(e) => setDailySubscription(prev => prev ? ({
                             ...prev,
                             draw_entries_earned: parseInt(e.target.value) || 1
-                          }))}
+                          }) : null)}
                         />
                         <p className="text-xs text-gray-500 mt-1">Number of wheel spin entries earned per subscription</p>
                       </div>
@@ -1419,10 +1419,10 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
                         <Switch
                           id="subscription_active"
                           checked={dailySubscription?.is_paid !== false}
-                          onCheckedChange={(checked) => setDailySubscription(prev => ({
+                          onCheckedChange={(checked) => setDailySubscription(prev => prev ? ({
                             ...prev,
                             is_paid: checked
-                          }))}
+                          }) : null)}
                         />
                         <Label htmlFor="subscription_active">Enable Daily Subscriptions</Label>
                       </div>
@@ -1552,7 +1552,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
 
           {/* Strategic Affiliate Management */}
           <TabsContent value="strategic-affiliates">
-            <StrategicAffiliateAdminDashboard sessionToken={sessionToken} />
+            <StrategicAffiliateAdminDashboard sessionToken={sessionToken || ''} />
           </TabsContent>
 
           {/* User Management */}
@@ -1664,7 +1664,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
                           <Switch
                             checked={setting.value || setting.setting_value}
                             onCheckedChange={(checked) => 
-                              handleSettingUpdate(setting.key || setting.setting_key, checked, setting.description)
+                              handleSettingUpdate(setting.key || setting.setting_key || '', checked, setting.description)
                             }
                             disabled={actionLoading === (setting.key || setting.setting_key)}
                           />
@@ -1673,7 +1673,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
                             value={setting.value || setting.setting_value}
                             onChange={(e) => {
                               const value = isNaN(Number(e.target.value)) ? e.target.value : Number(e.target.value);
-                              handleSettingUpdate(setting.key || setting.setting_key, value, setting.description);
+                              handleSettingUpdate(setting.key || setting.setting_key || '', value, setting.description);
                             }}
                             className="w-32"
                             disabled={actionLoading === (setting.key || setting.setting_key)}

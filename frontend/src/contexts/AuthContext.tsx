@@ -4,12 +4,11 @@ import { useAuth } from '@/hooks/useAuth';
 interface User {
   id: string;
   msisdn: string;
-  email?: string;
-  full_name?: string;
+  email: string;
+  full_name: string;
   loyalty_tier: string;
-  total_points?: number;
-  total_recharge_amount: number;
-  created_at: string;
+  total_points: number;
+  total_recharges: number;
 }
 
 interface AuthContextType {

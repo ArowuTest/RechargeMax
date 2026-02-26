@@ -57,13 +57,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSucce
         
         if (result.success && result.data.user) {
           const userData = {
-            id: result.data.user.id,
-            msisdn: result.data.user.msisdn,
-            full_name: result.data.user.full_name || '',
-            email: result.data.user.email || '',
-            loyalty_tier: result.data.user.loyalty_tier,
-            total_points: result.data.user.total_points,
-            total_recharges: result.data.user.total_recharges
+            id: String(result.data.user.id),
+            msisdn: String(result.data.user.msisdn),
+            full_name: String(result.data.user.full_name || ''),
+            email: String(result.data.user.email || ''),
+            loyalty_tier: String(result.data.user.loyalty_tier),
+            total_points: Number(result.data.user.total_points || 0),
+            total_recharges: Number(result.data.user.total_recharges || 0)
           };
           
           login(userData);
@@ -183,8 +183,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSucce
                 </Button>
                 <Button 
                   variant="outline" 
-                  onClick={canResend() ? () => sendOTP(phone) : undefined}
-                  disabled={!canResend() || isSending}
+                  onClick={canResend ? () => sendOTP(phone) : undefined}
+                  disabled={!canResend || isSending}
                 >
                   {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Resend'}
                 </Button>

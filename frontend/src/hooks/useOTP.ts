@@ -158,7 +158,7 @@ export const useOTP = () => {
 
         return true;
       } else {
-        throw new Error(response.error || 'Invalid OTP');
+        throw new Error((response as any).error || 'Invalid OTP');
       }
     } catch (error) {
       console.error('Error verifying OTP:', error);

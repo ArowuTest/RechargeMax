@@ -115,7 +115,7 @@ export const AffiliateDashboard: React.FC = () => {
       } else {
         // Check if it's a status issue (pending approval)
         if (response.status) {
-          setAffiliateStatus(response.status);
+          setAffiliateStatus(String(response.status));
         } else {
           setAffiliateStatus('NOT_FOUND');
         }
@@ -153,7 +153,7 @@ export const AffiliateDashboard: React.FC = () => {
     try {
       setDashboardLoading(true);
       
-      const response = await refreshAffiliateLink(user.msisdn);
+      const response = await refreshAffiliateLink();
       
       if (response.success) {
         // Update the referral link with the new URL

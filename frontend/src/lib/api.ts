@@ -68,9 +68,10 @@ export const createRecharge = async (rechargeData: any) => {
 export const getUserRecharges = async (userId: string) => {
   const response = await userApi.getTransactions();
   // Filter for recharge transactions
-  return response?.filter((t: any) => 
+  const data = (response as any)?.data || [];
+  return data.filter((t: any) => 
     t.transaction_type === 'airtime' || t.transaction_type === 'data'
-  ) || [];
+  );
 };
 
 // ============================================================================

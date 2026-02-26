@@ -326,6 +326,7 @@ export default function WinnerClaimProcessing() {
       const request: ShippingUpdateRequest = {
         winner_id: selectedWinner.id,
         tracking_number: shippingForm.tracking_number,
+        shipping_status: 'shipped',  // Default status
         courier_service: shippingForm.courier_service,
         estimated_delivery: shippingForm.estimated_delivery,
         notes: shippingForm.notes,

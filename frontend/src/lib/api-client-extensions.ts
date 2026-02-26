@@ -427,6 +427,7 @@ export interface PayoutRequest {
   amount?: number;  // Payout amount
   payout_amount?: number;  // Alternative field name
   payout_method?: string;  // Payment method used
+  notes?: string;  // Additional payout notes
 }
 
 export interface ShippingUpdateRequest {

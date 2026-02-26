@@ -812,7 +812,7 @@ export const UserDashboard: React.FC = () => {
                                       Mode: <span className="font-medium">{prize.fulfillment_mode}</span>
                                     </p>
                                   )}
-                                  {prize?.fulfillment_attempts > 0 && (
+                                  {(prize?.fulfillment_attempts ?? 0) > 0 && (
                                     <p className="text-xs text-gray-500">
                                       Provisioning attempts: <span className="font-medium">{prize.fulfillment_attempts}</span>
                                     </p>

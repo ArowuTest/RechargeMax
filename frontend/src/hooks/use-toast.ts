@@ -6,6 +6,7 @@ export interface Toast {
   description?: string;
   variant?: 'default' | 'destructive';
   duration?: number;
+  action?: React.ReactNode;
 }
 
 interface ToastState {

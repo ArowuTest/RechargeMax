@@ -58,12 +58,18 @@ func NewDrawService(
 	}
 }
 
+// generateDrawCode generates a unique draw code in the format DRAW-YYYYMMDD-XXXX
+func generateDrawCode() string {
+	return fmt.Sprintf("DRAW-%s-%04d", time.Now().Format("20060102"), rand.Intn(9000)+1000)
+}
+
 // CreateDraw creates a new draw record
 func (s *DrawService) CreateDraw(ctx context.Context, name, description string, drawDate time.Time, prizePool int64) (*entities.Draw, error) {
 	descPtr := &description
 	drawTimePtr := &drawDate
 	draw := &entities.Draw{
 		ID:          uuid.New(),
+		DrawCode:    generateDrawCode(),
 		Name:        name,
 		Type:        "DAILY",
 		Description: descPtr,
@@ -106,6 +112,7 @@ func (s *DrawService) CreateDrawWithTemplate(
 	drawTimePtr := &drawDate
 	draw := &entities.Draw{
 		ID:              uuid.New(),
+		DrawCode:        generateDrawCode(),
 		Name:            name,
 		Type:            "DAILY", // Will be updated based on draw type
 		Description:     descPtr,
@@ -521,9 +528,29 @@ func (s *DrawService) UpdateDraw(ctx context.Context, drawID string, updates map
 		draw.RunnerUpsCount = int(runnerUpsCount)
 	}
 	
-	// Save updated draw
-	if err := s.drawRepo.Update(ctx, draw); err != nil {
-		return nil, fmt.Errorf("failed to update draw: %w", err)
+	// Save updated draw - use UpdateStatus for status-only updates to avoid draw_code unique constraint issues
+	if len(updates) == 1 {
+		if status, ok := updates["status"].(string); ok {
+			if err := s.drawRepo.UpdateStatus(ctx, did, status); err != nil {
+				return nil, fmt.Errorf("failed to update draw status: %w", err)
+			}
+			draw.Status = status
+			return draw, nil
+		}
+	}
+	// For other updates, use targeted column updates to avoid overwriting draw_code
+	updateMap := map[string]interface{}{}
+	if _, ok := updates["name"]; ok { updateMap["name"] = draw.Name }
+	if _, ok := updates["description"]; ok { updateMap["description"] = draw.Description }
+	if _, ok := updates["draw_date"]; ok { updateMap["draw_time"] = draw.DrawTime }
+	if _, ok := updates["status"]; ok { updateMap["status"] = draw.Status }
+	if _, ok := updates["prize_pool"]; ok { updateMap["prize_pool"] = draw.PrizePool }
+	if _, ok := updates["winners_count"]; ok { updateMap["winners_count"] = draw.WinnersCount }
+	if _, ok := updates["runner_ups_count"]; ok { updateMap["runner_ups_count"] = draw.RunnerUpsCount }
+	if len(updateMap) > 0 {
+		if err := s.db.Model(draw).Updates(updateMap).Error; err != nil {
+			return nil, fmt.Errorf("failed to update draw: %w", err)
+		}
 	}
 	
 	return draw, nil

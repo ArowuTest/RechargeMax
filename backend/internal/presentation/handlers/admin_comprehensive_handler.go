@@ -1,12 +1,14 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 
 	"rechargemax/internal/application/services"
 	"rechargemax/internal/domain/entities"
@@ -34,6 +36,8 @@ type AdminComprehensiveHandler struct {
 	// Prize Tier System Services
 	drawTypeService         *services.DrawTypeService
 	prizeTemplateService    *services.PrizeTemplateService
+	// Direct DB access for settings persistence
+	db                      *gorm.DB
 }
 
 // NewAdminComprehensiveHandler creates a new comprehensive admin handler
@@ -54,6 +58,7 @@ func NewAdminComprehensiveHandler(
 	subscriptionService     *services.SubscriptionService,
 	drawTypeService         *services.DrawTypeService,
 	prizeTemplateService    *services.PrizeTemplateService,
+	db                      *gorm.DB,
 ) *AdminComprehensiveHandler {
 	return &AdminComprehensiveHandler{
 		subscriptionTierService: subscriptionTierService,
@@ -72,6 +77,7 @@ func NewAdminComprehensiveHandler(
 		subscriptionService:     subscriptionService,
 		drawTypeService:         drawTypeService,
 		prizeTemplateService:    prizeTemplateService,
+		db:                      db,
 	}
 }
 
@@ -914,15 +920,6 @@ func (h *AdminComprehensiveHandler) GetSpinConfig(c *gin.Context) {
 
 // UpdateSpinConfig updates the spin wheel configuration
 func (h *AdminComprehensiveHandler) UpdateSpinConfig(c *gin.Context) {
-	// TODO: Implement spin config update using spin_tiers table instead
-	c.JSON(http.StatusNotImplemented, gin.H{
-		"success": false,
-		"error":   "This endpoint has been replaced by /api/admin/spin-tiers",
-	})
-	return
-	/*
-	ctx := c.Request.Context()
-
 	var config map[string]interface{}
 	if err := c.ShouldBindJSON(&config); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -932,12 +929,23 @@ func (h *AdminComprehensiveHandler) UpdateSpinConfig(c *gin.Context) {
 		return
 	}
 
-	if err := h.spinService.UpdateConfig(ctx, &config); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"error":   "Failed to update spin configuration",
-		})
-		return
+	// Persist each config field to platform_settings with "spin." prefix
+	for field, val := range config {
+		key := "spin." + field
+		strVal := fmt.Sprintf("%v", val)
+		err := h.db.Exec(
+			`INSERT INTO platform_settings (setting_key, setting_value, description)
+			 VALUES (?, ?, 'Spin wheel configuration')
+			 ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = now()`,
+			key, strVal,
+		).Error
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"success": false,
+				"error":   "Failed to save spin config key: " + key,
+			})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -945,7 +953,6 @@ func (h *AdminComprehensiveHandler) UpdateSpinConfig(c *gin.Context) {
 		"message": "Spin configuration updated successfully",
 		"data":    config,
 	})
-	*/
 }
 
 // GetAllPrizes returns all wheel prizes
@@ -972,11 +979,15 @@ func (h *AdminComprehensiveHandler) CreatePrize(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	var prizeData struct {
-		Name        string  `json:"name" binding:"required"`
-		Type        string  `json:"type" binding:"required"`
-		Value       float64 `json:"value" binding:"required"`
-		Probability float64 `json:"probability" binding:"required"`
-		IsActive    bool    `json:"is_active"`
+		Name            string   `json:"name" binding:"required"`
+		Type            string   `json:"type" binding:"required"`
+		Value           float64  `json:"value" binding:"required"`
+		Probability     float64  `json:"probability" binding:"required"`
+		IsActive        bool     `json:"is_active"`
+		MinimumRecharge *float64 `json:"minimum_recharge"`
+		ColorScheme     string   `json:"color_scheme"`
+		Color           string   `json:"color"`
+		SortOrder       *float64 `json:"sort_order"`
 	}
 
 	if err := c.ShouldBindJSON(&prizeData); err != nil {
@@ -988,19 +999,28 @@ func (h *AdminComprehensiveHandler) CreatePrize(c *gin.Context) {
 	}
 
 	prizeMap := map[string]interface{}{
-		"id":          uuid.New().String(),
 		"name":        prizeData.Name,
 		"type":        prizeData.Type,
 		"value":       prizeData.Value,
 		"probability": prizeData.Probability,
-		"color":       "#FFD700",
 		"is_active":   prizeData.IsActive,
+	}
+	if prizeData.MinimumRecharge != nil {
+		prizeMap["minimum_recharge"] = *prizeData.MinimumRecharge
+	}
+	if prizeData.ColorScheme != "" {
+		prizeMap["color_scheme"] = prizeData.ColorScheme
+	} else if prizeData.Color != "" {
+		prizeMap["color"] = prizeData.Color
+	}
+	if prizeData.SortOrder != nil {
+		prizeMap["sort_order"] = *prizeData.SortOrder
 	}
 	prize, err := h.spinService.CreatePrize(ctx, prizeMap)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
-			"error":   "Failed to create prize",
+			"error":   err.Error(),
 		})
 		return
 	}

@@ -569,6 +569,7 @@ func initHandlers(svcs *Services, repos *Repositories, appConfig *Config, db *go
 				svcs.Subscription,
 				svcs.DrawType,
 				svcs.PrizeTemplate,
+				db,
 			),
 			AdminSpinTiers: handlers.NewAdminSpinTiersHandler(db),
 		AdminUserManagement: handlers.NewAdminUserManagementHandler(repos.Admin),
@@ -775,12 +776,13 @@ func setupRouter(hdlrs *Handlers, svcs *Services) *gin.Engine {
 			admin.GET("/users", hdlrs.Admin.GetUsers)
 			// Note: Individual user details available via GetUsers with filtering
 			
-			// Draw management
-			admin.GET("/draws", hdlrs.Admin.GetDraws)
-			admin.POST("/draws", hdlrs.Draw.CreateDraw)
-			// Note: Individual draw details available via GetDraws endpoint
-			admin.GET("/draws/:id/export", hdlrs.Draw.ExportEntries)
-			admin.POST("/draws/:id/import-winners", hdlrs.Draw.ImportWinners)
+				// Draw management
+				admin.GET("/draws", hdlrs.Admin.GetDraws)
+				admin.POST("/draws", hdlrs.Draw.CreateDraw)
+				admin.PUT("/draws/:id", hdlrs.Draw.UpdateDraw)
+				admin.POST("/draws/:id/execute", hdlrs.Draw.ExecuteDraw)
+				admin.GET("/draws/:id/export", hdlrs.Draw.ExportEntries)
+				admin.POST("/draws/:id/import-winners", hdlrs.Draw.ImportWinners)
 			
 			// Winner management
 			// Note: Winners available via draw details and export endpoints

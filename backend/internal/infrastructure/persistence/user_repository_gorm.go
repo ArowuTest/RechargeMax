@@ -161,6 +161,15 @@ func (r *userRepositoryGORM) Update(ctx context.Context, user *entities.Users) e
 	return r.db.WithContext(ctx).Save(user).Error
 }
 
+// UpdateStatus updates only the is_active field for a user (avoids full-row update and unique constraint issues)
+func (r *userRepositoryGORM) UpdateStatus(ctx context.Context, userID uuid.UUID, isActive bool) error {
+	return r.db.WithContext(ctx).
+		Model(&entities.Users{}).
+		Where("id = ?", userID).
+		Update("is_active", isActive).
+		Error
+}
+
 // UpdatePoints updates user points
 func (r *userRepositoryGORM) UpdatePoints(ctx context.Context, userID uuid.UUID, points int) error {
 	return r.db.WithContext(ctx).

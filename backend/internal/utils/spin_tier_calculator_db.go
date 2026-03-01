@@ -7,18 +7,20 @@ import (
 
 // SpinTierDB represents a spin tier from the database
 type SpinTierDB struct {
-	ID               string `gorm:"column:id;primaryKey"`
-	TierName         string `gorm:"column:tier_name"`
-	TierDisplayName  string `gorm:"column:tier_display_name"`
-	MinDailyAmount   int64  `gorm:"column:min_daily_amount"`   // Amount in kobo
-	MaxDailyAmount   int64  `gorm:"column:max_daily_amount"`   // Amount in kobo
-	SpinsPerDay      int    `gorm:"column:spins_per_day"`
-	TierColor        string `gorm:"column:tier_color"`
-	TierIcon         string `gorm:"column:tier_icon"`
-	TierBadge        string `gorm:"column:tier_badge"`
-	Description      string `gorm:"column:description"`
-	SortOrder        int    `gorm:"column:sort_order"`
-	IsActive         bool   `gorm:"column:is_active"`
+	ID               string  `gorm:"column:id;primaryKey"`
+	TierName         string  `gorm:"column:tier_name"`
+	TierDisplayName  string  `gorm:"column:tier_display_name"`
+	MinDailyAmount   int64   `gorm:"column:min_daily_amount"`   // Amount in kobo
+	MaxDailyAmount   int64   `gorm:"column:max_daily_amount"`   // Amount in kobo
+	SpinsPerDay      int     `gorm:"column:spins_per_day"`
+	TierColor        string  `gorm:"column:tier_color"`
+	TierIcon         string  `gorm:"column:tier_icon"`
+	TierBadge        string  `gorm:"column:tier_badge"`
+	Description      string  `gorm:"column:description"`
+	SortOrder        int     `gorm:"column:sort_order"`
+	IsActive         bool    `gorm:"column:is_active"`
+	CreatedBy        *string `gorm:"column:created_by"` // UUID of admin who created
+	UpdatedBy        *string `gorm:"column:updated_by"` // UUID of admin who last updated
 }
 
 func (SpinTierDB) TableName() string {

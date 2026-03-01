@@ -7,26 +7,39 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Smartphone } from 'lucide-react';
-import type { NetworkConfig } from '@/types/admin-api.types';
 
-interface DataPlan {
+// Network as returned by the GET /admin/recharge/network-configs API
+interface NetworkApiResponse {
   id?: string;
-  network_id: string;
-  plan_name: string;
-  data_amount: string;
-  price: number;
-  validity_days: number;
-  plan_code: string;
-  is_active: boolean;
-  sort_order: number;
+  network?: string;       // API returns 'network' field
+  network_name?: string;  // fallback
+  code?: string;          // API returns 'code' field
+  network_code?: string;  // fallback
+  enabled?: boolean;
+  is_active?: boolean;
+  [key: string]: any;
+}
+
+// Data plan as returned by GET /admin/recharge/data-plans
+interface DataPlanApiResponse {
+  id?: string;
+  network_provider?: string;  // API field name
+  plan_name?: string;
+  data_amount?: string;
+  price?: number;
+  validity_days?: number;
+  plan_code?: string;
+  is_active?: boolean;
+  sort_order?: number;
+  [key: string]: any;
 }
 
 interface DataPlanDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  dataPlan?: DataPlan | null | undefined;
-  networks: NetworkConfig[];
-  onSave: (planData: Omit<DataPlan, 'id'>) => Promise<void>;
+  dataPlan?: DataPlanApiResponse | null | undefined;
+  networks: NetworkApiResponse[];
+  onSave: (planData: any) => Promise<void>;
   loading?: boolean;
 }
 
@@ -38,8 +51,8 @@ export const DataPlanDialog: React.FC<DataPlanDialogProps> = ({
   onSave,
   loading = false
 }) => {
-  const [formData, setFormData] = useState<Omit<DataPlan, 'id'>>({
-    network_id: '',
+  const [formData, setFormData] = useState({
+    network_provider: '',  // matches backend API field name
     plan_name: '',
     data_amount: '',
     price: 0,
@@ -54,18 +67,18 @@ export const DataPlanDialog: React.FC<DataPlanDialogProps> = ({
   useEffect(() => {
     if (dataPlan) {
       setFormData({
-        network_id: dataPlan.network_id,
-        plan_name: dataPlan.plan_name,
-        data_amount: dataPlan.data_amount,
-        price: dataPlan.price,
-        validity_days: dataPlan.validity_days,
-        plan_code: dataPlan.plan_code,
-        is_active: dataPlan.is_active,
-        sort_order: dataPlan.sort_order
+        network_provider: dataPlan.network_provider || '',
+        plan_name: dataPlan.plan_name || '',
+        data_amount: dataPlan.data_amount || '',
+        price: dataPlan.price || 0,
+        validity_days: dataPlan.validity_days || 30,
+        plan_code: dataPlan.plan_code || '',
+        is_active: dataPlan.is_active !== false,
+        sort_order: dataPlan.sort_order || 1
       });
     } else {
       setFormData({
-        network_id: '',
+        network_provider: '',
         plan_name: '',
         data_amount: '',
         price: 0,
@@ -81,8 +94,8 @@ export const DataPlanDialog: React.FC<DataPlanDialogProps> = ({
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.network_id) {
-      newErrors.network_id = 'Please select a network';
+    if (!formData.network_provider) {
+      newErrors.network_provider = 'Please select a network';
     }
 
     if (!formData.plan_name.trim()) {
@@ -137,8 +150,14 @@ export const DataPlanDialog: React.FC<DataPlanDialogProps> = ({
     }
   };
 
-  const getSelectedNetwork = () => {
-    return networks.find(n => n.id === formData.network_id);
+  // Get network display name and code from API response (handles both field name formats)
+  const getNetworkCode = (n: NetworkApiResponse) => n.code || n.network_code || '';
+  const getNetworkName = (n: NetworkApiResponse) => n.network || n.network_name || '';
+  const isNetworkActive = (n: NetworkApiResponse) => n.enabled !== false && n.is_active !== false;
+
+  const getSelectedNetworkCode = () => {
+    const net = networks.find(n => getNetworkCode(n) === formData.network_provider);
+    return net ? getNetworkCode(net) : '';
   };
 
   return (
@@ -157,27 +176,27 @@ export const DataPlanDialog: React.FC<DataPlanDialogProps> = ({
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Network Selection */}
           <div>
-            <Label htmlFor="network_id">Network Provider</Label>
+            <Label htmlFor="network_provider">Network Provider</Label>
             <Select 
-              value={formData.network_id} 
-              onValueChange={(value) => handleInputChange('network_id', value)}
+              value={formData.network_provider} 
+              onValueChange={(value) => handleInputChange('network_provider', value)}
             >
-              <SelectTrigger className={errors.network_id ? 'border-red-500' : ''}>
+              <SelectTrigger className={errors.network_provider ? 'border-red-500' : ''}>
                 <SelectValue placeholder="Select network provider" />
               </SelectTrigger>
               <SelectContent>
-                {networks.filter(n => n.is_active).map((network) => (
-                  <SelectItem key={network.id} value={network.id}>
+                {networks.filter(n => isNetworkActive(n)).map((network, idx) => (
+                  <SelectItem key={network.id || idx} value={getNetworkCode(network)}>
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline">{network.network_code}</Badge>
-                      {network.network_name}
+                      <Badge variant="outline">{getNetworkCode(network)}</Badge>
+                      {getNetworkName(network)}
                     </div>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {errors.network_id && (
-              <p className="text-red-500 text-sm mt-1">{errors.network_id}</p>
+            {errors.network_provider && (
+              <p className="text-red-500 text-sm mt-1">{errors.network_provider}</p>
             )}
           </div>
 
@@ -309,9 +328,9 @@ export const DataPlanDialog: React.FC<DataPlanDialogProps> = ({
                   </div>
                   <div className="text-right">
                     <div className="font-bold text-lg">₦{formData.price.toLocaleString()}</div>
-                    {getSelectedNetwork() && (
+                    {getSelectedNetworkCode() && (
                       <Badge variant="outline" className="text-xs">
-                        {getSelectedNetwork()?.network_code}
+                        {getSelectedNetworkCode()}
                       </Badge>
                     )}
                   </div>

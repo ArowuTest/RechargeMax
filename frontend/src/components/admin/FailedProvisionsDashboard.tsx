@@ -12,6 +12,9 @@ import {
   Filter
 } from 'lucide-react';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
+const getAdminToken = () => localStorage.getItem('rechargemax_admin_token') || localStorage.getItem('adminToken') || '';
+
 interface FailedProvision {
   id: string;
   msisdn: string;
@@ -44,7 +47,7 @@ const FailedProvisionsDashboard: React.FC = () => {
   const fetchFailedProvisions = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/v1/admin/prize-fulfillment/failed-provisions', {
+      const response = await fetch(`${API_BASE}/admin/prize-fulfillment/failed-provisions`,  {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -67,7 +70,7 @@ const FailedProvisionsDashboard: React.FC = () => {
     setError(null);
     
     try {
-      const response = await fetch(`/api/v1/admin/prize-fulfillment/retry/${provisionId}`, {
+      const response = await fetch(`${API_BASE}/admin/prize-fulfillment/retry/${provisionId}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -94,7 +97,7 @@ const FailedProvisionsDashboard: React.FC = () => {
     setError(null);
     
     try {
-      const response = await fetch('/api/v1/admin/prize-fulfillment/retry-all', {
+      const response = await fetch(`${API_BASE}/admin/prize-fulfillment/retry-all`,  {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`

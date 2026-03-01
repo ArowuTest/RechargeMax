@@ -1,6 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { useAdminContext } from '@/contexts/AdminContext';
+import { adminApi } from '@/lib/api-client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -34,6 +36,27 @@ interface AdminModule {
 export const AdminDashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const { adminUser, adminLogout, hasPermission } = useAdminContext();
+  const [stats, setStats] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const response = await adminApi.getStats();
+        // API returns { success: true, data: { total_users, active_draws, ... } }
+        if (response && response.success && response.data) {
+          setStats(response.data);
+        } else if (response && response.total_users !== undefined) {
+          // Direct data object
+          setStats(response);
+        } else {
+          setStats(response);
+        }
+      } catch (err) {
+        console.error('Failed to fetch admin stats:', err);
+      }
+    };
+    fetchStats();
+  }, []);
 
   const adminModules: AdminModule[] = [
     {
@@ -186,7 +209,7 @@ export const AdminDashboardPage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Total Users</p>
-                  <p className="text-2xl font-bold">-</p>
+                  <p className="text-2xl font-bold">{stats?.total_users ?? '-'}</p>
                 </div>
                 <Users className="w-8 h-8 text-blue-500" />
               </div>
@@ -198,7 +221,7 @@ export const AdminDashboardPage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Active Draws</p>
-                  <p className="text-2xl font-bold">-</p>
+                  <p className="text-2xl font-bold">{stats?.active_draws ?? '-'}</p>
                 </div>
                 <Gift className="w-8 h-8 text-purple-500" />
               </div>
@@ -210,7 +233,7 @@ export const AdminDashboardPage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Pending Claims</p>
-                  <p className="text-2xl font-bold">-</p>
+                  <p className="text-2xl font-bold">{stats?.pending_claims ?? '-'}</p>
                 </div>
                 <Trophy className="w-8 h-8 text-yellow-500" />
               </div>
@@ -222,7 +245,7 @@ export const AdminDashboardPage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Revenue</p>
-                  <p className="text-2xl font-bold">-</p>
+                  <p className="text-2xl font-bold">₦{stats?.total_revenue ? (stats.total_revenue / 100).toLocaleString() : '0'}</p>
                 </div>
                 <DollarSign className="w-8 h-8 text-green-500" />
               </div>

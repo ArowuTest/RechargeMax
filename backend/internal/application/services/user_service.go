@@ -502,9 +502,8 @@ func (s *UserService) DeactivateUser(ctx context.Context, msisdn string) error {
 	if err != nil {
 		return fmt.Errorf("user not found: %w", err)
 	}
-
-	user.IsActive = false
-	return s.userRepo.Update(ctx, user)
+	// Use targeted update to avoid full-row save and unique constraint violations
+	return s.userRepo.UpdateStatus(ctx, user.ID, false)
 }
 
 // ReactivateUser reactivates a user account
@@ -513,9 +512,8 @@ func (s *UserService) ReactivateUser(ctx context.Context, msisdn string) error {
 	if err != nil {
 		return fmt.Errorf("user not found: %w", err)
 	}
-
-	user.IsActive = true
-	return s.userRepo.Update(ctx, user)
+	// Use targeted update to avoid full-row save and unique constraint violations
+	return s.userRepo.UpdateStatus(ctx, user.ID, true)
 }
 
 // GetUserByID gets a user by ID

@@ -445,3 +445,65 @@ func (h *DrawHandler) UploadDrawEntries(c *gin.Context) {
 		"entries_created": entriesCreated,
 	})
 }
+
+// UpdateDraw godoc
+// @Summary Update a draw
+// @Description Update draw details or status (Admin only)
+// @Tags admin, draws
+// @Accept json
+// @Produce json
+// @Param id path string true "Draw ID"
+// @Param request body map[string]interface{} true "Draw update request"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} errors.ErrorResponse
+// @Failure 500 {object} errors.ErrorResponse
+// @Router /admin/draws/{id} [put]
+func (h *DrawHandler) UpdateDraw(c *gin.Context) {
+	drawID := c.Param("id")
+	if drawID == "" {
+		middleware.RespondWithError(c, errors.BadRequest("Draw ID is required"))
+		return
+	}
+
+	var updates map[string]interface{}
+	if err := c.ShouldBindJSON(&updates); err != nil {
+		middleware.RespondWithError(c, errors.BadRequest("Invalid request format"))
+		return
+	}
+
+	draw, err := h.drawService.UpdateDraw(c.Request.Context(), drawID, updates)
+	if err != nil {
+		middleware.RespondWithError(c, errors.Internal(err.Error()))
+		return
+	}
+
+	middleware.RespondWithSuccess(c, draw)
+}
+
+// ExecuteDraw godoc
+// @Summary Execute a draw (select winners)
+// @Description Execute a draw to select winners (Admin only)
+// @Tags admin, draws
+// @Produce json
+// @Param id path string true "Draw ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} errors.ErrorResponse
+// @Failure 500 {object} errors.ErrorResponse
+// @Router /admin/draws/{id}/execute [post]
+func (h *DrawHandler) ExecuteDraw(c *gin.Context) {
+	drawID := c.Param("id")
+	if drawID == "" {
+		middleware.RespondWithError(c, errors.BadRequest("Draw ID is required"))
+		return
+	}
+
+	if err := h.drawService.ExecuteDraw(c.Request.Context(), drawID); err != nil {
+		middleware.RespondWithError(c, errors.Internal(err.Error()))
+		return
+	}
+
+	middleware.RespondWithSuccess(c, gin.H{
+		"message": "Draw executed successfully",
+		"draw_id": drawID,
+	})
+}

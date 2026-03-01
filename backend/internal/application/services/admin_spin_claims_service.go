@@ -139,18 +139,33 @@ type RejectClaimRequest struct {
 	AdminNotes      string `json:"admin_notes"`
 }
 
-// ClaimStatistics represents statistics for claims
+// ClaimStatisticsOverview holds the overview counts
+type ClaimStatisticsOverview struct {
+	TotalClaims   int64 `json:"total_claims"`
+	PendingReview int64 `json:"pending_review"`
+	Approved      int64 `json:"approved"`
+	Rejected      int64 `json:"rejected"`
+	AutoClaimed   int64 `json:"auto_claimed"`
+}
+
+// ClaimStatsByType holds per-prize-type stats
+type ClaimStatsByType struct {
+	Total        int64 `json:"total"`
+	TotalValue   int64 `json:"total_value"`
+	Claimed      int64 `json:"claimed,omitempty"`
+	PendingReview int64 `json:"pending_review,omitempty"`
+	Approved     int64 `json:"approved,omitempty"`
+	Rejected     int64 `json:"rejected,omitempty"`
+}
+
 type ClaimStatistics struct {
-	TotalClaims          int64                       `json:"total_claims"`
-	PendingClaims        int64                       `json:"pending_claims"`
-	ApprovedClaims       int64                       `json:"approved_claims"`
-	RejectedClaims       int64                       `json:"rejected_claims"`
-	ClaimedPrizes        int64                       `json:"claimed_prizes"`
-	ExpiredPrizes        int64                       `json:"expired_prizes"`
-	TotalPrizeValue      int64                       `json:"total_prize_value"`
-	ClaimsByType         map[string]int64            `json:"claims_by_type"`
-	ClaimsByStatus       map[string]int64            `json:"claims_by_status"`
-	RecentClaims         []ClaimListItem             `json:"recent_claims"`
+	Overview                  ClaimStatisticsOverview       `json:"overview"`
+	ByPrizeType               map[string]*ClaimStatsByType  `json:"by_prize_type"`
+	AverageReviewTimeHours    float64                       `json:"average_review_time_hours"`
+	TotalValuePending         float64                       `json:"total_value_pending"`
+	TotalValueApproved        float64                       `json:"total_value_approved"`
+	TotalValueRejected        float64                       `json:"total_value_rejected"`
+	RecentClaims              []ClaimListItem               `json:"recent_claims"`
 }
 
 // ============================================================================
@@ -452,12 +467,11 @@ func (s *AdminSpinClaimService) RejectClaim(ctx context.Context, claimID string,
 // GetStatistics returns comprehensive statistics for claims
 func (s *AdminSpinClaimService) GetStatistics(ctx context.Context) (*ClaimStatistics, error) {
 	stats := &ClaimStatistics{
-		ClaimsByType:   make(map[string]int64),
-		ClaimsByStatus: make(map[string]int64),
+		ByPrizeType: make(map[string]*ClaimStatsByType),
 	}
 
 	// Total claims
-	s.db.WithContext(ctx).Model(&entities.SpinResults{}).Count(&stats.TotalClaims)
+	s.db.WithContext(ctx).Model(&entities.SpinResults{}).Count(&stats.Overview.TotalClaims)
 
 	// Claims by status
 	var statusCounts []struct {
@@ -470,39 +484,56 @@ func (s *AdminSpinClaimService) GetStatistics(ctx context.Context) (*ClaimStatis
 		Find(&statusCounts)
 
 	for _, sc := range statusCounts {
-		stats.ClaimsByStatus[sc.ClaimStatus] = sc.Count
 		switch sc.ClaimStatus {
 		case "PENDING_ADMIN_REVIEW":
-			stats.PendingClaims = sc.Count
+			stats.Overview.PendingReview = sc.Count
 		case "APPROVED":
-			stats.ApprovedClaims = sc.Count
+			stats.Overview.Approved = sc.Count
 		case "REJECTED":
-			stats.RejectedClaims = sc.Count
+			stats.Overview.Rejected = sc.Count
 		case "CLAIMED":
-			stats.ClaimedPrizes = sc.Count
-		case "EXPIRED":
-			stats.ExpiredPrizes = sc.Count
+			stats.Overview.AutoClaimed = sc.Count
 		}
 	}
 
-	// Claims by type
+	// Claims by prize type with values
 	var typeCounts []struct {
-		PrizeType string
-		Count     int64
+		PrizeType   string
+		Count       int64
+		TotalValue  float64
 	}
 	s.db.WithContext(ctx).Model(&entities.SpinResults{}).
-		Select("prize_type, COUNT(*) as count").
+		Select("prize_type, COUNT(*) as count, COALESCE(SUM(prize_value), 0) as total_value").
 		Group("prize_type").
 		Find(&typeCounts)
 
 	for _, tc := range typeCounts {
-		stats.ClaimsByType[tc.PrizeType] = tc.Count
+		stats.ByPrizeType[tc.PrizeType] = &ClaimStatsByType{
+			Total:      tc.Count,
+			TotalValue: int64(tc.TotalValue),
+		}
 	}
 
-	// Total prize value
+	// Total prize values by status
+	var valueCounts []struct {
+		ClaimStatus string
+		TotalValue  float64
+	}
 	s.db.WithContext(ctx).Model(&entities.SpinResults{}).
-		Select("COALESCE(SUM(prize_value), 0)").
-		Row().Scan(&stats.TotalPrizeValue)
+		Select("claim_status, COALESCE(SUM(prize_value), 0) as total_value").
+		Group("claim_status").
+		Find(&valueCounts)
+
+	for _, vc := range valueCounts {
+		switch vc.ClaimStatus {
+		case "PENDING_ADMIN_REVIEW":
+			stats.TotalValuePending = vc.TotalValue
+		case "APPROVED":
+			stats.TotalValueApproved = vc.TotalValue
+		case "REJECTED":
+			stats.TotalValueRejected = vc.TotalValue
+		}
+	}
 
 	// Recent claims
 	recentResponse, _ := s.ListClaims(ctx, ClaimFilters{}, Pagination{

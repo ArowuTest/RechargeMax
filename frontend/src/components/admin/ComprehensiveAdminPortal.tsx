@@ -105,7 +105,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
   // Permission check function
   const checkPermission = (permission: string): boolean => {
     if (!admin) return false;
-    return admin.permissions?.includes(permission) || admin.role === 'SUPER_ADMIN';
+      return admin.permissions?.includes(permission) || admin.role?.toUpperCase() === 'SUPER_ADMIN';
   };
   
   // Use the appropriate permission function
@@ -114,7 +114,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
   
   // Determine first available tab based on permissions
   const getFirstAvailableTab = (): string => {
-    if (admin?.role === 'SUPER_ADMIN') return 'dashboard';
+    if (admin?.role?.toUpperCase() === 'SUPER_ADMIN') return 'dashboard';
     if (hasPermission('view_analytics')) return 'dashboard';
     if (hasPermission('view_monitoring')) return 'monitoring';
     if (hasPermission('manage_draws')) return 'draw';
@@ -132,6 +132,8 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
   // Admin management states
   const [admins, setAdmins] = useState<any[]>([]);
   const [showCreateAdminDialog, setShowCreateAdminDialog] = useState(false);
+  const [showEditAdminDialog, setShowEditAdminDialog] = useState(false);
+  const [editingAdmin, setEditingAdmin] = useState<any | null>(null);
   
   // State for all admin data
   const [stats, setStats] = useState<AdminStats | null>(null);
@@ -197,7 +199,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
       const promises = [];
       
       // For Super Admin, fetch everything. For others, check permissions
-      const isSuperAdmin = admin?.role === 'SUPER_ADMIN';
+      const isSuperAdmin = admin?.role?.toUpperCase() === 'SUPER_ADMIN';
       
       if (isSuperAdmin || permissionCheck('view_analytics')) {
         promises.push(fetchDashboardStats());
@@ -234,14 +236,19 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
     switch (action) {
       case 'get_dashboard_stats':
         try {
-          const stats = await adminApi.getStats();
-          return stats;
+          const statsResponse = await adminApi.getStats();
+          // API returns { success: true, data: { total_users, active_draws, ... } }
+          if (statsResponse && statsResponse.success && statsResponse.data) {
+            return statsResponse.data;
+          }
+          return statsResponse;
         } catch (error) {
           console.error('Failed to fetch dashboard stats:', error);
           // Return zeros if API fails
           return {
-            success: true,
             total_users: 0,
+            active_draws: 0,
+            pending_claims: 0,
             new_users_today: 0,
             total_transactions: 0,
             transactions_today: 0,
@@ -289,14 +296,17 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
         console.log('🟢 Returning:', result);
         return result;
       
-      case 'get_admins':
-        // TODO: Implement backend endpoint for admins list
-        return { success: true, admins: [] };
+      case 'get_admins': {
+        const adminsResp = await adminApi.get('/admin/admins');
+        return { success: true, admins: adminsResp.data || [] };
+      }
       
-      case 'get_affiliates':
-        const affiliates = await adminApi.affiliates.getAll();
-        const affiliatesData = affiliates.success && affiliates.data ? affiliates.data.data : [];
-        return { success: true, affiliates: affiliatesData || [] };
+      case 'get_affiliates': {
+        const affiliatesResp = await adminApi.affiliates.getAll();
+        // Backend returns { success: true, data: [...] }
+        const affiliatesData = affiliatesResp.success ? (affiliatesResp.data || []) : [];
+        return { success: true, affiliates: Array.isArray(affiliatesData) ? affiliatesData : [] };
+      }
       
       case 'get_transactions':
         // TODO: Implement backend endpoint for transactions
@@ -307,9 +317,20 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
         const allPrizes = await adminApi.getWheelPrizes();
         return { success: true, prizes: allPrizes.success ? allPrizes.data : [] };
       
-      case 'get_settings':
-        // TODO: Implement backend endpoint for settings
-        return { success: true, settings: [] };
+      case 'get_settings': {
+        const settingsResp = await adminApi.get('/admin/settings');
+        // Backend returns a nested object; flatten into array of {key, value, description}
+        const raw = settingsResp.data || {};
+        const flatSettings: any[] = [];
+        for (const [category, values] of Object.entries(raw)) {
+          if (values && typeof values === 'object') {
+            for (const [k, v] of Object.entries(values as Record<string, any>)) {
+              flatSettings.push({ key: `${category}.${k}`, value: v, description: `${category} - ${k}` });
+            }
+          }
+        }
+        return { success: true, settings: flatSettings };
+      }
       
       case 'get_daily_subscription':
         try {
@@ -328,16 +349,23 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
           return { success: true, data: { subscriptions: [] } };
         }
       
-      case 'update_daily_subscription':
-        await adminApi.subscriptions.updateConfig(data.subscription_data);
+      case 'update_daily_subscription': {
+        const subData = data.subscription_data;
+        // Map frontend fields back to backend format
+        const backendData: any = {};
+        if (subData.amount !== undefined) backendData.daily_price = Math.round(Number(subData.amount) * 100);
+        if (subData.draw_entries_earned !== undefined) backendData.daily_spins = Number(subData.draw_entries_earned);
+        if (subData.is_paid !== undefined) backendData.daily_subscription_enabled = Boolean(subData.is_paid);
+        await adminApi.subscriptions.updateConfig(backendData);
         return { success: true };
+      }
       
       case 'update_network':
         await adminApi.networks.update(data.network_id, data.updates);
         return { success: true };
       
       case 'create_network':
-        // TODO: Implement create network endpoint
+        await adminApi.networks.create(data.network_data || data);
         return { success: true };
       
       case 'update_data_plan':
@@ -348,13 +376,37 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
         await adminApi.bundles.create(data.plan);
         return { success: true };
       
-      case 'update_wheel_prize':
-        await adminApi.spin.updatePrize(data.prize_id, data.updates);
+      case 'update_wheel_prize': {
+        // Map WheelPrizeDialog form fields to backend field names
+        const updatePayload = {
+          name: data.updates.prize_name || data.updates.name,
+          type: data.updates.prize_type || data.updates.type,
+          value: data.updates.prize_value !== undefined ? data.updates.prize_value : data.updates.value,
+          probability: data.updates.probability,
+          is_active: data.updates.is_active,
+          minimum_recharge: data.updates.minimum_recharge,
+          color: data.updates.color_scheme || data.updates.color,
+          sort_order: data.updates.sort_order || data.updates.display_order,
+        };
+        await adminApi.spin.updatePrize(data.prize_id, updatePayload);
         return { success: true };
+      }
       
-      case 'create_wheel_prize':
-        await adminApi.spin.createPrize(data);
+      case 'create_wheel_prize': {
+        // Map WheelPrizeDialog form fields to backend field names
+        const prizePayload = {
+          name: data.prize_name || data.name,
+          type: data.prize_type || data.type,
+          value: data.prize_value !== undefined ? data.prize_value : data.value,
+          probability: data.probability,
+          is_active: data.is_active !== undefined ? data.is_active : true,
+          minimum_recharge: data.minimum_recharge,
+          color: data.color_scheme || data.color,
+          sort_order: data.sort_order || data.display_order,
+        };
+        await adminApi.spin.createPrize(prizePayload);
         return { success: true };
+      }
       
       case 'approve_affiliate':
         await adminApi.affiliates.approve(data.affiliate_id);
@@ -369,20 +421,29 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
         return { success: true };
       
       case 'create_admin':
-        // TODO: Implement create admin endpoint
-        return { success: true, temp_password: 'TempPass123!' };
+        const adminCreateResp = await adminApi.post('/admin/admins', data.admin_data || data);
+        return { success: true, temp_password: adminCreateResp?.data?.temporary_password || adminCreateResp?.temporary_password || '' };
       
       case 'update_admin':
-        // TODO: Implement update admin endpoint
+        await adminApi.put(`/admin/admins/${data.admin_id}`, data.admin_data || data.updates || data);
         return { success: true };
       
       case 'delete_admin':
+        await adminApi.delete(`/admin/admins/${data.admin_id}`);
         // TODO: Implement delete admin endpoint
         return { success: true };
       
-      case 'update_setting':
-        await adminApi.config.set(data.setting_key, data.setting_value);
+      case 'update_setting': {
+        // Use PUT /admin/settings/:key with { value: string }
+        const settingKey = data.setting_key || '';
+        await adminApi.put(`/admin/settings/${encodeURIComponent(settingKey)}`, { value: String(data.setting_value) });
         return { success: true };
+      }
+      
+      case 'update_user_status': {
+        await adminApi.put(`/admin/users/${data.user_id}/status`, { status: data.status, reason: data.reason || '' });
+        return { success: true };
+      }
       
       case 'trigger_frontend_update':
         // No-op for now - frontend will update automatically
@@ -458,16 +519,16 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
       const data = await callAdminAPI('get_daily_subscription');
       console.log('🔍 Raw API Response:', JSON.stringify(data, null, 2));
       
-      if (data?.daily_subscription) {
+        if (data?.daily_subscription) {
         const config = data.daily_subscription;
         console.log('🔍 Extracted config:', JSON.stringify(config, null, 2));
         
-        // Force correct values to prevent corruption
+        // Map backend fields: daily_price (kobo) -> amount (naira), daily_spins -> draw_entries_earned
         const cleanConfig = {
-          id: config.id,
-          amount: Number(config.amount) || 30,
-          draw_entries_earned: Number(config.draw_entries_earned) || 1,
-          is_paid: Boolean(config.is_paid)
+          id: config.id || 'config',
+          amount: config.daily_price ? Number(config.daily_price) / 100 : (Number(config.amount) || 20),
+          draw_entries_earned: Number(config.daily_spins) || Number(config.draw_entries_earned) || 1,
+          is_paid: config.daily_subscription_enabled !== false && config.is_paid !== false
         };
         
         console.log('🔍 Clean config being set:', JSON.stringify(cleanConfig, null, 2));
@@ -595,7 +656,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
           description: "Network updated successfully",
         });
       } else {
-        await callAdminAPI('create_network', networkData);
+        await callAdminAPI('create_network', { network_data: networkData });
         toast({
           title: "Success",
           description: "Network created successfully",
@@ -1115,15 +1176,15 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
                         <TableRow key={network.id}>
                           <TableCell>
                             <div>
-                              <div className="font-medium">{network.network_name}</div>
-                              <div className="text-sm text-gray-500">{network.network_code}</div>
+                              <div className="font-medium">{network.network || network.network_name}</div>
+                              <div className="text-sm text-gray-500">{network.code || network.network_code}</div>
                             </div>
                           </TableCell>
                           <TableCell>
                             <Switch
-                              checked={network.is_active}
+                              checked={network.enabled ?? network.is_active ?? false}
                               onCheckedChange={(checked) => 
-                                handleNetworkUpdate(network.id, { is_active: checked })
+                                handleNetworkUpdate(network.id, { enabled: checked, is_active: checked })
                               }
                               disabled={actionLoading === network.id}
                             />
@@ -1150,7 +1211,13 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
                               size="sm" 
                               variant="outline"
                               onClick={() => {
-                                setEditingNetwork(network);
+                                // Map API response fields to dialog expected fields
+                                setEditingNetwork({
+                                  ...network,
+                                  network_name: network.network || network.network_name || '',
+                                  network_code: network.code || network.network_code || '',
+                                  is_active: network.enabled ?? network.is_active ?? true,
+                                });
                                 setShowNetworkDialog(true);
                               }}
                               disabled={actionLoading === network.id}
@@ -1233,8 +1300,26 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
                               >
                                 <Edit className="w-3 h-3" />
                               </Button>
-                              <Button size="sm" variant="destructive">
-                                <Trash2 className="w-3 h-3" />
+                              <Button 
+                                size="sm" 
+                                variant="destructive"
+                                onClick={async () => {
+                                  if (confirm('Are you sure you want to delete this data plan?')) {
+                                    try {
+                                      setActionLoading(plan.id);
+                                      await adminApi.bundles.delete(plan.id);
+                                      await fetchDataPlans();
+                                      toast({ title: 'Success', description: 'Data plan deleted successfully' });
+                                    } catch (error) {
+                                      toast({ title: 'Error', description: getErrorMessage(error), variant: 'destructive' });
+                                    } finally {
+                                      setActionLoading(null);
+                                    }
+                                  }
+                                }}
+                                disabled={actionLoading === plan.id}
+                              >
+                                {actionLoading === plan.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
                               </Button>
                             </div>
                           </TableCell>
@@ -1330,8 +1415,26 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
                             >
                               <Edit className="w-3 h-3" />
                             </Button>
-                            <Button size="sm" variant="destructive">
-                              <Trash2 className="w-3 h-3" />
+                            <Button 
+                              size="sm" 
+                              variant="destructive"
+                              onClick={async () => {
+                                if (confirm('Are you sure you want to delete this prize?')) {
+                                  try {
+                                    setActionLoading(prize.id);
+                                    await adminApi.spin.deletePrize(prize.id);
+                                    await fetchWheelPrizes();
+                                    toast({ title: 'Success', description: 'Prize deleted successfully' });
+                                  } catch (error) {
+                                    toast({ title: 'Error', description: getErrorMessage(error), variant: 'destructive' });
+                                  } finally {
+                                    setActionLoading(null);
+                                  }
+                                }
+                              }}
+                              disabled={actionLoading === prize.id}
+                            >
+                              {actionLoading === prize.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
                             </Button>
                           </div>
                         </TableCell>
@@ -1594,7 +1697,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
                         <TableRow key={user.id}>
                           <TableCell>
                             <div>
-                              <div className="font-medium">{user.full_name || 'N/A'}</div>
+                              <div className="font-medium">{[user.first_name, user.last_name].filter(Boolean).join(' ') || user.full_name || 'N/A'}</div>
                               <div className="text-sm text-gray-500">{user.email || 'No email'}</div>
                             </div>
                           </TableCell>
@@ -1622,10 +1725,44 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1">
-                              <Button size="sm" variant="outline">
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                title="View user details"
+                                onClick={() => {
+                                  const info = [
+                                    `Phone: ${user.msisdn}`,
+                                    `Name: ${[user.first_name, user.last_name].filter(Boolean).join(' ') || 'N/A'}`,
+                                    `Email: ${user.email || 'N/A'}`,
+                                    `Status: ${user.is_active ? 'Active' : 'Inactive'}`,
+                                    `Points: ${user.points_balance || 0}`,
+                                    `Tier: ${user.loyalty_tier || 'N/A'}`,
+                                    `Joined: ${formatDate(user.created_at)}`,
+                                  ].join('\n');
+                                  alert(info);
+                                }}
+                              >
                                 <Eye className="w-3 h-3" />
                               </Button>
-                              <Button size="sm" variant="outline">
+                              <Button 
+                                size="sm" 
+                                variant={user.is_active ? 'destructive' : 'default'}
+                                title={user.is_active ? 'Suspend user' : 'Activate user'}
+                                disabled={actionLoading === user.id}
+                                onClick={async () => {
+                                  const newStatus = user.is_active ? 'suspended' : 'active';
+                                  try {
+                                    setActionLoading(user.id);
+                                    await callAdminAPI('update_user_status', { user_id: user.id, status: newStatus });
+                                    await fetchUsers();
+                                    toast({ title: 'Success', description: `User ${newStatus === 'active' ? 'activated' : 'suspended'} successfully` });
+                                  } catch (err) {
+                                    toast({ title: 'Error', description: getErrorMessage(err), variant: 'destructive' });
+                                  } finally {
+                                    setActionLoading(null);
+                                  }
+                                }}
+                              >
                                 <Edit className="w-3 h-3" />
                               </Button>
                             </div>
@@ -1750,12 +1887,12 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
                               <Button 
                                 size="sm" 
                                 variant="outline"
-                                onClick={() => handleUpdateAdmin(adminUser.id, {
-                                  full_name: adminUser.full_name,
-                                  role: adminUser.role,
-                                  is_active: !adminUser.is_active
-                                })}
+                                onClick={() => {
+                                  setEditingAdmin(adminUser);
+                                  setShowEditAdminDialog(true);
+                                }}
                                 disabled={actionLoading === adminUser.id}
+                                title="Edit admin"
                               >
                                 <Edit className="w-3 h-3" />
                               </Button>
@@ -1779,116 +1916,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
           </TabsContent>
         </Tabs>
 
-        {/* Prize Dialog */}
-        <Dialog open={showPrizeDialog} onOpenChange={setShowPrizeDialog}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>
-                {editingPrize ? 'Edit Prize' : 'Add New Prize'}
-              </DialogTitle>
-              <DialogDescription>
-                Configure wheel spin prize details and probability
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="prize_name">Prize Name</Label>
-                <Input
-                  id="prize_name"
-                  defaultValue={editingPrize?.prize_name || ''}
-                  placeholder="e.g., ₦100 Cash"
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="prize_type">Prize Type</Label>
-                <Select defaultValue={editingPrize?.prize_type || 'CASH'}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="CASH">Cash</SelectItem>
-                    <SelectItem value="DATA">Data</SelectItem>
-                    <SelectItem value="AIRTIME">Airtime</SelectItem>
-                    <SelectItem value="POINTS">Points</SelectItem>
-                    <SelectItem value="TICKETS">Tickets</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="prize_value">Value</Label>
-                  <Input
-                    id="prize_value"
-                    type="number"
-                    defaultValue={editingPrize?.prize_value || ''}
-                    placeholder="100"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="probability">Probability (%)</Label>
-                  <Input
-                    id="probability"
-                    type="number"
-                    defaultValue={editingPrize?.probability || ''}
-                    placeholder="10"
-                    max="100"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <Label htmlFor="minimum_recharge">Minimum Recharge (₦)</Label>
-                <Input
-                  id="minimum_recharge"
-                  type="number"
-                  defaultValue={editingPrize?.minimum_recharge || '1000'}
-                  placeholder="1000"
-                />
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="is_active"
-                  defaultChecked={editingPrize?.is_active ?? true}
-                />
-                <Label htmlFor="is_active">Active</Label>
-              </div>
-
-              <div className="flex gap-2">
-                <Button 
-                  onClick={() => {
-                    const form = document.querySelector('[data-prize-form]') as HTMLFormElement;
-                    if (form) {
-                      const formData = new FormData(form);
-                      handleWheelPrizeSave({
-                        prize_name: (document.getElementById('prize_name') as HTMLInputElement).value,
-                        prize_type: (document.querySelector('[name="prize_type"]') as HTMLSelectElement)?.value || 'CASH',
-                        prize_value: parseFloat((document.getElementById('prize_value') as HTMLInputElement).value),
-                        probability: parseFloat((document.getElementById('probability') as HTMLInputElement).value),
-                        minimum_recharge: parseFloat((document.getElementById('minimum_recharge') as HTMLInputElement).value),
-                        is_active: (document.getElementById('is_active') as HTMLInputElement).checked
-                      });
-                    }
-                  }}
-                  disabled={actionLoading === 'prize'}
-                  className="flex-1"
-                >
-                  {actionLoading === 'prize' ? (
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  ) : null}
-                  {editingPrize ? 'Update Prize' : 'Create Prize'}
-                </Button>
-                <Button variant="outline" onClick={() => setShowPrizeDialog(false)}>
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* New Dialog Components */}
+        {/* Dialog Components */}
         <NetworkDialog
           open={showNetworkDialog}
           onOpenChange={setShowNetworkDialog}
@@ -1921,6 +1949,69 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
           onSave={handleCreateAdmin}
           loading={actionLoading === 'create_admin'}
         />
+
+        {/* Edit Admin Dialog */}
+        {showEditAdminDialog && editingAdmin && (
+          <Dialog open={showEditAdminDialog} onOpenChange={(open) => { setShowEditAdminDialog(open); if (!open) setEditingAdmin(null); }}>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Edit className="w-5 h-5" />
+                  Edit Admin: {editingAdmin.full_name}
+                </DialogTitle>
+                <DialogDescription>
+                  Update admin account details and permissions
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const form = e.target as HTMLFormElement;
+                const data = new FormData(form);
+                const updatedData = {
+                  full_name: data.get('full_name') as string,
+                  role: data.get('role') as string,
+                  is_active: (form.querySelector('#edit_is_active') as HTMLInputElement)?.checked ?? editingAdmin.is_active,
+                };
+                await handleUpdateAdmin(editingAdmin.id, updatedData);
+                setShowEditAdminDialog(false);
+                setEditingAdmin(null);
+              }} className="space-y-4">
+                <div>
+                  <Label htmlFor="edit_full_name">Full Name</Label>
+                  <Input id="edit_full_name" name="full_name" defaultValue={editingAdmin.full_name} required />
+                </div>
+                <div>
+                  <Label htmlFor="edit_email">Email Address</Label>
+                  <Input id="edit_email" value={editingAdmin.email} disabled className="bg-gray-50" />
+                  <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
+                </div>
+                <div>
+                  <Label htmlFor="edit_role">Role</Label>
+                  <select name="role" defaultValue={editingAdmin.role} className="w-full border rounded-md px-3 py-2 text-sm">
+                    <option value="ADMIN">Admin - Standard admin with limited permissions</option>
+                    <option value="SUPER_ADMIN">Super Admin - Full system access</option>
+                  </select>
+                </div>
+                <div className="flex items-center justify-between p-3 border rounded-lg">
+                  <div>
+                    <div className="font-medium">Account Active</div>
+                    <div className="text-sm text-gray-500">Enable or disable login for this account</div>
+                  </div>
+                  <input type="checkbox" id="edit_is_active" defaultChecked={editingAdmin.is_active} className="w-4 h-4" />
+                </div>
+                <div className="flex gap-2 pt-4">
+                  <Button type="submit" disabled={actionLoading === editingAdmin.id} className="flex-1">
+                    {actionLoading === editingAdmin.id ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Edit className="w-4 h-4 mr-2" />}
+                    Update Admin
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => { setShowEditAdminDialog(false); setEditingAdmin(null); }}>
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
     </div>
   );

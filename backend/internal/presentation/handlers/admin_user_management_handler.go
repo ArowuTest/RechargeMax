@@ -1,13 +1,13 @@
 package handlers
 
 import (
+	"math/rand"
 	"net/http"
 	"strconv"
-
+	"time"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
-
 	"rechargemax/internal/domain/entities"
 	"rechargemax/internal/domain/repositories"
 )
@@ -103,11 +103,12 @@ func (h *AdminUserManagementHandler) CreateAdmin(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	var req struct {
-		Email    string `json:"email" binding:"required,email"`
-		Password string `json:"password" binding:"required,min=8"`
-		FullName string `json:"full_name" binding:"required"`
-		Role     string `json:"role" binding:"required"`
-		IsActive *bool  `json:"is_active"`
+		Email       string   `json:"email" binding:"required,email"`
+		Password    string   `json:"password"`
+		FullName    string   `json:"full_name" binding:"required"`
+		Role        string   `json:"role" binding:"required"`
+		IsActive    *bool    `json:"is_active"`
+		Permissions []string `json:"permissions"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -141,6 +142,19 @@ func (h *AdminUserManagementHandler) CreateAdmin(c *gin.Context) {
 			"error":   "Admin user with this email already exists",
 		})
 		return
+	}
+
+	// Auto-generate a temporary password if none provided
+	tempPassword := ""
+	if req.Password == "" {
+		const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$"
+		rand.Seed(time.Now().UnixNano())
+		b := make([]byte, 12)
+		for i := range b {
+			b[i] = charset[rand.Intn(len(charset))]
+		}
+		req.Password = string(b)
+		tempPassword = req.Password
 	}
 
 	// Hash password
@@ -180,11 +194,16 @@ func (h *AdminUserManagementHandler) CreateAdmin(c *gin.Context) {
 	// Remove password hash from response
 	admin.PasswordHash = ""
 
-	c.JSON(http.StatusCreated, gin.H{
+	response := gin.H{
 		"success": true,
 		"message": "Admin user created successfully",
 		"data":    admin,
-	})
+	}
+	if tempPassword != "" {
+		response["temporary_password"] = tempPassword
+		response["message"] = "Admin user created successfully. Please share the temporary password with the new admin."
+	}
+	c.JSON(http.StatusCreated, response)
 }
 
 // UpdateAdmin updates an existing admin user

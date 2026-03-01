@@ -451,7 +451,7 @@ export const adminApi: any = {
   // Affiliates management
   affiliates: {
     getAll: async () => {
-      const response = await apiClient.get<ApiResponse<any[]>>('/admin/affiliates');
+      const response = await apiClient.get<ApiResponse<any[]>>('/admin/affiliates/all');
       return response.data;
     },
     approve: async (affiliateId: string) => {
@@ -475,11 +475,11 @@ export const adminApi: any = {
       return response.data;
     },
     getConfig: async () => {
-      const response = await apiClient.get<ApiResponse>('/admin/subscription-pricing/current');
+      const response = await apiClient.get<ApiResponse>('/admin/daily-subscriptions/config');
       return response.data;
     },
     updateConfig: async (data: any) => {
-      const response = await apiClient.post<ApiResponse>('/admin/subscription-pricing', data);
+      const response = await apiClient.put<ApiResponse>('/admin/daily-subscriptions/config', data);
       return response.data;
     },
   },
@@ -520,15 +520,15 @@ export const adminApi: any = {
       return response.data;
     },
     create: async (data: any) => {
-      const response = await apiClient.post<ApiResponse>('/admin/bundles', data);
+      const response = await apiClient.post<ApiResponse>('/admin/data-plans', data);
       return response.data;
     },
     update: async (bundleId: string, data: any) => {
-      const response = await apiClient.put<ApiResponse>(`/admin/bundles/${bundleId}`, data);
+      const response = await apiClient.put<ApiResponse>(`/admin/data-plans/${bundleId}`, data);
       return response.data;
     },
     delete: async (bundleId: string) => {
-      const response = await apiClient.delete<ApiResponse>(`/admin/bundles/${bundleId}`);
+      const response = await apiClient.delete<ApiResponse>(`/admin/data-plans/${bundleId}`);
       return response.data;
     },
   },
@@ -539,8 +539,16 @@ export const adminApi: any = {
       const response = await apiClient.get<ApiResponse<any[]>>('/admin/recharge/network-configs');
       return response.data;
     },
+    create: async (data: any) => {
+      const response = await apiClient.post<ApiResponse>('/admin/networks', data);
+      return response.data;
+    },
     update: async (networkId: string, data: any) => {
       const response = await apiClient.put<ApiResponse>(`/admin/networks/${networkId}`, data);
+      return response.data;
+    },
+    delete: async (networkId: string) => {
+      const response = await apiClient.delete<ApiResponse>(`/admin/networks/${networkId}`);
       return response.data;
     },
   },

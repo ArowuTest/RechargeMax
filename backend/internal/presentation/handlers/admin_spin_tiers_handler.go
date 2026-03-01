@@ -3,8 +3,9 @@ package handlers
 import (
 	"net/http"
 	"rechargemax/internal/utils"
-	
+
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -235,13 +236,14 @@ type CreateTierRequest struct {
 // POST /api/admin/spin-tiers
 func (h *AdminSpinTiersHandler) CreateTier(c *gin.Context) {
 	// Get admin ID from context
-	_, exists := c.Get("admin_id")
+	adminIDVal, exists := c.Get("admin_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"error": "Admin ID not found in context",
 		})
 		return
 	}
+	adminID, _ := adminIDVal.(string)
 
 	var req CreateTierRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -272,8 +274,10 @@ func (h *AdminSpinTiersHandler) CreateTier(c *gin.Context) {
 		return
 	}
 
-	// Create tier
+	// Create tier, setting the admin as creator
+	tierID := uuid.New().String()
 	tier := utils.SpinTierDB{
+		ID: tierID,
 		TierName:        req.TierName,
 		TierDisplayName: req.TierDisplayName,
 		MinDailyAmount:  req.MinDailyAmount,
@@ -285,6 +289,10 @@ func (h *AdminSpinTiersHandler) CreateTier(c *gin.Context) {
 		Description:     req.Description,
 		SortOrder:       req.SortOrder,
 		IsActive:        true,
+	}
+	if adminID != "" {
+		tier.CreatedBy = &adminID
+		tier.UpdatedBy = &adminID
 	}
 
 	if err := h.db.Create(&tier).Error; err != nil {

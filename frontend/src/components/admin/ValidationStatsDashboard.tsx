@@ -26,6 +26,9 @@ import {
   Wifi
 } from 'lucide-react';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
+const getAdminToken = () => localStorage.getItem('rechargemax_admin_token') || localStorage.getItem('adminToken') || '';
+
 interface ValidationStats {
   summary: {
     total_validations: number;
@@ -83,10 +86,11 @@ const ValidationStatsDashboard: React.FC = () => {
     setError(null);
 
     try {
-      const response = await fetch('/api/v1/admin/validation/stats', {
+      const response = await fetch(`${API_BASE}/admin/validation/stats`,  {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAdminToken()}`,
         },
         body: JSON.stringify({
           start_date: startDate,

@@ -13,6 +13,9 @@ import {
   Bell
 } from 'lucide-react';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
+const getAdminToken = () => localStorage.getItem('rechargemax_admin_token') || localStorage.getItem('adminToken') || '';
+
 interface UnclaimedPrize {
   id: string;
   msisdn: string;
@@ -45,7 +48,7 @@ const UnclaimedPrizesDashboard: React.FC = () => {
   const fetchUnclaimedPrizes = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/v1/admin/prize-fulfillment/unclaimed-prizes', {
+      const response = await fetch(`${API_BASE}/admin/prize-fulfillment/unclaimed-prizes`,  {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -68,7 +71,7 @@ const UnclaimedPrizesDashboard: React.FC = () => {
     setError(null);
     
     try {
-      const response = await fetch('/api/v1/admin/prize-fulfillment/send-reminders', {
+      const response = await fetch(`${API_BASE}/admin/prize-fulfillment/send-reminders`,  {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`

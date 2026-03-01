@@ -13,10 +13,12 @@ import (
 
 // JWTClaims represents the claims in a JWT token
 type JWTClaims struct {
-	UserID string `json:"user_id"`
-	MSISDN string `json:"msisdn"`
-	Role   string `json:"role"`
-	Type   string `json:"type"`
+	UserID  string `json:"user_id"`
+	AdminID string `json:"admin_id"` // Admin tokens use admin_id instead of user_id
+	MSISDN  string `json:"msisdn"`
+	Email   string `json:"email"`
+	Role    string `json:"role"`
+	Type    string `json:"type"`
 	jwt.RegisteredClaims
 }
 
@@ -73,7 +75,7 @@ func AuthMiddleware(authService interface{}) gin.HandlerFunc {
 	}
 }
 
-// AdminAuthMiddleware validates admin authentication
+// AdminAuthMiddleware validates admin authentication and sets admin_id in context
 func AdminAuthMiddleware(authService interface{}) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		log.Println("[AdminAuth] Request received:", c.Request.Method, c.Request.URL.Path)
@@ -88,7 +90,6 @@ func AdminAuthMiddleware(authService interface{}) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-
 		// Extract token
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
@@ -99,12 +100,8 @@ func AdminAuthMiddleware(authService interface{}) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-
-		token := parts[1]
-
-		// Simply accept any non-empty token for now
-		// The AuthService will validate the JWT token properly
-		if token == "" {
+		tokenString := parts[1]
+		if tokenString == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"success": false,
 				"message": "Invalid token",
@@ -112,13 +109,50 @@ func AdminAuthMiddleware(authService interface{}) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-
-		// Set admin context (JWT validation happens in handlers if needed)
-		c.Set("admin_token", token)
+		// Parse JWT to extract admin_id and other claims
+		parsedToken, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+			}
+			return []byte(os.Getenv("JWT_SECRET")), nil
+		})
+		if err != nil || !parsedToken.Valid {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"success": false,
+				"message": "Invalid or expired admin token",
+			})
+			c.Abort()
+			return
+		}
+		claims, ok := parsedToken.Claims.(*JWTClaims)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"success": false,
+				"message": "Invalid admin token claims",
+			})
+			c.Abort()
+			return
+		}
+		// Admin tokens use admin_id claim; fall back to user_id for compatibility
+		adminID := claims.AdminID
+		if adminID == "" {
+			adminID = claims.UserID
+		}
+		if adminID == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"success": false,
+				"message": "Invalid admin token: missing admin ID",
+			})
+			c.Abort()
+			return
+		}
+		// Set full admin context for all handlers
+		c.Set("admin_id", adminID)
+		c.Set("admin_token", tokenString)
+		c.Set("msisdn", claims.MSISDN)
 		c.Set("is_admin", true)
 		c.Set("authenticated", true)
-		log.Println("[AdminAuth] Middleware passed, calling handler...")
-
+		log.Println("[AdminAuth] Middleware passed, admin_id:", claims.UserID)
 		c.Next()
 		log.Println("[AdminAuth] Handler completed")
 	}

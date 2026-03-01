@@ -48,12 +48,63 @@ func (h *AdminHandler) SetServices(
 
 // GetDashboardStats returns admin dashboard statistics
 func (h *AdminHandler) GetDashboardStats(c *gin.Context) {
-	// TODO: Implement dashboard stats aggregation
+	ctx := c.Request.Context()
+	
+	// Get total users count
+	totalUsers, _ := h.userService.GetUserCount(ctx)
+	
+	// Get users list to count active ones
+	_, totalUsersFromList, _ := h.userService.GetAllUsers(ctx, 1, 1)
+	if totalUsers == 0 {
+		totalUsers = totalUsersFromList
+	}
+	
+	// Get affiliate stats
+	totalAffiliates := int64(0)
+	pendingAffiliates := int64(0)
+	totalCommissions := float64(0)
+	if h.affiliateService != nil {
+		affiliates, _, _ := h.affiliateService.GetAllAffiliates(ctx, 1, 1000, "")
+		if affiliates != nil {
+			totalAffiliates = int64(len(affiliates))
+			for _, a := range affiliates {
+				if a.Status == "PENDING" {
+					pendingAffiliates++
+				}
+				totalCommissions += float64(a.TotalCommission)
+			}
+		}
+	}
+	
+	// Get active draws count
+	activeDraws := int64(0)
+	if h.drawService != nil {
+		draws, _ := h.drawService.GetActiveDraws(ctx)
+		if draws != nil {
+			activeDraws = int64(len(draws))
+		}
+	}
+
+	// Get pending winner claims count
+	pendingClaims := int64(0)
+	if h.winnerService != nil {
+		_, totalWinners, _ := h.winnerService.GetAllWinners(ctx, 1, 1000, "")
+		pendingClaims = totalWinners
+	}
+
 	stats := gin.H{
-		"total_users":         0,
+		"total_users":          totalUsers,
+		"active_draws":         activeDraws,
+		"pending_claims":       pendingClaims,
 		"active_subscriptions": 0,
-		"total_recharges":     0,
-		"total_revenue":       0,
+		"total_recharges":      0,
+		"total_revenue":        0,
+		"total_affiliates":     totalAffiliates,
+		"pending_affiliates":   pendingAffiliates,
+		"total_commissions":    totalCommissions,
+		"new_users_today":      0,
+		"transactions_today":   0,
+		"today_revenue":        0,
 	}
 	
 	c.JSON(http.StatusOK, gin.H{

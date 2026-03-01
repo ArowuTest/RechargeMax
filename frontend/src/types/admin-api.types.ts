@@ -55,11 +55,13 @@ export interface PaginatedResponse<T> {
 export interface NetworkConfig {
   id: string;
   name: string;
+  network?: string;       // API field name (backend returns 'network')
   network_name?: string;  // Alternative field name
   code: string;
   network_code?: string;  // Alternative field name
   logo: string;
   is_active: boolean;
+  enabled?: boolean;      // API field name (backend returns 'enabled')
   support_data: boolean;
   data_enabled?: boolean;  // Alternative field name
   support_airtime: boolean;

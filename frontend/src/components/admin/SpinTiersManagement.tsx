@@ -34,6 +34,25 @@ import {
   Loader2
 } from 'lucide-react';
 import { SpinTierDialog } from './SpinTierDialog';
+import { adminApi } from '@/lib/api-client';
+
+// Map PascalCase backend response to snake_case frontend model
+const mapTierFromBackend = (t: any): SpinTier => ({
+  id: t.ID || t.id || '',
+  tier_name: t.TierName || t.tier_name || '',
+  tier_display_name: t.TierDisplayName || t.tier_display_name || '',
+  min_daily_amount: t.MinDailyAmount ?? t.min_daily_amount ?? 0,
+  max_daily_amount: t.MaxDailyAmount ?? t.max_daily_amount ?? null,
+  spins_per_day: t.SpinsPerDay ?? t.spins_per_day ?? 0,
+  tier_color: t.TierColor || t.tier_color || '#000000',
+  tier_icon: t.TierIcon || t.tier_icon || '',
+  tier_badge: t.TierBadge || t.tier_badge || '',
+  tier_description: t.Description || t.tier_description || '',
+  sort_order: t.SortOrder ?? t.sort_order ?? 0,
+  is_active: t.IsActive ?? t.is_active ?? true,
+  created_at: t.CreatedAt || t.created_at || '',
+  updated_at: t.UpdatedAt || t.updated_at || '',
+});
 
 interface SpinTier {
   id: string;
@@ -80,20 +99,9 @@ const SpinTiersManagement: React.FC = () => {
       setLoading(true);
       setError('');
       
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch('/api/admin/spin-tiers', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to load spin tiers');
-      }
-
-      const data = await response.json();
-      setTiers(data.tiers || []);
+      const data = await adminApi.get('/admin/spin-tiers');
+      const rawTiers = data.tiers || data.data || [];
+      setTiers(rawTiers.map(mapTierFromBackend));
       
       // Validate configuration
       await validateConfiguration();
@@ -106,18 +114,8 @@ const SpinTiersManagement: React.FC = () => {
 
   const validateConfiguration = async () => {
     try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch('/api/admin/spin-tiers/validate', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setValidationErrors(data.errors || []);
-      }
+      const data = await adminApi.get('/admin/spin-tiers/validate');
+      setValidationErrors(data.errors || []);
     } catch (err) {
       console.error('Validation check failed:', err);
     }
@@ -145,19 +143,7 @@ const SpinTiersManagement: React.FC = () => {
       setSaving(true);
       setError('');
       
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch(`/api/admin/spin-tiers/${tierToDelete.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to delete tier');
-      }
+      await adminApi.delete(`/admin/spin-tiers/${tierToDelete.id}`);
 
       setSuccess(`Tier "${tierToDelete.tier_display_name}" deleted successfully`);
       setDeleteDialogOpen(false);
@@ -165,8 +151,8 @@ const SpinTiersManagement: React.FC = () => {
       await loadTiers();
       
       setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete tier');
+    } catch (err: any) {
+      setError(err?.response?.data?.error || err.message || 'Failed to delete tier');
     } finally {
       setSaving(false);
     }
@@ -177,25 +163,25 @@ const SpinTiersManagement: React.FC = () => {
       setSaving(true);
       setError('');
       
-      const token = localStorage.getItem('adminToken');
-      const url = selectedTier 
-        ? `/api/admin/spin-tiers/${selectedTier.id}`
-        : '/api/admin/spin-tiers';
-      
-      const method = selectedTier ? 'PUT' : 'POST';
+      // Map snake_case frontend fields to the backend request format
+      const payload = {
+        tier_name: tierData.tier_name,
+        tier_display_name: tierData.tier_display_name,
+        min_daily_amount: tierData.min_daily_amount,
+        max_daily_amount: tierData.max_daily_amount,
+        spins_per_day: tierData.spins_per_day,
+        tier_color: tierData.tier_color,
+        tier_icon: tierData.tier_icon,
+        tier_badge: tierData.tier_badge,
+        description: tierData.tier_description,
+        sort_order: tierData.sort_order,
+        is_active: tierData.is_active,
+      };
 
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(tierData)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to save tier');
+      if (selectedTier) {
+        await adminApi.put(`/admin/spin-tiers/${selectedTier.id}`, payload);
+      } else {
+        await adminApi.post('/admin/spin-tiers', payload);
       }
 
       setSuccess(selectedTier ? 'Tier updated successfully' : 'Tier created successfully');
@@ -203,8 +189,8 @@ const SpinTiersManagement: React.FC = () => {
       await loadTiers();
       
       setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save tier');
+    } catch (err: any) {
+      setError(err?.response?.data?.error || err.message || 'Failed to save tier');
       throw err;
     } finally {
       setSaving(false);

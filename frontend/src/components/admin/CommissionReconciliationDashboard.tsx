@@ -26,6 +26,9 @@ import {
   Info
 } from 'lucide-react';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
+const getAdminToken = () => localStorage.getItem('rechargemax_admin_token') || localStorage.getItem('adminToken') || '';
+
 interface CommissionSummary {
   total_transactions: number;
   total_recharge_amount: number;
@@ -99,10 +102,11 @@ export const CommissionReconciliationDashboard: React.FC = () => {
     setError(null);
 
     try {
-      const response = await fetch('/api/v1/admin/commissions/reconciliation', {
+      const response = await fetch(`${API_BASE}/admin/commissions/reconciliation`,  {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAdminToken()}`,
         },
         body: JSON.stringify({
           start_date: startDate,
@@ -131,10 +135,11 @@ export const CommissionReconciliationDashboard: React.FC = () => {
 
   const exportReport = async () => {
     try {
-      const response = await fetch('/api/v1/admin/commissions/export', {
+      const response = await fetch(`${API_BASE}/admin/commissions/export`,  {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAdminToken()}`,
         },
         body: JSON.stringify({
           start_date: startDate,

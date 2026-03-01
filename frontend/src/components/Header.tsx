@@ -25,6 +25,11 @@ export const Header: React.FC = () => {
 
   const currentPage = location.pathname;
 
+  // Admin routes have their own dedicated header — suppress the user nav header
+  if (currentPage.startsWith('/admin')) {
+    return null;
+  }
+
   const navigationItems = [
     { id: '/', label: 'Home', icon: Home },
     { id: '/recharge', label: 'Recharge', icon: Smartphone },

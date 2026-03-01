@@ -26,6 +26,7 @@ type UserRepository interface {
 	
 	// Update operations
 	Update(ctx context.Context, user *entities.Users) error
+	UpdateStatus(ctx context.Context, userID uuid.UUID, isActive bool) error
 	UpdatePoints(ctx context.Context, userID uuid.UUID, points int) error
 	UpdateLoyaltyTier(ctx context.Context, userID uuid.UUID, tier string) error
 	UpdateRechargeStats(ctx context.Context, userID uuid.UUID, amount float64) error

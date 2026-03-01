@@ -8,6 +8,10 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { CheckCircle2, AlertCircle, Settings, Save } from 'lucide-react';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
+const getAdminToken = () => localStorage.getItem('rechargemax_admin_token') || localStorage.getItem('adminToken') || '';
+
+
 interface PrizeFulfillmentConfig {
   id: string;
   prizeType: string;
@@ -42,7 +46,7 @@ const PrizeFulfillmentConfigPanel: React.FC = () => {
   const fetchConfigs = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/v1/admin/prize-fulfillment/configs', {
+      const response = await fetch(`${API_BASE}/admin/prize-fulfillment/configs`,  {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -72,7 +76,7 @@ const PrizeFulfillmentConfigPanel: React.FC = () => {
     setError(null);
     
     try {
-      const response = await fetch(`/api/v1/admin/prize-fulfillment/configs/${selectedConfig.id}`, {
+      const response = await fetch(`${API_BASE}/admin/prize-fulfillment/configs/${selectedConfig.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

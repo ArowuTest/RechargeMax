@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { 
   Trophy, 
   Calendar, 
@@ -26,7 +27,8 @@ import {
   Target,
   Gift,
   Upload,
-  XCircle
+  XCircle,
+  Pencil
 } from 'lucide-react';
 
 interface Draw {
@@ -89,6 +91,15 @@ const DrawIntegrationDashboard: React.FC = () => {
   });
   const [csvFile, setCsvFile] = useState<File | null>(null);
 
+  // Edit draw dialog state
+  const [editingDraw, setEditingDraw] = useState<Draw | null>(null);
+  const [editDrawForm, setEditDrawForm] = useState({
+    name: '',
+    status: '' as Draw['status'],
+    duration_hours: 24
+  });
+  const [editLoading, setEditLoading] = useState(false);
+
   useEffect(() => {
     fetchDrawData();
     fetchDrawTypes();
@@ -128,7 +139,8 @@ const DrawIntegrationDashboard: React.FC = () => {
   const fetchDrawTypes = async () => {
     try {
       const response = await adminApi.get('/admin/draw-types');
-      setDrawTypes(response.data.data || []);
+      // adminApi.get returns the full response body: { success, data: [...] }
+      setDrawTypes(response.data || []);
     } catch (error: any) {
       console.error('Failed to fetch draw types:', error);
       toast({
@@ -142,7 +154,8 @@ const DrawIntegrationDashboard: React.FC = () => {
   const fetchPrizeTemplates = async (drawTypeId: number) => {
     try {
       const response = await adminApi.get(`/admin/prize-templates?draw_type_id=${drawTypeId}`);
-      setPrizeTemplates(response.data.data || []);
+      // adminApi.get returns the full response body: { success, data: [...] }
+      setPrizeTemplates(response.data || []);
     } catch (error: any) {
       console.error('Failed to fetch prize templates:', error);
       toast({
@@ -156,7 +169,8 @@ const DrawIntegrationDashboard: React.FC = () => {
   const fetchPrizeCategories = async (templateId: number) => {
     try {
       const response = await adminApi.get(`/admin/prize-templates/${templateId}`);
-      const template = response.data.data;
+      // adminApi.get returns the full response body: { success, data: {...} }
+      const template = response.data;
       setPrizeCategories(template.prize_categories || []);
       
       // Calculate total prize pool
@@ -205,15 +219,20 @@ const DrawIntegrationDashboard: React.FC = () => {
       setActionLoading('create_draw');
       
       // Create draw via API
-      const drawData = {
+      // Only include prize_pool if no template is selected (backend requires either template OR prize_pool > 0, not both)
+      const drawData: Record<string, any> = {
         name: newDraw.name,
         type: newDraw.type,
         draw_type_id: selectedDrawType,
         prize_template_id: selectedTemplate,
-        prize_pool: totalPrizePool,
+        duration_hours: newDraw.duration_hours,
         start_time: new Date().toISOString(),
         end_time: new Date(Date.now() + (newDraw.duration_hours * 3600000)).toISOString(),
       };
+      // Only add prize_pool if template is not selected and pool is > 0
+      if (!selectedTemplate && totalPrizePool > 0) {
+        drawData.prize_pool = totalPrizePool;
+      }
 
       await adminApi.draws.create(drawData);
       
@@ -286,6 +305,46 @@ const DrawIntegrationDashboard: React.FC = () => {
       });
     } finally {
       setActionLoading('');
+    }
+  };
+
+  const handleOpenEditDraw = (draw: Draw) => {
+    setEditingDraw(draw);
+    // Calculate remaining hours from now to end_time
+    const remainingMs = new Date(draw.end_time).getTime() - Date.now();
+    const remainingHours = Math.max(1, Math.round(remainingMs / 3600000));
+    setEditDrawForm({
+      name: draw.name,
+      status: draw.status,
+      duration_hours: remainingHours
+    });
+  };
+
+  const handleUpdateDraw = async () => {
+    if (!editingDraw) return;
+    try {
+      setEditLoading(true);
+      const updatePayload: Record<string, any> = {
+        name: editDrawForm.name,
+        status: editDrawForm.status,
+        end_time: new Date(Date.now() + editDrawForm.duration_hours * 3600000).toISOString()
+      };
+      await adminApi.draws.update(editingDraw.id, updatePayload);
+      toast({
+        title: 'Draw Updated',
+        description: `${editDrawForm.name} has been updated successfully`,
+      });
+      setEditingDraw(null);
+      await fetchDrawData();
+    } catch (error: any) {
+      console.error('Failed to update draw:', error);
+      toast({
+        title: 'Error Updating Draw',
+        description: error.message || 'Failed to update draw',
+        variant: 'destructive',
+      });
+    } finally {
+      setEditLoading(false);
     }
   };
 
@@ -458,8 +517,10 @@ const DrawIntegrationDashboard: React.FC = () => {
                             <Button
                               size="sm"
                               variant="outline"
+                              title="Edit Draw"
+                              onClick={() => handleOpenEditDraw(draw)}
                             >
-                              <Settings className="w-3 h-3" />
+                              <Pencil className="w-3 h-3" />
                             </Button>
                           </div>
                         </TableCell>
@@ -776,6 +837,73 @@ const DrawIntegrationDashboard: React.FC = () => {
           </Card>
         </TabsContent>
       </Tabs>
+      {/* Edit Draw Dialog */}
+      {editingDraw && (
+        <Dialog open={!!editingDraw} onOpenChange={(open) => { if (!open) setEditingDraw(null); }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Settings className="w-5 h-5" />
+                Edit Draw
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div>
+                <Label htmlFor="edit_draw_name">Draw Name</Label>
+                <Input
+                  id="edit_draw_name"
+                  value={editDrawForm.name}
+                  onChange={(e) => setEditDrawForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Draw name"
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit_draw_status">Status</Label>
+                <Select
+                  value={editDrawForm.status}
+                  onValueChange={(val) => setEditDrawForm(prev => ({ ...prev, status: val as Draw['status'] }))}
+                >
+                  <SelectTrigger id="edit_draw_status">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="UPCOMING">UPCOMING</SelectItem>
+                    <SelectItem value="ACTIVE">ACTIVE</SelectItem>
+                    <SelectItem value="CANCELLED">CANCELLED</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="edit_draw_duration">Extend Duration (Hours from now)</Label>
+                <Input
+                  id="edit_draw_duration"
+                  type="number"
+                  min="1"
+                  max="720"
+                  value={editDrawForm.duration_hours}
+                  onChange={(e) => setEditDrawForm(prev => ({ ...prev, duration_hours: parseInt(e.target.value) || 24 }))}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  New end time: {new Date(Date.now() + editDrawForm.duration_hours * 3600000).toLocaleString()}
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditingDraw(null)} disabled={editLoading}>
+                Cancel
+              </Button>
+              <Button onClick={handleUpdateDraw} disabled={!editDrawForm.name || editLoading}>
+                {editLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <Settings className="w-4 h-4 mr-2" />
+                )}
+                Update Draw
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 };

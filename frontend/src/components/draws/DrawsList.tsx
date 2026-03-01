@@ -52,8 +52,17 @@ export const DrawsList: React.FC<DrawsListProps> = ({ onLoginRequired }) => {
     try {
       const response = await getActiveDraws();
       
-      if (response && response.success && response.data) {
-        setDraws(response.data);
+      if (response && response.success && response.data && Array.isArray(response.data)) {
+        // Map API fields to component interface fields
+        setDraws(response.data.map((draw: any) => ({
+          id: draw.id,
+          name: draw.name,
+          prize_amount: draw.prize_amount ?? draw.prize_pool ?? 0,
+          end_time: draw.end_time,
+          total_entries: draw.total_entries ?? 0,
+          user_entries: draw.user_entries ?? 0,
+          status: (draw.status?.toLowerCase() as 'active' | 'ended' | 'upcoming') || 'active',
+        })));
       } else {
         setDraws([]);
       }
@@ -80,7 +89,7 @@ export const DrawsList: React.FC<DrawsListProps> = ({ onLoginRequired }) => {
     try {
       const response = await getRecentWinners(10);
       
-      if (response && response.data) {
+      if (response && response.data && Array.isArray(response.data)) {
         setWinners(response.data);
       } else {
         setWinners([]);

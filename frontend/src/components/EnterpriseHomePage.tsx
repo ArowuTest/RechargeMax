@@ -429,7 +429,7 @@ export const EnterpriseHomePage: React.FC = () => {
       // Get recent winners from Go backend
       const winnersResponse = await getRecentWinners(4);
 
-      if ('success' in winnersResponse && winnersResponse.success && winnersResponse.data && winnersResponse.data.length > 0) {
+      if ('success' in winnersResponse && winnersResponse.success && winnersResponse.data && Array.isArray(winnersResponse.data) && winnersResponse.data.length > 0) {
         setRecentWinners(winnersResponse.data.map((winner: any, index: number) => ({
           id: `real_${index}`,
           name: winner.full_name,

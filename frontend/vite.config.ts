@@ -242,10 +242,6 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),
-        // Proxy react-router-dom to our wrapper
-        "react-router-dom": path.resolve(__dirname, "./src/lib/react-router-dom-proxy.tsx"),
-        // Original react-router-dom under a different name
-        "react-router-dom-original": "react-router-dom",
       },
     },
     define: {

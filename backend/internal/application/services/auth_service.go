@@ -56,14 +56,17 @@ func NewAuthService(
 
 // SendOTP sends an OTP to the user's phone number
 func (s *AuthService) SendOTP(ctx context.Context, msisdn string, purpose string) error {
-	// Validate MSISDN format
-	if len(msisdn) < 10 {
-		return fmt.Errorf("invalid phone number format")
+	// Normalise MSISDN to canonical international format (2348XXXXXXXXX)
+	// This ensures OTPs are always stored and looked up using the same format
+	// regardless of whether the user supplied 08012345678, 2348012345678, or +2348012345678
+	normalizedMSISDN, err := validation.NormalizeMSISDN(msisdn)
+	if err != nil {
+		return errors.BadRequest("Invalid phone number format: " + err.Error())
 	}
 
-	// Check rate limiting (max 3 OTPs per 10 minutes)
+	// Check rate limiting (max 3 OTPs per 10 minutes) — using normalised MSISDN
 	tenMinutesAgo := time.Now().Add(-10 * time.Minute)
-	recentCount, err := s.otpRepo.CountRecentOTPs(ctx, msisdn, tenMinutesAgo)
+	recentCount, err := s.otpRepo.CountRecentOTPs(ctx, normalizedMSISDN, tenMinutesAgo)
 	if err != nil {
 		return fmt.Errorf("failed to check rate limit: %w", err)
 	}
@@ -80,10 +83,10 @@ func (s *AuthService) SendOTP(ctx context.Context, msisdn string, purpose string
 		return fmt.Errorf("failed to generate OTP: %w", err)
 	}
 
-	// Create OTP record
+	// Create OTP record — always stored with normalised international MSISDN
 	otp := &entities.OTP{
 		ID:        uuid.New(),
-		Msisdn:    msisdn,
+		Msisdn:    normalizedMSISDN,
 		Code:      otpCode,
 		Purpose:   purpose,
 		ExpiresAt: time.Now().Add(10 * time.Minute), // 10 minutes expiry
@@ -94,10 +97,10 @@ func (s *AuthService) SendOTP(ctx context.Context, msisdn string, purpose string
 		return fmt.Errorf("failed to create OTP record: %w", err)
 	}
 
-	// Send SMS
-	if err := s.sendSMS(ctx, msisdn, otpCode); err != nil {
+	// Send SMS (use normalised MSISDN for delivery)
+	if err := s.sendSMS(ctx, normalizedMSISDN, otpCode); err != nil {
 		// Log error but don't fail the request
-		fmt.Printf("Failed to send SMS to %s: %v\n", msisdn, err)
+		fmt.Printf("Failed to send SMS to %s: %v\n", normalizedMSISDN, err)
 	}
 
 	return nil
@@ -111,8 +114,8 @@ func (s *AuthService) VerifyOTP(ctx context.Context, msisdn, code, purpose strin
 		return "", nil, false, fmt.Errorf("invalid phone number format: %w", err)
 	}
 	
-	// Find valid OTP with matching purpose (using original msisdn for OTP lookup)
-	otp, err := s.otpRepo.FindValidOTPWithPurpose(ctx, msisdn, code, purpose)
+	// Find valid OTP with matching purpose (using normalised MSISDN — same as stored in SendOTP)
+	otp, err := s.otpRepo.FindValidOTPWithPurpose(ctx, normalizedMSISDN, code, purpose)
 	if err != nil {
 		return "", nil, false, fmt.Errorf("invalid or expired OTP")
 	}

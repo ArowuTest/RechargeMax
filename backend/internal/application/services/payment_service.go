@@ -105,8 +105,19 @@ func NewPaymentService(paystackSecretKey, flutterwaveSecretKey string, paymentRe
 	}
 }
 
+// isSandboxMode returns true if the payment gateway is using placeholder/test keys
+func (s *PaymentService) isSandboxMode() bool {
+	return s.paystackSecretKey == "" || s.paystackSecretKey == "sk_test_placeholder" || s.paystackSecretKey == "placeholder"
+}
+
 // InitializePayment initializes a payment with the specified gateway
 func (s *PaymentService) InitializePayment(ctx context.Context, req PaymentRequest) (string, error) {
+	// Sandbox mode: return a mock payment URL when real keys are not configured
+	if s.isSandboxMode() {
+		mockURL := fmt.Sprintf("https://checkout.paystack.com/sandbox/%s?amount=%d&email=%s", req.Reference, req.Amount, req.Email)
+		return mockURL, nil
+	}
+
 	// Default to Paystack if no gateway specified
 	gateway := "paystack"
 	if gatewayMeta, ok := req.Metadata["gateway"]; ok {

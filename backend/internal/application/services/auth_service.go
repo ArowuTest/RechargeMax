@@ -12,6 +12,7 @@ import (
 
 	"rechargemax/internal/domain/entities"
 	"rechargemax/internal/domain/repositories"
+	"rechargemax/internal/errors"
 	"rechargemax/internal/validation"
 )
 
@@ -68,7 +69,9 @@ func (s *AuthService) SendOTP(ctx context.Context, msisdn string, purpose string
 	}
 
 	if recentCount >= 3 {
-		return fmt.Errorf("too many OTP requests. Please wait 10 minutes before trying again")
+		return errors.RateLimitExceeded().WithDetails(map[string]interface{}{
+			"message": "Too many OTP requests. Please wait 10 minutes before trying again.",
+		})
 	}
 
 	// Generate 6-digit OTP

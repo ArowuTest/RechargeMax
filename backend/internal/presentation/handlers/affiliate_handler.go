@@ -35,12 +35,18 @@ func (h *AffiliateHandler) GetReferralCode(c *gin.Context) {
 
 	affiliate, err := h.affiliateService.GetAffiliateByMSISDN(c.Request.Context(), msisdn)
 	if err != nil {
-		middleware.RespondWithError(c, err)
+		// User is not registered as an affiliate - return empty response
+		middleware.RespondWithSuccess(c, map[string]interface{}{
+			"referral_code":   nil,
+			"is_affiliate":    false,
+			"message":         "Not registered as an affiliate",
+		})
 		return
 	}
 
 	middleware.RespondWithSuccess(c, map[string]interface{}{
 		"referral_code": affiliate.AffiliateCode,
+		"is_affiliate":  true,
 	})
 }
 
@@ -62,7 +68,14 @@ func (h *AffiliateHandler) GetStats(c *gin.Context) {
 
 	stats, err := h.affiliateService.GetAffiliateStats(c.Request.Context(), msisdn)
 	if err != nil {
-		middleware.RespondWithError(c, err)
+		// User is not registered as an affiliate - return empty stats
+		middleware.RespondWithSuccess(c, map[string]interface{}{
+			"is_affiliate":       false,
+			"total_referrals":    0,
+			"total_earnings":     0,
+			"pending_earnings":   0,
+			"message":            "Not registered as an affiliate",
+		})
 		return
 	}
 
@@ -104,7 +117,14 @@ func (h *AffiliateHandler) GetReferrals(c *gin.Context) {
 	// Get affiliate stats which includes referral count
 	stats, err := h.affiliateService.GetAffiliateStats(c.Request.Context(), msisdn)
 	if err != nil {
-		middleware.RespondWithError(c, err)
+		// User is not an affiliate - return empty referrals list
+		middleware.RespondWithSuccess(c, map[string]interface{}{
+			"referrals":    []interface{}{},
+			"total":        0,
+			"page":         pagination.Page,
+			"limit":        pagination.Limit,
+			"is_affiliate": false,
+		})
 		return
 	}
 	

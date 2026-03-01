@@ -56,6 +56,7 @@ func NewSubscriptionService(
 
 // CreateSubscription creates a new subscription
 func (s *SubscriptionService) CreateSubscription(ctx context.Context, req CreateSubscriptionRequest) (*SubscriptionResponse, error) {
+	fmt.Printf("[DEBUG] CreateSubscription called for MSISDN: %s, PaymentMethod: %s\n", req.MSISDN, req.PaymentMethod)
 	// Detect network (optional)
 	networkHint := ""
 	if req.Network != "" {
@@ -63,15 +64,21 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 	}
 	_, err := s.hlrService.DetectNetwork(ctx, req.MSISDN, &networkHint)
 	if err != nil {
-		// Log but don't fail
+		fmt.Printf("[DEBUG] DetectNetwork error (non-fatal): %v\n", err)
 	}
 
 	// Check for existing active subscription
 	// Query all subscriptions for this MSISDN
+	fmt.Printf("[DEBUG] Looking up user by MSISDN: %s\n", req.MSISDN)
 	user, err := s.userRepo.FindByMSISDN(ctx, req.MSISDN)
-	if err == nil && user != nil {
+	if err != nil {
+		fmt.Printf("[DEBUG] FindByMSISDN error: %v\n", err)
+	} else if user != nil {
+		fmt.Printf("[DEBUG] Found user: %s\n", user.ID)
 		existingSubs, err := s.subscriptionRepo.FindByUserID(ctx, user.ID)
-		if err == nil {
+		if err != nil {
+			fmt.Printf("[DEBUG] FindByUserID error: %v\n", err)
+		} else {
 			// Check if any subscription is active
 			for _, sub := range existingSubs {
 				if sub.Status == "active" {
@@ -83,7 +90,6 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 
 	// Generate unique subscription code
 	subscriptionCode := fmt.Sprintf("SUB_%s_%d", req.MSISDN[len(req.MSISDN)-4:], time.Now().Unix())
-
 	subscription := &entities.Subscription{
 		Id:               uuid.New(),
 		SubscriptionCode: subscriptionCode,
@@ -92,8 +98,13 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 		Amount:           20.00, // ₦20 daily
 		Status:           "pending",
 	}
+	// Set UserId if user was found
+	if user != nil {
+		subscription.UserId = &user.ID
+	}
 
 	if err := s.subscriptionRepo.Create(ctx, subscription); err != nil {
+		fmt.Printf("[DEBUG] Subscription create error: %v\n", err)
 		return nil, fmt.Errorf("failed to create subscription: %w", err)
 	}
 
@@ -144,27 +155,33 @@ func (s *SubscriptionService) GetSubscription(ctx context.Context, msisdn string
 		return nil, fmt.Errorf("failed to get subscriptions: %w", err)
 	}
 
-	// Find active subscription
+		// Find active subscription first, then fall back to most recent
+	var latestSub *entities.Subscription
 	for _, sub := range subscriptions {
+		sub := sub // capture range variable
 		if sub.Status == "active" {
-			// Calculate next billing date
-			nextBilling := sub.SubscriptionDate.Add(24 * time.Hour)
-			
-			return &SubscriptionResponse{
-				ID:            sub.Id,
-				MSISDN:        sub.Msisdn,
-				Network:       "auto",
-				Status:        sub.Status,
-				PaymentMethod: "paystack",
-				DailyAmount:   int64(sub.Amount * 100),
-				NextBilling:   nextBilling,
-				CreatedAt:     sub.CreatedAt,
-			}, nil
+			latestSub = sub
+			break
+		}
+		if latestSub == nil || sub.CreatedAt.After(latestSub.CreatedAt) {
+			latestSub = sub
 		}
 	}
-
-	// No active subscription found
-	return nil, fmt.Errorf("no active subscription found")
+	if latestSub == nil {
+		return nil, fmt.Errorf("no subscription found")
+	}
+	// Calculate next billing date
+	nextBilling := latestSub.SubscriptionDate.Add(24 * time.Hour)
+	return &SubscriptionResponse{
+		ID:            latestSub.Id,
+		MSISDN:        latestSub.Msisdn,
+		Network:       "auto",
+		Status:        latestSub.Status,
+		PaymentMethod: "paystack",
+		DailyAmount:   int64(latestSub.Amount * 100),
+		NextBilling:   nextBilling,
+		CreatedAt:     latestSub.CreatedAt,
+	}, nil
 }
 
 // CancelSubscription cancels a user's subscription

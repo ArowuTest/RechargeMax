@@ -3,6 +3,8 @@ package validation
 import (
 	"fmt"
 	"time"
+
+	"rechargemax/internal/utils"
 )
 
 // RechargeRequest validation
@@ -474,6 +476,10 @@ type AirtimeRechargeRequest struct {
 
 func (r *AirtimeRechargeRequest) Validate() error {
 	var errs ValidationErrors
+	// Normalise MSISDN to canonical international format (234...) in-place
+	if normalized, err := utils.NormalizeMSISDN(r.PhoneNumber); err == nil {
+		r.PhoneNumber = normalized
+	}
 	if err := ValidateMSISDN(r.PhoneNumber); err != nil {
 		errs.Add("phone_number", err.Error())
 	}
@@ -498,6 +504,10 @@ type DataRechargeRequest struct {
 
 func (r *DataRechargeRequest) Validate() error {
 	var errs ValidationErrors
+	// Normalise MSISDN to canonical international format (234...) in-place
+	if normalized, err := utils.NormalizeMSISDN(r.PhoneNumber); err == nil {
+		r.PhoneNumber = normalized
+	}
 	if err := ValidateMSISDN(r.PhoneNumber); err != nil {
 		errs.Add("phone_number", err.Error())
 	}
@@ -695,7 +705,10 @@ type ValidatePhoneNetworkRequest struct {
 
 func (r *ValidatePhoneNetworkRequest) Validate() error {
 	var errs ValidationErrors
-	
+	// Normalise MSISDN to canonical international format (234...) in-place
+	if normalized, err := utils.NormalizeMSISDN(r.PhoneNumber); err == nil {
+		r.PhoneNumber = normalized
+	}
 	if err := ValidateMSISDN(r.PhoneNumber); err != nil {
 		errs.Add("phone_number", err.Error())
 	}

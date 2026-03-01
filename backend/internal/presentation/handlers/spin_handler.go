@@ -80,10 +80,15 @@ func (h *SpinHandler) PlaySpin(c *gin.Context) {
 			middleware.RespondWithError(c, errors.BadRequest("MSISDN required for spin"))
 			return
 		}
-		errors.Info("Guest spin request", map[string]interface{}{
-			"msisdn": req.MSISDN,
+		// Normalise guest MSISDN to canonical international format (234...)
+		if normalized, err := validation.NormalizeMSISDN(req.MSISDN); err == nil {
+			msisdn = normalized
+		} else {
+			msisdn = req.MSISDN
+		}
+		errors.Info("Guest spin request (normalised)", map[string]interface{}{
+			"msisdn": msisdn,
 		})
-		msisdn = req.MSISDN
 	} else {
 		errors.Info("Authenticated spin request", map[string]interface{}{
 			"msisdn": msisdn,
@@ -213,7 +218,12 @@ func (h *SpinHandler) GetTierProgress(c *gin.Context) {
 		// Try to get from JWT context
 		msisdn = c.GetString("msisdn")
 	}
-	
+	// Normalise MSISDN if provided as query param (may be in local format)
+	if msisdn != "" {
+		if normalized, err := validation.NormalizeMSISDN(msisdn); err == nil {
+			msisdn = normalized
+		}
+	}
 	if msisdn == "" {
 		middleware.RespondWithError(c, errors.BadRequest("MSISDN required"))
 		return

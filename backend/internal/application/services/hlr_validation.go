@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"rechargemax/internal/utils"
 )
 
 // NetworkValidationResult contains the result of network validation
@@ -57,6 +59,10 @@ func (s *HLRService) GetCachedNetworkForUser(ctx context.Context, msisdn string)
 // ValidateNetworkSelection validates that the selected network matches the actual network
 // This is called BEFORE showing data plans or processing payment
 func (s *HLRService) ValidateNetworkSelection(ctx context.Context, msisdn string, selectedNetwork string) (*NetworkValidationResult, error) {
+	// Normalise MSISDN to canonical international format (234...) at the service boundary
+	if normalized, err := utils.NormalizeMSISDN(msisdn); err == nil {
+		msisdn = normalized
+	}
 	result := &NetworkValidationResult{
 		MSISDN:          msisdn,
 		SelectedNetwork: selectedNetwork,
@@ -129,6 +135,10 @@ func (s *HLRService) ValidateNetworkSelection(ctx context.Context, msisdn string
 // 2. If user selects network, validate it
 // 3. Return validated network or error
 func (s *HLRService) ValidateAndDetectNetwork(ctx context.Context, msisdn string, userSelectedNetwork *string) (*NetworkValidationResult, error) {
+	// Normalise MSISDN to canonical international format (234...) at the service boundary
+	if normalized, err := utils.NormalizeMSISDN(msisdn); err == nil {
+		msisdn = normalized
+	}
 	// If user selected a network, validate it
 	if userSelectedNetwork != nil && *userSelectedNetwork != "" {
 		return s.ValidateNetworkSelection(ctx, msisdn, *userSelectedNetwork)

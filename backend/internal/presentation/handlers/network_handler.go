@@ -133,6 +133,10 @@ func (h *NetworkHandler) GetCachedNetwork(c *gin.Context) {
 		middleware.RespondWithError(c, errors.BadRequest("Invalid request format"))
 		return
 	}
+	// Normalise MSISDN to canonical international format (234...) in-place
+	if normalized, err := validation.NormalizeMSISDN(req.PhoneNumber); err == nil {
+		req.PhoneNumber = normalized
+	}
 
 	// Get cached network from recent recharges
 	result, err := h.hlrService.GetCachedNetworkForUser(c.Request.Context(), req.PhoneNumber)
@@ -170,6 +174,10 @@ func (h *NetworkHandler) ValidateNetworkSelection(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		middleware.RespondWithError(c, errors.BadRequest("Invalid request format"))
 		return
+	}
+	// Normalise MSISDN to canonical international format (234...) in-place
+	if normalized, err := validation.NormalizeMSISDN(req.PhoneNumber); err == nil {
+		req.PhoneNumber = normalized
 	}
 
 	// Validate network selection

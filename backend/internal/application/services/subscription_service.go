@@ -3,10 +3,9 @@ package services
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
-
 	"github.com/google/uuid"
-
 	"rechargemax/internal/domain/entities"
 	"rechargemax/internal/domain/repositories"
 )
@@ -17,6 +16,7 @@ type SubscriptionService struct {
 	userRepo         repositories.UserRepository
 	paymentService   *PaymentService
 	hlrService       *HLRService
+	drawRepo         repositories.DrawRepository // For creating draw entries on subscription
 }
 
 // CreateSubscriptionRequest represents subscription creation request
@@ -37,6 +37,7 @@ type SubscriptionResponse struct {
 	NextBilling   time.Time `json:"next_billing"`
 	CreatedAt     time.Time `json:"created_at"`
 	PaymentURL    string    `json:"payment_url,omitempty"`
+	Reference     string    `json:"reference,omitempty"`
 }
 
 // NewSubscriptionService creates a new subscription service
@@ -45,12 +46,14 @@ func NewSubscriptionService(
 	userRepo repositories.UserRepository,
 	paymentService *PaymentService,
 	hlrService *HLRService,
+	drawRepo repositories.DrawRepository,
 ) *SubscriptionService {
 	return &SubscriptionService{
 		subscriptionRepo: subscriptionRepo,
 		userRepo:         userRepo,
 		paymentService:   paymentService,
 		hlrService:       hlrService,
+		drawRepo:         drawRepo,
 	}
 }
 
@@ -81,8 +84,9 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 		}
 	}
 
-	// Generate unique subscription code
-	subscriptionCode := fmt.Sprintf("SUB_%s_%d", req.MSISDN[len(req.MSISDN)-4:], time.Now().Unix())
+	// Generate unique subscription code (nanoseconds + UUID suffix for uniqueness)
+	subNow := time.Now()
+	subscriptionCode := fmt.Sprintf("SUB_%s_%d%s", req.MSISDN[len(req.MSISDN)-4:], subNow.UnixNano()/1e6, uuid.New().String()[:6])
 
 	subscription := &entities.Subscription{
 		Id:               uuid.New(),
@@ -113,7 +117,7 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 		subscription.Status = "active"
 		s.subscriptionRepo.Update(ctx, subscription)
 	} else {
-		reference := fmt.Sprintf("SUB_%s_%d", subscription.Id.String()[:8], time.Now().Unix())
+		reference := fmt.Sprintf("SUB_%s_%d%s", subscription.Id.String()[:8], time.Now().UnixNano()/1e6, uuid.New().String()[:6])
 		paymentReq := PaymentRequest{
 			Amount:    2000,
 			Email:     s.getUserEmail(ctx, subscription.Msisdn),
@@ -122,9 +126,18 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 		}
 		paymentURL, err := s.paymentService.InitializePayment(ctx, paymentReq)
 		if err != nil {
-			return nil, fmt.Errorf("failed to initialize payment: %w", err)
+			// In development/test mode, use a mock payment URL so subscription flow can be tested
+			appEnv := os.Getenv("APP_ENV")
+			if appEnv == "development" || appEnv == "test" || appEnv == "" {
+				response.PaymentURL = fmt.Sprintf("https://checkout.paystack.com/test_%s", reference)
+				response.Reference = reference
+			} else {
+				return nil, fmt.Errorf("failed to initialize payment: %w", err)
+			}
+		} else {
+			response.PaymentURL = paymentURL
 		}
-		response.PaymentURL = paymentURL
+		response.Reference = reference
 	}
 
 	return response, nil
@@ -273,6 +286,33 @@ func (s *SubscriptionService) ProcessSuccessfulPayment(ctx context.Context, paym
 	user.TotalPoints += int(pointsEarned)
 	if err := s.userRepo.Update(ctx, user); err != nil {
 		return fmt.Errorf("failed to update user points: %w", err)
+	}
+
+	// Create draw entry for the subscription point (1 subscription = 1 draw entry)
+	if s.drawRepo != nil {
+		activeDraw, drawErr := s.drawRepo.GetActiveDraw(ctx)
+		if drawErr == nil && activeDraw != nil {
+			now := time.Now()
+			entriesCount := 1
+			subID := subscription.Id
+			drawEntry := &entities.DrawEntries{
+				ID:                   uuid.New(),
+				DrawID:               activeDraw.ID,
+				UserID:               &user.ID,
+				Msisdn:               subscription.Msisdn,
+				EntriesCount:         &entriesCount,
+				SourceType:           "SUBSCRIPTION",
+				SourceSubscriptionID: &subID,
+				CreatedAt:            &now,
+			}
+			if createErr := s.drawRepo.CreateEntry(ctx, drawEntry); createErr != nil {
+				// Log but don't fail subscription for draw entry creation failure
+				fmt.Printf("Warning: Failed to create draw entry for subscription: %v\n", createErr)
+			} else {
+				// Update draw total entries count
+				_ = s.drawRepo.UpdateStats(ctx, activeDraw.ID, int(activeDraw.TotalEntries)+1, 0)
+			}
+		}
 	}
 
 	// Send subscription activation notification (SMS, Email, Push)

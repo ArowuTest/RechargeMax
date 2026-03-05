@@ -33,16 +33,18 @@ type UpdateProfileRequest struct {
 
 // UserProfile represents user profile data
 type UserProfile struct {
-	ID          uuid.UUID  `json:"id"`
-	MSISDN      string     `json:"msisdn"`
-	FirstName   string     `json:"first_name"`
-	LastName    string     `json:"last_name"`
-	Email       string     `json:"email"`
-	LoyaltyTier string     `json:"loyalty_tier"`
-	TotalPoints int64      `json:"total_points"`
-	IsActive    bool       `json:"is_active"`
-	LastLoginAt *time.Time `json:"last_login_at"`
-	CreatedAt   time.Time  `json:"created_at"`
+	ID           uuid.UUID  `json:"id"`
+	MSISDN       string     `json:"msisdn"`
+	FirstName    string     `json:"first_name"`
+	LastName     string     `json:"last_name"`
+	Email        string     `json:"email"`
+	LoyaltyTier  string     `json:"loyalty_tier"`
+	TotalPoints  int64      `json:"total_points"`
+	IsActive     bool       `json:"is_active"`
+	LastLoginAt  *time.Time `json:"last_login_at"`
+	CreatedAt    time.Time  `json:"created_at"`
+	ReferralCode string     `json:"referral_code"`
+	UserCode     string     `json:"user_code"`
 }
 
 // UserSummaryResponse represents user summary data
@@ -153,16 +155,18 @@ func (s *UserService) GetUserProfile(ctx context.Context, msisdn string) (*UserP
 	}
 
 	return &UserProfile{
-		ID:          user.ID,
-		MSISDN:      user.MSISDN,
-		FirstName:   user.FullName,
-		LastName:    "",
-		Email:       user.Email,
-		LoyaltyTier: user.LoyaltyTier,
-		TotalPoints: int64(user.TotalPoints),
-		IsActive:    user.IsActive,
-		LastLoginAt: user.LastLoginAt,
-		CreatedAt:   user.CreatedAt,
+		ID:           user.ID,
+		MSISDN:       user.MSISDN,
+		FirstName:    user.FullName,
+		LastName:     "",
+		Email:        user.Email,
+		LoyaltyTier:  user.LoyaltyTier,
+		TotalPoints:  int64(user.TotalPoints),
+		IsActive:     user.IsActive,
+		LastLoginAt:  user.LastLoginAt,
+		CreatedAt:    user.CreatedAt,
+		ReferralCode: user.ReferralCode,
+		UserCode:     user.UserCode,
 	}, nil
 }
 
@@ -286,19 +290,21 @@ func (s *UserService) GetDashboard(ctx context.Context, msisdn string) (*Dashboa
 		// Get prizes
 		prizes := s.getUserPrizes(ctx, user.ID)
 
-		return &DashboardResponse{
-			User: &UserProfile{
-				ID:          user.ID,
-				MSISDN:      user.MSISDN,
-				FirstName:   user.FullName,
-				LastName:    "",
-				Email:       user.Email,
-				LoyaltyTier: user.LoyaltyTier,
-				TotalPoints: int64(user.TotalPoints),
-				IsActive:    user.IsActive,
-				LastLoginAt: user.LastLoginAt,
-				CreatedAt:   user.CreatedAt,
-			},
+			return &DashboardResponse{
+				User: &UserProfile{
+					ID:           user.ID,
+					MSISDN:       user.MSISDN,
+					FirstName:    user.FullName,
+					LastName:     "",
+					Email:        user.Email,
+					LoyaltyTier:  user.LoyaltyTier,
+					TotalPoints:  int64(user.TotalPoints),
+					IsActive:     user.IsActive,
+					LastLoginAt:  user.LastLoginAt,
+					CreatedAt:    user.CreatedAt,
+					ReferralCode: user.ReferralCode,
+					UserCode:     user.UserCode,
+				},
 			Stats:              stats,
 			Summary:            summary,
 			RecentTransactions: recentTransactions,

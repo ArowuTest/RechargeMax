@@ -227,3 +227,20 @@ func (h *SpinHandler) GetTierProgress(c *gin.Context) {
 
 	middleware.RespondWithSuccess(c, progress)
 }
+
+// GetActivePrizes returns all active wheel prizes (public endpoint for the spin wheel UI)
+func (h *SpinHandler) GetActivePrizes(c *gin.Context) {
+	prizes, err := h.spinService.GetAllPrizes(c.Request.Context())
+	if err != nil {
+		middleware.RespondWithError(c, err)
+		return
+	}
+	// Filter to only active prizes for public endpoint
+	activePrizes := make([]map[string]interface{}, 0)
+	for _, p := range prizes {
+		if active, ok := p["is_active"].(bool); ok && active {
+			activePrizes = append(activePrizes, p)
+		}
+	}
+	middleware.RespondWithSuccess(c, activePrizes)
+}

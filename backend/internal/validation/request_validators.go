@@ -318,7 +318,7 @@ func (r *PaginationRequest) Validate() error {
 		r.Limit = 20
 	}
 	
-	if err := ValidatePagination(r.Limit, (r.Page-1)*r.Limit); err != nil {
+	if err := ValidatePagination(r.Page, r.Limit); err != nil {
 		errs.Add("pagination", err.Error())
 	}
 	

@@ -33,10 +33,18 @@ func (r *userRepositoryGORM) CreateUserWithDefaults(ctx context.Context, msisdn 
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate referral code: %w", err)
 	}
-	
+
+	// Generate unique user code (format: USR + 8 random uppercase hex chars)
+	userCodeBytes := make([]byte, 4)
+	if _, randErr := rand.Read(userCodeBytes); randErr != nil {
+		return nil, fmt.Errorf("failed to generate user code: %w", randErr)
+	}
+	userCode := "USR" + strings.ToUpper(hex.EncodeToString(userCodeBytes))
+
 	// Create user with all defaults
 	user := &entities.Users{
 		ID:           uuid.New(),
+		UserCode:     userCode,
 		MSISDN:       msisdn,
 		ReferralCode: referralCode,
 		ReferredBy:   referredBy,

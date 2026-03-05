@@ -5,6 +5,7 @@ import (
 	cryptorand "crypto/rand"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 	
 	"github.com/google/uuid"
@@ -149,7 +150,7 @@ func (s *SpinService) PlaySpin(ctx context.Context, msisdn string) (*SpinResultR
 				"error": txErr.Error(),
 				"msisdn": msisdn,
 			})
-			return nil, fmt.Errorf("not eligible to spin: No qualifying recharges found. Recharge ₦1000+ to earn a spin!")
+			return nil, errors.BadRequest("No qualifying recharges found. Recharge ₦1000+ to earn a spin!")
 		}
 		
 		errors.Info("Found qualifying transaction", map[string]interface{}{
@@ -192,13 +193,13 @@ return nil, fmt.Errorf("failed to check eligibility: %w", err)
 }
 
 if !eligibility.Eligible {
-return nil, fmt.Errorf("not eligible to spin: %s", eligibility.Message)
+return nil, errors.BadRequest("Not eligible to spin: " + eligibility.Message)
 }
 
 // Get all active prizes
 prizes, err := s.prizeRepo.FindActive(ctx)
 if err != nil || len(prizes) == 0 {
-return nil, fmt.Errorf("no prizes available")
+return nil, errors.BadRequest("No prizes available at this time. Please try again later.")
 }
 
 	// Select a random prize based on probability
@@ -720,87 +721,124 @@ func (s *SpinService) GetAllPrizes(ctx context.Context) ([]map[string]interface{
 // CreatePrize creates a new prize (admin)
 func (s *SpinService) CreatePrize(ctx context.Context, data map[string]interface{}) (map[string]interface{}, error) {
 	// Validate required fields
-	requiredFields := []string{"id", "name", "type", "value", "probability", "color"}
+	requiredFields := []string{"name", "type", "value", "probability"}
 	for _, field := range requiredFields {
 		if _, ok := data[field]; !ok {
 			return nil, fmt.Errorf("missing required field: %s", field)
 		}
 	}
-	
+
 	// Validate probability
-	if prob, ok := data["probability"].(float64); ok {
-		if prob < 0 || prob > 100 {
-			return nil, fmt.Errorf("probability must be between 0 and 100")
-		}
+	prob, ok := data["probability"].(float64)
+	if !ok {
+		return nil, fmt.Errorf("probability must be a number")
 	}
-	
-	// Validate prize type
-	validTypes := []string{"airtime", "data", "points", "nothing", "cash"}
+	if prob < 0 || prob > 100 {
+		return nil, fmt.Errorf("probability must be between 0 and 100")
+	}
+
+	// Validate prize type (accept both upper and lower case)
 	prizeType, ok := data["type"].(string)
 	if !ok {
 		return nil, fmt.Errorf("invalid prize type")
 	}
-	
+	prizeTypeUpper := strings.ToUpper(prizeType)
+	validTypes := []string{"AIRTIME", "DATA", "POINTS", "CASH", "PHYSICAL"}
 	isValidType := false
 	for _, t := range validTypes {
-		if prizeType == t {
+		if prizeTypeUpper == t {
 			isValidType = true
 			break
 		}
 	}
 	if !isValidType {
-		return nil, fmt.Errorf("invalid prize type: %s", prizeType)
+		return nil, fmt.Errorf("invalid prize type: %s (must be AIRTIME, DATA, POINTS, CASH, or PHYSICAL)", prizeType)
 	}
-	
-	// Store prize in database
-	// In production, this would:
-	// 1. Create a WheelPrize entity
-	// 2. Save to wheel_prizes table via prizeRepo
-	// 3. Update spin configuration to include new prize
-	// 4. Invalidate caches
-	//
-	// Example implementation:
-	// prize := &entities.WheelPrize{
-	//     ID:          uuid.New(),
-	//     Name:        data["name"].(string),
-	//     Type:        data["type"].(string),
-	//     Value:       int64(data["value"].(float64)),
-	//     Probability: data["probability"].(float64),
-	//     Color:       data["color"].(string),
-	//     IsActive:    true,
-	//     CreatedAt:   time.Now(),
-	// }
-	// 
-	// err := s.prizeRepo.Create(ctx, prize)
-	// if err != nil {
-	//     return nil, fmt.Errorf("failed to create prize: %w", err)
-	// }
-	
-	// For now, return the prize data
-	// When WheelPrizeRepository CRUD methods are implemented, uncomment above
-	return data, nil
+
+	// Get value
+	var prizeValue int64
+	switch v := data["value"].(type) {
+	case float64:
+		prizeValue = int64(v * 100) // Convert naira to kobo
+	case int64:
+		prizeValue = v
+	default:
+		return nil, fmt.Errorf("invalid prize value")
+	}
+
+	// Get fulfilment mode
+	fulfilmentMode := "MANUAL"
+	if fm, ok := data["fulfilment_mode"].(string); ok && fm != "" {
+		fulfilmentMode = strings.ToUpper(fm)
+	} else if prizeTypeUpper == "AIRTIME" || prizeTypeUpper == "DATA" {
+		fulfilmentMode = "AUTO"
+	}
+
+	// Get is_active
+	isActive := true
+	if ia, ok := data["is_active"].(bool); ok {
+		isActive = ia
+	}
+
+	// Create prize entity
+	newPrizeID := uuid.New()
+	prizeCode := fmt.Sprintf("PRZ_%s", strings.ToUpper(newPrizeID.String()[:8]))
+	prize := &entities.WheelPrizes{
+		ID:             newPrizeID,
+		PrizeCode:      prizeCode,
+		PrizeName:      data["name"].(string),
+		PrizeType:      prizeTypeUpper,
+		PrizeValue:     prizeValue,
+		Probability:    prob,
+		IsActive:       &isActive,
+		FulfilmentMode: fulfilmentMode,
+	}
+
+	if err := s.prizeRepo.Create(ctx, prize); err != nil {
+		return nil, fmt.Errorf("failed to create prize: %w", err)
+	}
+
+	// Return created prize as map
+	return map[string]interface{}{
+		"id":              prize.ID.String(),
+		"name":            prize.PrizeName,
+		"type":            prize.PrizeType,
+		"value":           prize.PrizeValue,
+		"probability":     prize.Probability,
+		"is_active":       isActive,
+		"fulfilment_mode": prize.FulfilmentMode,
+		"created_at":      prize.CreatedAt,
+	}, nil
 }
 
 // UpdatePrize updates an existing prize (admin)
 func (s *SpinService) UpdatePrize(ctx context.Context, prizeID string, data map[string]interface{}) (map[string]interface{}, error) {
-	// Validate prize ID
 	if prizeID == "" {
 		return nil, fmt.Errorf("prize ID is required")
 	}
-	
-	// Validate probability if provided
-	if prob, ok := data["probability"].(float64); ok {
-		if prob < 0 || prob > 100 {
-			return nil, fmt.Errorf("probability must be between 0 and 100")
-		}
+
+	// Parse prize UUID
+	pid, err := uuid.Parse(prizeID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid prize ID format")
 	}
-	
-	// Validate prize type if provided
-	if prizeType, ok := data["type"].(string); ok {
-		validTypes := []string{"airtime", "data", "points", "nothing", "cash"}
+
+	// Find existing prize
+	prize, err := s.prizeRepo.FindByID(ctx, pid)
+	if err != nil {
+		return nil, fmt.Errorf("prize not found: %w", err)
+	}
+
+	// Apply updates
+	if name, ok := data["name"].(string); ok && name != "" {
+		prize.PrizeName = name
+	}
+	if prizeType, ok := data["type"].(string); ok && prizeType != "" {
+		prizeTypeUpper := strings.ToUpper(prizeType)
+		validTypes := []string{"AIRTIME", "DATA", "POINTS", "CASH", "PHYSICAL"}
 		isValidType := false
 		for _, t := range validTypes {
-			if prizeType == t {
+			if prizeTypeUpper == t {
 				isValidType = true
 				break
 			}
@@ -808,74 +846,67 @@ func (s *SpinService) UpdatePrize(ctx context.Context, prizeID string, data map[
 		if !isValidType {
 			return nil, fmt.Errorf("invalid prize type: %s", prizeType)
 		}
+		prize.PrizeType = prizeTypeUpper
 	}
-	
-	// Update prize in database
-	// In production, this would:
-	// 1. Find existing prize by ID
-	// 2. Update fields with new data
-	// 3. Save to database via prizeRepo
-	// 4. Invalidate caches
-	//
-	// Example implementation:
-	// prize, err := s.prizeRepo.FindByID(ctx, prizeID)
-	// if err != nil {
-	//     return nil, fmt.Errorf("prize not found: %w", err)
-	// }
-	// 
-	// if name, ok := data["name"].(string); ok {
-	//     prize.Name = name
-	// }
-	// if prob, ok := data["probability"].(float64); ok {
-	//     prize.Probability = prob
-	// }
-	// // ... update other fields
-	// 
-	// err = s.prizeRepo.Update(ctx, prize)
-	// if err != nil {
-	//     return nil, fmt.Errorf("failed to update prize: %w", err)
-	// }
-	
-	// For now, return the updated data
-	// When WheelPrizeRepository CRUD methods are implemented, uncomment above
-	data["id"] = prizeID
-	return data, nil
+	if prob, ok := data["probability"].(float64); ok {
+		if prob < 0 || prob > 100 {
+			return nil, fmt.Errorf("probability must be between 0 and 100")
+		}
+		prize.Probability = prob
+	}
+	if value, ok := data["value"].(float64); ok {
+		prize.PrizeValue = int64(value * 100) // Convert naira to kobo
+	}
+	if isActive, ok := data["is_active"].(bool); ok {
+		prize.IsActive = &isActive
+	}
+	if fm, ok := data["fulfilment_mode"].(string); ok && fm != "" {
+		prize.FulfilmentMode = strings.ToUpper(fm)
+	}
+
+	// Save to database
+	if err := s.prizeRepo.Update(ctx, prize); err != nil {
+		return nil, fmt.Errorf("failed to update prize: %w", err)
+	}
+
+	isActive := prize.IsActive != nil && *prize.IsActive
+	return map[string]interface{}{
+		"id":              prize.ID.String(),
+		"name":            prize.PrizeName,
+		"type":            prize.PrizeType,
+		"value":           prize.PrizeValue,
+		"probability":     prize.Probability,
+		"is_active":       isActive,
+		"fulfilment_mode": prize.FulfilmentMode,
+		"updated_at":      prize.UpdatedAt,
+	}, nil
 }
 
-// DeletePrize deletes a prize (admin)
+// DeletePrize deletes a prize (admin) - soft delete by setting is_active = false
 func (s *SpinService) DeletePrize(ctx context.Context, prizeID string) error {
-	// Validate prize ID
 	if prizeID == "" {
 		return fmt.Errorf("prize ID is required")
 	}
-	
-	// Delete prize from database
-	// In production, this would:
-	// 1. Find prize by ID to ensure it exists
-	// 2. Check if prize is currently in use (active spins)
-	// 3. Soft delete (set IsActive = false) or hard delete
-	// 4. Update spin configuration to remove prize
-	// 5. Invalidate caches
-	//
-	// Example implementation:
-	// prize, err := s.prizeRepo.FindByID(ctx, prizeID)
-	// if err != nil {
-	//     return fmt.Errorf("prize not found: %w", err)
-	// }
-	// 
-	// // Soft delete (recommended to preserve historical data)
-	// prize.IsActive = false
-	// err = s.prizeRepo.Update(ctx, prize)
-	// if err != nil {
-	//     return fmt.Errorf("failed to delete prize: %w", err)
-	// }
-	// 
-	// // Or hard delete:
-	// // err = s.prizeRepo.Delete(ctx, prizeID)
-	
-	// For now, just validate the ID format
-	// When WheelPrizeRepository CRUD methods are implemented, uncomment above
-	
+
+	pid, err := uuid.Parse(prizeID)
+	if err != nil {
+		return fmt.Errorf("invalid prize ID format")
+	}
+
+	// Find existing prize
+	prize, err := s.prizeRepo.FindByID(ctx, pid)
+	if err != nil {
+		return fmt.Errorf("prize not found: %w", err)
+	}
+
+	// Soft delete: set IsActive = false to preserve historical spin data
+	isActive := false
+	prize.IsActive = &isActive
+
+	if err := s.prizeRepo.Update(ctx, prize); err != nil {
+		return fmt.Errorf("failed to delete prize: %w", err)
+	}
+
 	return nil
 }
 

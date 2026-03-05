@@ -66,7 +66,7 @@ func (h *AdminHandler) GetDashboardStats(c *gin.Context) {
 func (h *AdminHandler) GetUsers(c *gin.Context) {
 	ctx := c.Request.Context()
 	
-	users, _, err := h.userService.GetAllUsers(ctx, 1000, 0)
+	users, _, err := h.userService.GetAllUsers(ctx, 1, 1000)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,

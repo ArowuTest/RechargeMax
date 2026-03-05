@@ -267,7 +267,13 @@ func (s *HLRService) detectByPrefix(msisdn string) *NetworkDetectionResult {
 		return nil
 	}
 
-	prefix := msisdn[:4]
+	// Normalize to local format for prefix matching
+	// e.g., 2348031110021 -> 08031110021, prefix = 0803
+	normalized := msisdn
+	if len(msisdn) == 13 && msisdn[:3] == "234" {
+		normalized = "0" + msisdn[3:]
+	}
+	prefix := normalized[:4]
 	network := ""
 
 	// MTN prefixes

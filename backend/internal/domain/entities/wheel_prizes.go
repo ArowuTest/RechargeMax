@@ -21,8 +21,9 @@ type WheelPrizes struct {
 	SortOrder          *int       `json:"sort_order" gorm:"column:sort_order"`
 	Description        string     `json:"description" gorm:"column:description"`
 	TermsAndConditions string     `json:"terms_and_conditions" gorm:"column:terms_and_conditions"`
-	CreatedAt          time.Time      `json:"created_at" gorm:"column:created_at;autoCreateTime"`
-	UpdatedAt          time.Time      `json:"updated_at" gorm:"column:updated_at;autoUpdateTime"`
+	FulfilmentMode     string     `json:"fulfilment_mode" gorm:"column:fulfilment_mode;default:MANUAL"` // AUTO or MANUAL prize delivery
+	CreatedAt          time.Time  `json:"created_at" gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt          time.Time  `json:"updated_at" gorm:"column:updated_at;autoUpdateTime"`
 }
 
 // TableName specifies the table name for WheelPrizes

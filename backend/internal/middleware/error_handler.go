@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"log"
 	"net/http"
 	"time"
 
@@ -93,6 +94,9 @@ func RespondWithError(c *gin.Context, err error) {
 		c.JSON(appErr.HTTPStatus, appErr.ToResponse())
 		return
 	}
+	
+	// Log the actual error for debugging
+	log.Printf("[ERROR] Unhandled error on %s %s: %v", c.Request.Method, c.Request.URL.Path, err)
 	
 	// Generic error
 	c.JSON(http.StatusInternalServerError, gin.H{

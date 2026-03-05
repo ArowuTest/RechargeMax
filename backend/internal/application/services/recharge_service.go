@@ -2,6 +2,8 @@ package services
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -9,6 +11,7 @@ import (
 
 	"rechargemax/internal/domain/entities"
 	"rechargemax/internal/domain/repositories"
+	"rechargemax/internal/errors"
 )
 
 // RechargeService handles all recharge-related operations
@@ -98,12 +101,12 @@ func (s *RechargeService) CreateRecharge(ctx context.Context, req CreateRecharge
 	// 3. If validation fails, return error (don't proceed to payment)
 	validationResult, err := s.hlrService.ValidateAndDetectNetwork(ctx, req.MSISDN, req.Network)
 	if err != nil {
-		return nil, fmt.Errorf("network validation failed: %w", err)
+		return nil, errors.BadRequest(fmt.Sprintf("Network validation failed: %s", err.Error()))
 	}
 	
 	// Check if validation passed
 	if !validationResult.IsValid {
-		return nil, fmt.Errorf("network validation failed: %s", validationResult.Message)
+		return nil, errors.BadRequest(fmt.Sprintf("Network validation failed: %s", validationResult.Message))
 	}
 	
 	// Use validated network
@@ -120,9 +123,10 @@ func (s *RechargeService) CreateRecharge(ctx context.Context, req CreateRecharge
 		return nil, fmt.Errorf("failed to get or create user: %w", err)
 	}
 
-	// Generate payment reference and transaction code
-	paymentRef := fmt.Sprintf("RCH_%s_%d", req.MSISDN[len(req.MSISDN)-4:], time.Now().Unix())
-	transactionCode := fmt.Sprintf("TXN_%s_%d", req.MSISDN[len(req.MSISDN)-4:], time.Now().UnixNano()/1000000) // Use milliseconds for uniqueness
+	// Generate payment reference and transaction code (use nanoseconds + UUID suffix for uniqueness)
+	now := time.Now()
+	paymentRef := fmt.Sprintf("RCH_%s_%d%s", req.MSISDN[len(req.MSISDN)-4:], now.UnixNano()/1e6, uuid.New().String()[:6])
+	transactionCode := fmt.Sprintf("TXN_%s_%d", req.MSISDN[len(req.MSISDN)-4:], now.UnixNano()/1000000) // Use milliseconds for uniqueness
 
 	// Create recharge record
 	recharge := &entities.Recharge{
@@ -132,7 +136,7 @@ func (s *RechargeService) CreateRecharge(ctx context.Context, req CreateRecharge
 		Msisdn:          normalizedMSISDN, // Use normalized format for database
 		Amount:          req.Amount,
 		NetworkProvider: network,
-		RechargeType:    req.RechargeType,
+		RechargeType:    strings.ToUpper(req.RechargeType),
 		Status:          "PENDING",
 		PaymentMethod:   req.PaymentMethod,
 		PaymentReference: paymentRef,
@@ -156,7 +160,13 @@ func (s *RechargeService) CreateRecharge(ctx context.Context, req CreateRecharge
 		CallbackURL: fmt.Sprintf("%s/api/v1/payment/callback?reference=%s&gateway=paystack", s.backendURL, paymentRef),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize payment: %w", err)
+		// In development/test mode, use a mock payment URL so recharge flow can be tested
+		appEnv := os.Getenv("APP_ENV")
+		if appEnv == "development" || appEnv == "test" || appEnv == "" {
+			paymentURL = fmt.Sprintf("https://checkout.paystack.com/test_%s", paymentRef)
+		} else {
+			return nil, fmt.Errorf("failed to initialize payment: %w", err)
+		}
 	}
 
 	return &RechargeResponse{
@@ -290,6 +300,37 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 				// Log error but don't fail the recharge
 				fmt.Printf("Failed to create spin opportunity: %v\n", err)
 				// Don't return error - spin opportunity failure shouldn't rollback recharge
+			}
+		}
+
+		// Create draw entries for earned points (1 point = 1 draw entry)
+		// Find the active draw to add entries to
+		if pointsEarned > 0 {
+			var activeDraw entities.Draw
+			drawErr := tx.Where("status = ?", "ACTIVE").First(&activeDraw).Error
+			if drawErr == nil {
+				// Create draw entries for each point earned
+				for i := int64(0); i < pointsEarned; i++ {
+					now := time.Now()
+					entriesCount := 1
+					txID := recharge.ID
+					entry := &entities.DrawEntries{
+						ID:                   uuid.New(),
+						DrawID:               activeDraw.ID,
+						UserID:               &user.ID,
+						Msisdn:               recharge.Msisdn,
+						EntriesCount:         &entriesCount,
+						SourceType:           "TRANSACTION",
+						SourceTransactionID:  &txID,
+						CreatedAt:            &now,
+					}
+					if err := tx.Create(entry).Error; err != nil {
+						fmt.Printf("Warning: Failed to create draw entry: %v\n", err)
+						// Don't fail the recharge for draw entry creation failure
+					}
+				}
+				// Update draw total entries count
+				tx.Model(&activeDraw).UpdateColumn("total_entries", gorm.Expr("total_entries + ?", pointsEarned))
 			}
 		}
 		

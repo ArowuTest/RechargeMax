@@ -5,10 +5,10 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
-
 	"github.com/google/uuid"
-
+	apperrors "rechargemax/internal/errors"
 	"rechargemax/internal/domain/entities"
 	"rechargemax/internal/domain/repositories"
 )
@@ -123,7 +123,7 @@ func (s *AffiliateService) RegisterAffiliate(ctx context.Context, req RegisterAf
 	// Check if user is already an affiliate
 	existingAffiliate, err := s.affiliateRepo.FindByUserID(ctx, user.ID)
 	if err == nil && existingAffiliate != nil {
-		return nil, fmt.Errorf("user is already registered as an affiliate")
+		return nil, apperrors.Conflict("User is already registered as an affiliate")
 	}
 
 	// Generate unique affiliate code
@@ -132,11 +132,14 @@ func (s *AffiliateService) RegisterAffiliate(ctx context.Context, req RegisterAf
 		return nil, fmt.Errorf("failed to generate affiliate code: %w", err)
 	}
 
+	// Generate unique referral code for affiliate (distinct from user referral code)
+	affReferralCode := fmt.Sprintf("AFF%s", strings.ToUpper(uuid.New().String()[:8]))
 	// Create affiliate record
 	affiliate := &entities.Affiliates{
 		ID:             uuid.New(),
 		UserID:         &user.ID,
 		AffiliateCode:  affiliateCode,
+		ReferralCode:   affReferralCode,
 		Status:         "PENDING", // Requires approval
 		Tier:           "BRONZE",
 		CommissionRate: 5.00, // 5% default commission rate

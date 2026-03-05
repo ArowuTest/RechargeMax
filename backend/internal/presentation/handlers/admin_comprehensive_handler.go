@@ -972,11 +972,12 @@ func (h *AdminComprehensiveHandler) CreatePrize(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	var prizeData struct {
-		Name        string  `json:"name" binding:"required"`
-		Type        string  `json:"type" binding:"required"`
-		Value       float64 `json:"value" binding:"required"`
-		Probability float64 `json:"probability" binding:"required"`
-		IsActive    bool    `json:"is_active"`
+		Name           string  `json:"name" binding:"required"`
+		Type           string  `json:"type" binding:"required"`
+		Value          float64 `json:"value" binding:"required"`
+		Probability    float64 `json:"probability" binding:"required"`
+		IsActive       bool    `json:"is_active"`
+		FulfilmentMode string  `json:"fulfilment_mode"` // AUTO or MANUAL
 	}
 
 	if err := c.ShouldBindJSON(&prizeData); err != nil {
@@ -987,14 +988,24 @@ func (h *AdminComprehensiveHandler) CreatePrize(c *gin.Context) {
 		return
 	}
 
+	fulfilmentMode := prizeData.FulfilmentMode
+	if fulfilmentMode == "" {
+		// Default: AUTO for airtime/data, MANUAL for cash/physical/points
+		if prizeData.Type == "AIRTIME" || prizeData.Type == "DATA" {
+			fulfilmentMode = "AUTO"
+		} else {
+			fulfilmentMode = "MANUAL"
+		}
+	}
 	prizeMap := map[string]interface{}{
-		"id":          uuid.New().String(),
-		"name":        prizeData.Name,
-		"type":        prizeData.Type,
-		"value":       prizeData.Value,
-		"probability": prizeData.Probability,
-		"color":       "#FFD700",
-		"is_active":   prizeData.IsActive,
+		"id":              uuid.New().String(),
+		"name":            prizeData.Name,
+		"type":            prizeData.Type,
+		"value":           prizeData.Value,
+		"probability":     prizeData.Probability,
+		"color":           "#FFD700",
+		"is_active":       prizeData.IsActive,
+		"fulfilment_mode": fulfilmentMode,
 	}
 	prize, err := h.spinService.CreatePrize(ctx, prizeMap)
 	if err != nil {
@@ -1027,11 +1038,12 @@ func (h *AdminComprehensiveHandler) UpdatePrize(c *gin.Context) {
 	}
 
 	var updateData struct {
-		Name        *string  `json:"name"`
-		Type        *string  `json:"type"`
-		Value       *float64 `json:"value"`
-		Probability *float64 `json:"probability"`
-		IsActive    *bool    `json:"is_active"`
+		Name           *string  `json:"name"`
+		Type           *string  `json:"type"`
+		Value          *float64 `json:"value"`
+		Probability    *float64 `json:"probability"`
+		IsActive       *bool    `json:"is_active"`
+		FulfilmentMode *string  `json:"fulfilment_mode"` // AUTO or MANUAL
 	}
 
 	if err := c.ShouldBindJSON(&updateData); err != nil {
@@ -1057,6 +1069,9 @@ func (h *AdminComprehensiveHandler) UpdatePrize(c *gin.Context) {
 	}
 	if updateData.IsActive != nil {
 		updateMap["is_active"] = *updateData.IsActive
+	}
+	if updateData.FulfilmentMode != nil {
+		updateMap["fulfilment_mode"] = *updateData.FulfilmentMode
 	}
 	
 	updatedPrize, err := h.spinService.UpdatePrize(ctx, prizeID.String(), updateMap)

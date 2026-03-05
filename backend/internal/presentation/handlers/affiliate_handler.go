@@ -140,6 +140,9 @@ func (h *AffiliateHandler) Register(c *gin.Context) {
 		return
 	}
 
+	// Set MSISDN from JWT context (authenticated user)
+	req.MSISDN = msisdn
+
 	// Validate request
 	if err := req.Validate(); err != nil {
 		middleware.RespondWithValidationError(c, err)

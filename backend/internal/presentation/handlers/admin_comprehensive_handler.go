@@ -1547,9 +1547,68 @@ func (h *AdminComprehensiveHandler) GetAllAffiliates(c *gin.Context) {
 		return
 	}
 
+	// Enrich affiliates with user data (full_name, email, last_activity)
+	type AffiliateResponse struct {
+		ID              string      `json:"id"`
+		UserID          interface{} `json:"user_id"`
+		AffiliateCode   string      `json:"affiliate_code"`
+		ReferralCode    string      `json:"referral_code"`
+		Status          string      `json:"status"`
+		Tier            string      `json:"tier"`
+		CommissionRate  float64     `json:"commission_rate"`
+		TotalReferrals  int         `json:"total_referrals"`
+		ActiveReferrals int         `json:"active_referrals"`
+		TotalCommission float64     `json:"total_commission"`
+		BusinessName    string      `json:"business_name"`
+		WebsiteUrl      string      `json:"website_url"`
+		BankName        string      `json:"bank_name"`
+		AccountNumber   string      `json:"account_number"`
+		AccountName     string      `json:"account_name"`
+		FullName        string      `json:"full_name"`
+		Email           string      `json:"email"`
+		LastActivity    string      `json:"last_activity"`
+		CreatedAt       string      `json:"created_at"`
+		UpdatedAt       string      `json:"updated_at"`
+		ApprovedAt      interface{} `json:"approved_at"`
+	}
+
+	enrichedAffiliates := make([]AffiliateResponse, 0, len(affiliates))
+	for _, aff := range affiliates {
+		ar := AffiliateResponse{
+			ID:              aff.ID.String(),
+			AffiliateCode:   aff.AffiliateCode,
+			ReferralCode:    aff.ReferralCode,
+			Status:          aff.Status,
+			Tier:            aff.Tier,
+			CommissionRate:  aff.CommissionRate,
+			TotalReferrals:  aff.TotalReferrals,
+			ActiveReferrals: aff.ActiveReferrals,
+			TotalCommission: aff.TotalCommission,
+			BusinessName:    aff.BusinessName,
+			WebsiteUrl:      aff.WebsiteUrl,
+			BankName:        aff.BankName,
+			AccountNumber:   aff.AccountNumber,
+			AccountName:     aff.AccountName,
+			CreatedAt:       aff.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			UpdatedAt:       aff.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			LastActivity:    aff.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		}
+		if aff.UserID != nil {
+			ar.UserID = aff.UserID.String()
+		}
+		if aff.ApprovedAt != nil {
+			ar.ApprovedAt = aff.ApprovedAt.Format("2006-01-02T15:04:05Z07:00")
+		}
+		if aff.User != nil {
+			ar.FullName = aff.User.FullName
+			ar.Email = aff.User.Email
+		}
+		enrichedAffiliates = append(enrichedAffiliates, ar)
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"data":    affiliates,
+		"data":    enrichedAffiliates,
 		"pagination": gin.H{
 			"page":     page,
 			"per_page": perPage,

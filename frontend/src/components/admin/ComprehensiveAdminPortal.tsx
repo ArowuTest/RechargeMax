@@ -740,6 +740,20 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
   };
 
   const handleWheelPrizeSave = async (prizeData: any) => {
+    // Validate that total probability will not exceed 100% after this save
+    if (prizeData.is_active !== false) {
+      const otherActivePrizes = wheelPrizes.filter(p => p.is_active && p.id !== editingPrize?.id);
+      const otherTotal = otherActivePrizes.reduce((sum, p) => sum + Number(p.probability), 0);
+      const newTotal = otherTotal + Number(prizeData.probability || 0);
+      if (newTotal > 100.01) {
+        toast({
+          title: "Probability Exceeds 100%",
+          description: `Adding this prize would bring total probability to ${newTotal.toFixed(1)}%. Please reduce other prizes first. Current total from other active prizes: ${otherTotal.toFixed(1)}%.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
     try {
       setActionLoading('prize_save');
       if (editingPrize) {
@@ -1095,24 +1109,191 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
 
           {/* Dashboard */}
           <TabsContent value="dashboard">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="w-6 h-6" />
-                  Platform Analytics Dashboard
-                </CardTitle>
-                <CardDescription>
-                  Overview of platform performance and key metrics
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-8">
-                  <BarChart3 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500">Analytics dashboard</p>
-                  <p className="text-sm text-gray-400">Revenue trends, user growth, and performance metrics</p>
-                </div>
-              </CardContent>
-            </Card>
+            <div className="space-y-6">
+              {/* Key Performance Indicators */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <Card className="border-l-4 border-l-blue-500">
+                  <CardContent className="p-5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Total Registered Users</p>
+                        <p className="text-3xl font-bold text-gray-900 mt-1">{(stats?.total_users || 0).toLocaleString()}</p>
+                        <p className="text-xs text-green-600 mt-1">+{stats?.new_users_today || 0} new today</p>
+                      </div>
+                      <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                        <Users className="w-6 h-6 text-blue-600" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-l-4 border-l-green-500">
+                  <CardContent className="p-5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Total Revenue</p>
+                        <p className="text-3xl font-bold text-gray-900 mt-1">{formatCurrency(stats?.total_revenue || 0)}</p>
+                        <p className="text-xs text-blue-600 mt-1">{(stats?.total_transactions || 0).toLocaleString()} total transactions</p>
+                      </div>
+                      <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                        <DollarSign className="w-6 h-6 text-green-600" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-l-4 border-l-purple-500">
+                  <CardContent className="p-5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Active Affiliates</p>
+                        <p className="text-3xl font-bold text-gray-900 mt-1">{stats?.approved_affiliates || 0}</p>
+                        <p className="text-xs text-yellow-600 mt-1">{stats?.pending_affiliates || 0} pending approval</p>
+                      </div>
+                      <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
+                        <Award className="w-6 h-6 text-purple-600" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-l-4 border-l-yellow-500">
+                  <CardContent className="p-5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Commissions Paid</p>
+                        <p className="text-3xl font-bold text-gray-900 mt-1">{formatCurrency(stats?.total_commissions || 0)}</p>
+                        <p className="text-xs text-purple-600 mt-1">{stats?.total_prizes || 0} prizes won</p>
+                      </div>
+                      <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
+                        <TrendingUp className="w-6 h-6 text-yellow-600" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-l-4 border-l-indigo-500">
+                  <CardContent className="p-5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Today's Transactions</p>
+                        <p className="text-3xl font-bold text-gray-900 mt-1">{(stats?.transactions_today || 0).toLocaleString()}</p>
+                        <p className="text-xs text-gray-500 mt-1">Recharges processed today</p>
+                      </div>
+                      <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center">
+                        <Smartphone className="w-6 h-6 text-indigo-600" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-l-4 border-l-red-500">
+                  <CardContent className="p-5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Spin Prizes Available</p>
+                        <p className="text-3xl font-bold text-gray-900 mt-1">{wheelPrizes.filter(p => p.is_active).length}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {wheelPrizes.length > 0 ? (() => {
+                            const v = validatePrizeProbabilities(wheelPrizes);
+                            return v.isValid
+                              ? <span className="text-green-600">Probability: {v.total.toFixed(1)}% ✓</span>
+                              : <span className="text-red-600">⚠ Probability: {v.total.toFixed(1)}%</span>;
+                          })() : 'No prizes configured'}
+                        </p>
+                      </div>
+                      <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                        <Gift className="w-6 h-6 text-red-600" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Platform Overview Table */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5" />
+                    Platform Overview
+                  </CardTitle>
+                  <CardDescription>Summary of key platform metrics and configuration status</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-3">
+                      <h4 className="font-semibold text-sm text-gray-700 uppercase tracking-wide">User Metrics</h4>
+                      <div className="space-y-2">
+                        {[
+                          { label: 'Total Users', value: (stats?.total_users || 0).toLocaleString() },
+                          { label: 'New Users Today', value: (stats?.new_users_today || 0).toLocaleString() },
+                          { label: 'Total Transactions', value: (stats?.total_transactions || 0).toLocaleString() },
+                          { label: 'Transactions Today', value: (stats?.transactions_today || 0).toLocaleString() },
+                        ].map(item => (
+                          <div key={item.label} className="flex justify-between items-center py-1 border-b border-gray-100">
+                            <span className="text-sm text-gray-600">{item.label}</span>
+                            <span className="text-sm font-semibold">{item.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      <h4 className="font-semibold text-sm text-gray-700 uppercase tracking-wide">Financial Metrics</h4>
+                      <div className="space-y-2">
+                        {[
+                          { label: 'Total Revenue', value: formatCurrency(stats?.total_revenue || 0) },
+                          { label: 'Total Commissions', value: formatCurrency(stats?.total_commissions || 0) },
+                          { label: 'Total Affiliates', value: (stats?.total_affiliates || 0).toLocaleString() },
+                          { label: 'Pending Affiliates', value: (stats?.pending_affiliates || 0).toLocaleString() },
+                        ].map(item => (
+                          <div key={item.label} className="flex justify-between items-center py-1 border-b border-gray-100">
+                            <span className="text-sm text-gray-600">{item.label}</span>
+                            <span className="text-sm font-semibold">{item.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Recent Users Preview */}
+              {users.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Users className="w-5 h-5" />
+                      Recent Users
+                    </CardTitle>
+                    <CardDescription>Last 5 registered users on the platform</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>User</TableHead>
+                          <TableHead>Phone</TableHead>
+                          <TableHead>Tier</TableHead>
+                          <TableHead>Points</TableHead>
+                          <TableHead>Joined</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {users.slice(0, 5).map((u: any) => (
+                          <TableRow key={u.id}>
+                            <TableCell className="font-medium">{u.full_name || u.first_name || 'N/A'}</TableCell>
+                            <TableCell>{u.msisdn}</TableCell>
+                            <TableCell><Badge variant="outline">{u.loyalty_tier || 'BRONZE'}</Badge></TableCell>
+                            <TableCell>{(u.total_points || 0).toLocaleString()}</TableCell>
+                            <TableCell>{formatDate(u.created_at)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           </TabsContent>
 
           {/* System Monitoring */}
@@ -1697,7 +1878,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
                         <TableRow key={user.id}>
                           <TableCell>
                             <div>
-                              <div className="font-medium">{[user.first_name, user.last_name].filter(Boolean).join(' ') || user.full_name || 'N/A'}</div>
+                              <div className="font-medium">{[user.first_name, user.last_name].filter(Boolean).join(' ') || user.full_name || `User ${user.msisdn?.slice(-4) || ''}`}</div>
                               <div className="text-sm text-gray-500">{user.email || 'No email'}</div>
                             </div>
                           </TableCell>

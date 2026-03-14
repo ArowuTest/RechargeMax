@@ -132,9 +132,21 @@ func (h *SpinHandler) PlaySpin(c *gin.Context) {
 // @Failure 500 {object} errors.ErrorResponse
 // @Router /spin/history [get]
 func (h *SpinHandler) GetHistory(c *gin.Context) {
+	// Support both authenticated users (JWT) and guest users (query param)
+	// OptionalAuthMiddleware sets msisdn in context if JWT is present
 	msisdn := c.GetString("msisdn")
 	if msisdn == "" {
-		middleware.RespondWithError(c, errors.Unauthorized("User not authenticated"))
+		// Fall back to msisdn query parameter for guest access
+		msisdn = c.Query("msisdn")
+		if msisdn != "" {
+			// Normalise MSISDN from query param
+			if normalized, err := validation.NormalizeMSISDN(msisdn); err == nil {
+				msisdn = normalized
+			}
+		}
+	}
+	if msisdn == "" {
+		middleware.RespondWithError(c, errors.BadRequest("MSISDN required: provide via Authorization header or msisdn query parameter"))
 		return
 	}
 
@@ -236,4 +248,24 @@ func (h *SpinHandler) GetTierProgress(c *gin.Context) {
 	}
 
 	middleware.RespondWithSuccess(c, progress)
+}
+
+// GetPrizes godoc
+// @Summary Get all spin prizes
+// @Description Get all available spin prizes (public endpoint)
+// @Tags spin
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Failure 500 {object} errors.ErrorResponse
+// @Router /spin/prizes [get]
+func (h *SpinHandler) GetPrizes(c *gin.Context) {
+	prizes, err := h.spinService.GetAllPrizes(c.Request.Context())
+	if err != nil {
+		middleware.RespondWithError(c, err)
+		return
+	}
+
+	middleware.RespondWithSuccess(c, map[string]interface{}{
+		"data": prizes,
+	})
 }

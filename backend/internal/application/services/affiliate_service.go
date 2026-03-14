@@ -11,6 +11,7 @@ import (
 
 	"rechargemax/internal/domain/entities"
 	"rechargemax/internal/domain/repositories"
+	"rechargemax/internal/errors"
 )
 
 // AffiliateService handles affiliate operations
@@ -123,7 +124,7 @@ func (s *AffiliateService) RegisterAffiliate(ctx context.Context, req RegisterAf
 	// Check if user is already an affiliate
 	existingAffiliate, err := s.affiliateRepo.FindByUserID(ctx, user.ID)
 	if err == nil && existingAffiliate != nil {
-		return nil, fmt.Errorf("user is already registered as an affiliate")
+		return nil, errors.Conflict("You are already registered as an affiliate")
 	}
 
 	// Generate unique affiliate code

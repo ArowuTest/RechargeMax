@@ -150,7 +150,7 @@ func (s *SpinService) PlaySpin(ctx context.Context, msisdn string) (*SpinResultR
 				"error": txErr.Error(),
 				"msisdn": msisdn,
 			})
-			return nil, fmt.Errorf("not eligible to spin: No qualifying recharges found. Recharge ₦1000+ to earn a spin!")
+			return nil, errors.BadRequest("Not eligible to spin: No qualifying recharges found. Recharge ₦1000+ to earn a spin!")
 		}
 		
 		errors.Info("Found qualifying transaction", map[string]interface{}{
@@ -189,17 +189,17 @@ func (s *SpinService) PlaySpin(ctx context.Context, msisdn string) (*SpinResultR
 	// Check eligibility (now protected by lock)
 	eligibility, err := s.CheckEligibility(ctx, msisdn)
 if err != nil {
-return nil, fmt.Errorf("failed to check eligibility: %w", err)
+	return nil, fmt.Errorf("failed to check eligibility: %w", err)
 }
 
 if !eligibility.Eligible {
-return nil, fmt.Errorf("not eligible to spin: %s", eligibility.Message)
+	return nil, errors.BadRequest(fmt.Sprintf("Not eligible to spin: %s", eligibility.Message))
 }
 
 // Get all active prizes
 prizes, err := s.prizeRepo.FindActive(ctx)
 if err != nil || len(prizes) == 0 {
-return nil, fmt.Errorf("no prizes available")
+	return nil, errors.BadRequest("No prizes available for spinning")
 }
 
 	// Select a random prize based on probability

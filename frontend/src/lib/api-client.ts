@@ -57,10 +57,19 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     if (error.response?.status === 401) {
-      // Unauthorized - clear token and redirect to login
-      localStorage.removeItem('rechargemax_token');
-      localStorage.removeItem('rechargemax_user');
-      window.location.href = '/#/login';
+      const requestUrl = (error.config as any)?.url || '';
+      const isAdminRoute = requestUrl.includes('/admin/');
+      if (isAdminRoute) {
+        // Admin token expired — clear admin session and redirect to admin login
+        localStorage.removeItem('rechargemax_admin_token');
+        localStorage.removeItem('rechargemax_admin_user');
+        window.location.href = '/#/admin/login';
+      } else {
+        // User token expired — clear user session and redirect to user login
+        localStorage.removeItem('rechargemax_token');
+        localStorage.removeItem('rechargemax_user');
+        window.location.href = '/#/login';
+      }
     }
     return Promise.reject(error);
   }
@@ -320,6 +329,12 @@ export const subscriptionApi = {
   // Get subscription history
   getHistory: async () => {
     const response = await apiClient.get<ApiResponse<any[]>>('/subscription/history');
+    return response.data;
+  },
+
+  // Get public subscription config (pricing)
+  getConfig: async () => {
+    const response = await apiClient.get<ApiResponse>('/subscription/config');
     return response.data;
   },
 };

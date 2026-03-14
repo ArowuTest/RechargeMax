@@ -38,6 +38,7 @@ func (r *affiliateRepositoryGORM) FindByID(ctx context.Context, id uuid.UUID) (*
 func (r *affiliateRepositoryGORM) FindAll(ctx context.Context, limit, offset int) ([]*entities.Affiliates, error) {
 	var entities []*entities.Affiliates
 	err := r.db.WithContext(ctx).
+		Preload("User").
 		Limit(limit).
 		Offset(offset).
 		Order("created_at DESC").
@@ -90,8 +91,8 @@ func (r *affiliateRepositoryGORM) FindByAffiliateCode(ctx context.Context, code 
 func (r *affiliateRepositoryGORM) FindByMSISDN(ctx context.Context, msisdn string) (*entities.Affiliates, error) {
 	var affiliate entities.Affiliates
 	err := r.db.WithContext(ctx).
-		Joins("JOIN users_2026_01_30_14_00 ON users_2026_01_30_14_00.id = affiliates_2026_01_30_14_00.user_id").
-		Where("users_2026_01_30_14_00.msisdn = ?", msisdn).
+		Joins("JOIN users ON users.id = affiliates.user_id").
+		Where("users.msisdn = ?", msisdn).
 		First(&affiliate).Error
 	if err != nil {
 		return nil, err
@@ -103,8 +104,8 @@ func (r *affiliateRepositoryGORM) FindByMSISDN(ctx context.Context, msisdn strin
 func (r *affiliateRepositoryGORM) FindByEmail(ctx context.Context, email string) (*entities.Affiliates, error) {
 	var affiliate entities.Affiliates
 	err := r.db.WithContext(ctx).
-		Joins("JOIN users_2026_01_30_14_00 ON users_2026_01_30_14_00.id = affiliates_2026_01_30_14_00.user_id").
-		Where("users_2026_01_30_14_00.email = ?", email).
+		Joins("JOIN users ON users.id = affiliates.user_id").
+		Where("users.email = ?", email).
 		First(&affiliate).Error
 	if err != nil {
 		return nil, err

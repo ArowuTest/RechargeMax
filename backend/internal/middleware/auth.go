@@ -133,19 +133,29 @@ func AdminAuthMiddleware(authService interface{}) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		// Admin tokens use admin_id claim; fall back to user_id for compatibility
-		adminID := claims.AdminID
-		if adminID == "" {
-			adminID = claims.UserID
-		}
-		if adminID == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"success": false,
-				"message": "Invalid admin token: missing admin ID",
-			})
-			c.Abort()
-			return
-		}
+			// Verify this is an admin token (type must be "admin")
+			// Regular user tokens must not be accepted on admin endpoints — return 403 Forbidden
+			if claims.Type != "admin" {
+				c.JSON(http.StatusForbidden, gin.H{
+					"success": false,
+					"message": "Access denied: admin privileges required",
+				})
+				c.Abort()
+				return
+			}
+			// Admin tokens use admin_id claim; fall back to user_id for compatibility
+			adminID := claims.AdminID
+			if adminID == "" {
+				adminID = claims.UserID
+			}
+			if adminID == "" {
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"success": false,
+					"message": "Invalid admin token: missing admin ID",
+				})
+				c.Abort()
+				return
+			}
 		// Set full admin context for all handlers
 		c.Set("admin_id", adminID)
 		c.Set("admin_token", tokenString)

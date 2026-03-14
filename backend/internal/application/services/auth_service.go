@@ -111,13 +111,13 @@ func (s *AuthService) VerifyOTP(ctx context.Context, msisdn, code, purpose strin
 	// Normalize MSISDN to format 234XXXXXXXXXX
 	normalizedMSISDN, err := validation.NormalizeMSISDN(msisdn)
 	if err != nil {
-		return "", nil, false, fmt.Errorf("invalid phone number format: %w", err)
+		return "", nil, false, errors.BadRequest("Invalid phone number format: " + err.Error())
 	}
 	
 	// Find valid OTP with matching purpose (using normalised MSISDN — same as stored in SendOTP)
 	otp, err := s.otpRepo.FindValidOTPWithPurpose(ctx, normalizedMSISDN, code, purpose)
 	if err != nil {
-		return "", nil, false, fmt.Errorf("invalid or expired OTP")
+		return "", nil, false, errors.Unauthorized("Invalid or expired OTP")
 	}
 
 	// Mark OTP as used

@@ -98,7 +98,7 @@ func (h *RechargeHandler) InitiateAirtimeRecharge(c *gin.Context) {
 		middleware.RespondWithError(c, errors.BadRequest("Invalid request format"))
 		return
 	}
-	fmt.Printf("[DEBUG] Request parsed: phone=%s, network=%s, amount=%d\n", req.PhoneNumber, req.Network, req.Amount)
+	fmt.Printf("[DEBUG] Request parsed: phone=%s, network=%s, amount=%.2f\n", req.PhoneNumber, req.Network, req.Amount)
 
 	// Validate request
 	if err := req.Validate(); err != nil {

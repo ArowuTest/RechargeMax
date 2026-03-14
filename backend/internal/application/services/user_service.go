@@ -33,16 +33,19 @@ type UpdateProfileRequest struct {
 
 // UserProfile represents user profile data
 type UserProfile struct {
-	ID          uuid.UUID  `json:"id"`
-	MSISDN      string     `json:"msisdn"`
-	FirstName   string     `json:"first_name"`
-	LastName    string     `json:"last_name"`
-	Email       string     `json:"email"`
-	LoyaltyTier string     `json:"loyalty_tier"`
-	TotalPoints int64      `json:"total_points"`
-	IsActive    bool       `json:"is_active"`
-	LastLoginAt *time.Time `json:"last_login_at"`
-	CreatedAt   time.Time  `json:"created_at"`
+	ID           uuid.UUID  `json:"id"`
+	MSISDN       string     `json:"msisdn"`
+	FirstName    string     `json:"first_name"`
+	LastName      string     `json:"last_name"`
+	Email        string     `json:"email"`
+	LoyaltyTier  string     `json:"loyalty_tier"`
+	TotalPoints  int64      `json:"total_points"`
+	IsActive     bool       `json:"is_active"`
+	LastLoginAt  *time.Time `json:"last_login_at"`
+	CreatedAt    time.Time  `json:"created_at"`
+	ReferralCode string     `json:"referral_code"`
+	UserCode     string     `json:"user_code"`
+	FullName     string     `json:"full_name"`
 }
 
 // UserSummaryResponse represents user summary data
@@ -153,16 +156,19 @@ func (s *UserService) GetUserProfile(ctx context.Context, msisdn string) (*UserP
 	}
 
 	return &UserProfile{
-		ID:          user.ID,
-		MSISDN:      user.MSISDN,
-		FirstName:   user.FullName,
-		LastName:    "",
-		Email:       user.Email,
-		LoyaltyTier: user.LoyaltyTier,
-		TotalPoints: int64(user.TotalPoints),
-		IsActive:    user.IsActive,
-		LastLoginAt: user.LastLoginAt,
-		CreatedAt:   user.CreatedAt,
+		ID:           user.ID,
+		MSISDN:       user.MSISDN,
+		FirstName:    user.FullName,
+		LastName:     "",
+		FullName:     user.FullName,
+		Email:        user.Email,
+		LoyaltyTier:  user.LoyaltyTier,
+		TotalPoints:  int64(user.TotalPoints),
+		IsActive:     user.IsActive,
+		LastLoginAt:  user.LastLoginAt,
+		CreatedAt:    user.CreatedAt,
+		ReferralCode: user.ReferralCode,
+		UserCode:     user.UserCode,
 	}, nil
 }
 
@@ -195,16 +201,19 @@ func (s *UserService) UpdateUserProfile(ctx context.Context, msisdn string, req 
 	}
 
 	return &UserProfile{
-		ID:          user.ID,
-		MSISDN:      user.MSISDN,
-		FirstName:   user.FullName,
-		LastName:    "",
-		Email:       user.Email,
-		LoyaltyTier: user.LoyaltyTier,
-		TotalPoints: int64(user.TotalPoints),
-		IsActive:    user.IsActive,
-		LastLoginAt: user.LastLoginAt,
-		CreatedAt:   user.CreatedAt,
+		ID:           user.ID,
+		MSISDN:       user.MSISDN,
+		FirstName:    user.FullName,
+		LastName:     "",
+		FullName:     user.FullName,
+		Email:        user.Email,
+		LoyaltyTier:  user.LoyaltyTier,
+		TotalPoints:  int64(user.TotalPoints),
+		IsActive:     user.IsActive,
+		LastLoginAt:  user.LastLoginAt,
+		CreatedAt:    user.CreatedAt,
+		ReferralCode: user.ReferralCode,
+		UserCode:     user.UserCode,
 	}, nil
 }
 
@@ -288,16 +297,19 @@ func (s *UserService) GetDashboard(ctx context.Context, msisdn string) (*Dashboa
 
 		return &DashboardResponse{
 			User: &UserProfile{
-				ID:          user.ID,
-				MSISDN:      user.MSISDN,
-				FirstName:   user.FullName,
-				LastName:    "",
-				Email:       user.Email,
-				LoyaltyTier: user.LoyaltyTier,
-				TotalPoints: int64(user.TotalPoints),
-				IsActive:    user.IsActive,
-				LastLoginAt: user.LastLoginAt,
-				CreatedAt:   user.CreatedAt,
+				ID:           user.ID,
+				MSISDN:       user.MSISDN,
+				FirstName:    user.FullName,
+				LastName:     "",
+				FullName:     user.FullName,
+				Email:        user.Email,
+				LoyaltyTier:  user.LoyaltyTier,
+				TotalPoints:  int64(user.TotalPoints),
+				IsActive:     user.IsActive,
+				LastLoginAt:  user.LastLoginAt,
+				CreatedAt:    user.CreatedAt,
+				ReferralCode: user.ReferralCode,
+				UserCode:     user.UserCode,
 			},
 			Stats:              stats,
 			Summary:            summary,
@@ -320,7 +332,7 @@ func (s *UserService) getRecentActivity(ctx context.Context, userID uuid.UUID) (
 		for _, r := range recharges {
 			activities = append(activities, ActivityItem{
 				Type:        "recharge",
-				Description: fmt.Sprintf("Recharged %s", r.DataPlan),
+				Description: fmt.Sprintf("Recharged %s %s", r.NetworkProvider, r.RechargeType),
 				Amount:      int64(r.Amount),
 				Points:      int64(r.PointsEarned),
 				CreatedAt:   r.CreatedAt,
@@ -598,16 +610,19 @@ func (s *UserService) GetAllUsers(ctx context.Context, page, perPage int) ([]*Us
 	var profiles []*UserProfile
 	for _, user := range users {
 		profiles = append(profiles, &UserProfile{
-			ID:          user.ID,
-			MSISDN:      user.MSISDN,
-			FirstName:   user.FullName, // Note: Users entity has FullName, not FirstName/LastName
-			LastName:    "",
-			Email:       user.Email,
-			LoyaltyTier: user.LoyaltyTier,
-			TotalPoints: int64(user.TotalPoints),
-			IsActive:    user.IsActive,
-			LastLoginAt: user.LastLoginAt,
-			CreatedAt:   user.CreatedAt,
+			ID:           user.ID,
+			MSISDN:       user.MSISDN,
+			FirstName:    user.FullName,
+			LastName:     "",
+			FullName:     user.FullName,
+			Email:        user.Email,
+			LoyaltyTier:  user.LoyaltyTier,
+			TotalPoints:  int64(user.TotalPoints),
+			IsActive:     user.IsActive,
+			LastLoginAt:  user.LastLoginAt,
+			CreatedAt:    user.CreatedAt,
+			ReferralCode: user.ReferralCode,
+			UserCode:     user.UserCode,
 		})
 	}
 	

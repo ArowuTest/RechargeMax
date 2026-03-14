@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"fmt"
+
 	"github.com/gin-gonic/gin"
 
 	"rechargemax/internal/application/services"
@@ -160,6 +162,11 @@ func (h *AffiliateHandler) Register(c *gin.Context) {
 		return
 	}
 
+	// Set MSISDN from JWT context if not provided in body
+	if req.MSISDN == "" {
+		req.MSISDN = msisdn
+	}
+
 	// Validate request
 	if err := req.Validate(); err != nil {
 		middleware.RespondWithValidationError(c, err)
@@ -176,6 +183,7 @@ func (h *AffiliateHandler) Register(c *gin.Context) {
 
 	affiliate, err := h.affiliateService.RegisterAffiliate(c.Request.Context(), affiliateReq)
 	if err != nil {
+		fmt.Printf("[AFFILIATE REGISTER ERROR] %v\n", err)
 		middleware.RespondWithError(c, err)
 		return
 	}
@@ -205,13 +213,31 @@ func (h *AffiliateHandler) GetDashboard(c *gin.Context) {
 		return
 	}
 
-	dashboard, err := h.affiliateService.GetAffiliateDashboard(c.Request.Context(), msisdn)
+	// Check if user is an affiliate
+	affiliate, err := h.affiliateService.GetAffiliateByMSISDN(c.Request.Context(), msisdn)
 	if err != nil {
-		middleware.RespondWithError(c, err)
+		// User is not an affiliate
+		middleware.RespondWithSuccess(c, map[string]interface{}{
+			"is_affiliate": false,
+		})
 		return
 	}
 
-	middleware.RespondWithSuccess(c, dashboard)
+	// Get stats
+	stats, err := h.affiliateService.GetAffiliateStats(c.Request.Context(), msisdn)
+	if err != nil {
+		stats = nil
+	}
+
+	// Build response in format the frontend expects
+	response := map[string]interface{}{
+		"is_affiliate": true,
+		"affiliate": affiliate,
+		"statistics":  stats,
+		"bank_accounts": []interface{}{},
+		"referral_link": affiliate.ReferralLink,
+	}
+	middleware.RespondWithSuccess(c, response)
 }
 
 // GetReferralLink godoc

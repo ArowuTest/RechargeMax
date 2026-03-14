@@ -670,6 +670,9 @@ func setupRouter(hdlrs *Handlers, svcs *Services) *gin.Engine {
 				winners.GET("/recent", hdlrs.Platform.GetRecentWinners)
 			}
 
+			// Subscription config route (public - for displaying pricing)
+			v1.GET("/subscription/config", hdlrs.Subscription.GetConfig)
+
 			// Draws routes (public)
 			draws := v1.Group("/draws")
 			{
@@ -686,6 +689,7 @@ func setupRouter(hdlrs *Handlers, svcs *Services) *gin.Engine {
 				spin.POST("/play", hdlrs.Spin.PlaySpin) // Guest & auth spin support
 				spin.GET("/eligibility", hdlrs.Spin.CheckEligibility) // Check spin eligibility
 				spin.GET("/history", hdlrs.Spin.GetHistory) // Spin history
+				spin.GET("/prizes", hdlrs.Spin.GetPrizes) // Public prizes list
 			}
 
 			// Spin tiers routes (public - for displaying prizes and progress)
@@ -737,14 +741,20 @@ func setupRouter(hdlrs *Handlers, svcs *Services) *gin.Engine {
 			// Note: Spin routes moved to public section above to support guest spins
 			// /spin/play, /spin/eligibility, /spin/history are all public
 
-			// Affiliate routes
-			affiliate := protected.Group("/affiliate")
-			{
-				affiliate.GET("/code", hdlrs.Affiliate.GetReferralCode)
-				affiliate.GET("/stats", hdlrs.Affiliate.GetStats)
-				affiliate.GET("/referrals", hdlrs.Affiliate.GetReferrals)
-				// Note: Earnings data available via dashboard and referrals endpoints
-			}
+				// Affiliate routes
+				affiliate := protected.Group("/affiliate")
+				{
+					affiliate.GET("/code", hdlrs.Affiliate.GetReferralCode)
+					affiliate.GET("/stats", hdlrs.Affiliate.GetStats)
+					affiliate.GET("/referrals", hdlrs.Affiliate.GetReferrals)
+					affiliate.GET("/dashboard", hdlrs.Affiliate.GetDashboard)
+					affiliate.POST("/register", hdlrs.Affiliate.Register)
+					affiliate.GET("/referral-link", hdlrs.Affiliate.GetReferralCode) // Referral link alias
+					affiliate.GET("/link", hdlrs.Affiliate.GetReferralLink)           // Referral link with full URL
+					affiliate.GET("/commissions", hdlrs.Affiliate.GetCommissions)     // Commission history
+					affiliate.GET("/earnings", hdlrs.Affiliate.GetEarnings)           // Earnings summary
+					affiliate.POST("/payout", hdlrs.Affiliate.RequestPayout)          // Request payout
+				}
 
 			// Winner routes
 			winner := protected.Group("/winner")

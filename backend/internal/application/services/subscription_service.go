@@ -3,12 +3,14 @@ package services
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
 	"rechargemax/internal/domain/entities"
 	"rechargemax/internal/domain/repositories"
+	"rechargemax/internal/errors"
 )
 
 // SubscriptionService handles subscription operations
@@ -80,11 +82,11 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 			fmt.Printf("[DEBUG] FindByUserID error: %v\n", err)
 		} else {
 			// Check if any subscription is active
-			for _, sub := range existingSubs {
-				if sub.Status == "active" {
-					return nil, fmt.Errorf("user already has an active subscription")
+				for _, sub := range existingSubs {
+					if sub.Status == "active" {
+						return nil, errors.Conflict("You already have an active subscription for today")
+					}
 				}
-			}
 		}
 	}
 
@@ -105,6 +107,10 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 
 	if err := s.subscriptionRepo.Create(ctx, subscription); err != nil {
 		fmt.Printf("[DEBUG] Subscription create error: %v\n", err)
+		// Check for unique constraint violation (duplicate subscription for today)
+		if strings.Contains(err.Error(), "23505") || strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
+			return nil, errors.Conflict("You already have a subscription for today")
+		}
 		return nil, fmt.Errorf("failed to create subscription: %w", err)
 	}
 
@@ -215,7 +221,7 @@ func (s *SubscriptionService) CancelSubscription(ctx context.Context, msisdn str
 	}
 
 	// No active subscription found
-	return fmt.Errorf("no active subscription to cancel")
+	return errors.NotFound("active subscription")
 }
 
 // GetSubscriptionHistory retrieves subscription history for a user
@@ -359,9 +365,9 @@ func (s *SubscriptionService) GetAllSubscriptions(ctx context.Context, page, per
 // GetConfig returns subscription configuration
 func (s *SubscriptionService) GetConfig(ctx context.Context) (map[string]interface{}, error) {
 	config := map[string]interface{}{
-		"daily_price":         20000, // ₦200 in kobo
-		"weekly_price":        100000, // ₦1000 in kobo
-		"monthly_price":       300000, // ₦3000 in kobo
+		"daily_price":         2000, // ₦20 in kobo
+		"weekly_price":        10000, // ₦100 in kobo
+		"monthly_price":       30000, // ₦300 in kobo
 		"daily_spins":         3,
 		"weekly_spins":        25,
 		"monthly_spins":       100,

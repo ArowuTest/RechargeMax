@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"github.com/gin-gonic/gin"
 	
 	"rechargemax/internal/application/services"
@@ -56,6 +57,7 @@ func (h *SubscriptionHandler) CreateSubscription(c *gin.Context) {
 	})
 
 	if err != nil {
+		fmt.Printf("[ERROR] CreateSubscription failed for MSISDN %s: %v\n", msisdn, err)
 		middleware.RespondWithError(c, err)
 		return
 	}
@@ -142,6 +144,22 @@ func (h *SubscriptionHandler) CancelSubscription(c *gin.Context) {
 	middleware.RespondWithSuccess(c, map[string]interface{}{
 		"message": "Subscription cancelled successfully",
 	})
+}
+
+// GetConfig godoc
+// @Summary Get subscription configuration
+// @Description Get public subscription pricing and configuration
+// @Tags subscription
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /subscription/config [get]
+func (h *SubscriptionHandler) GetConfig(c *gin.Context) {
+	config, err := h.subscriptionService.GetConfig(c.Request.Context())
+	if err != nil {
+		middleware.RespondWithError(c, errors.Internal("Failed to fetch subscription config"))
+		return
+	}
+	middleware.RespondWithSuccess(c, config)
 }
 
 // Subscribe godoc

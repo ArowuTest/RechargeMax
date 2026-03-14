@@ -2,6 +2,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -9,6 +10,7 @@ import (
 
 	"rechargemax/internal/domain/entities"
 	"rechargemax/internal/domain/repositories"
+	"rechargemax/internal/errors"
 )
 
 // RechargeService handles all recharge-related operations
@@ -98,12 +100,12 @@ func (s *RechargeService) CreateRecharge(ctx context.Context, req CreateRecharge
 	// 3. If validation fails, return error (don't proceed to payment)
 	validationResult, err := s.hlrService.ValidateAndDetectNetwork(ctx, req.MSISDN, req.Network)
 	if err != nil {
-		return nil, fmt.Errorf("network validation failed: %w", err)
+		return nil, errors.BadRequest("Network validation failed: " + err.Error())
 	}
 	
 	// Check if validation passed
 	if !validationResult.IsValid {
-		return nil, fmt.Errorf("network validation failed: %s", validationResult.Message)
+		return nil, errors.BadRequest("Network mismatch: " + validationResult.Message)
 	}
 	
 	// Use validated network
@@ -121,7 +123,7 @@ func (s *RechargeService) CreateRecharge(ctx context.Context, req CreateRecharge
 	}
 
 	// Generate payment reference and transaction code
-	paymentRef := fmt.Sprintf("RCH_%s_%d", req.MSISDN[len(req.MSISDN)-4:], time.Now().Unix())
+	paymentRef := fmt.Sprintf("RCH_%s_%s", req.MSISDN[len(req.MSISDN)-4:], uuid.New().String()[:8]) // Use UUID for guaranteed uniqueness
 	transactionCode := fmt.Sprintf("TXN_%s_%d", req.MSISDN[len(req.MSISDN)-4:], time.Now().UnixNano()/1000000) // Use milliseconds for uniqueness
 
 	// Create recharge record
@@ -132,7 +134,7 @@ func (s *RechargeService) CreateRecharge(ctx context.Context, req CreateRecharge
 		Msisdn:          normalizedMSISDN, // Use normalized format for database
 		Amount:          req.Amount,
 		NetworkProvider: network,
-		RechargeType:    req.RechargeType,
+		RechargeType:    strings.ToUpper(req.RechargeType), // DB constraint requires uppercase (AIRTIME/DATA)
 		Status:          "PENDING",
 		PaymentMethod:   req.PaymentMethod,
 		PaymentReference: paymentRef,

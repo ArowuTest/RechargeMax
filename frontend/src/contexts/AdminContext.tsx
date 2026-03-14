@@ -36,15 +36,36 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing admin session
-    const checkAdminSession = () => {
+    // Check for existing admin session and validate the token with the backend
+    const checkAdminSession = async () => {
       try {
         const storedAdmin = localStorage.getItem('rechargemax_admin_user');
         const storedToken = localStorage.getItem('rechargemax_admin_token');
+
         if (storedAdmin && storedToken) {
-          const adminData = JSON.parse(storedAdmin);
-          setAdminUser(adminData);
-          setSessionToken(storedToken);
+          // Validate token with backend to ensure it hasn't expired
+          const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+          try {
+            const res = await fetch(`${apiBaseUrl}/admin/dashboard`, {
+              headers: { Authorization: `Bearer ${storedToken}` },
+            });
+
+            if (res.ok) {
+              // Token is valid — restore session
+              const adminData = JSON.parse(storedAdmin);
+              setAdminUser(adminData);
+              setSessionToken(storedToken);
+            } else {
+              // Token expired or invalid — clear stale session
+              localStorage.removeItem('rechargemax_admin_user');
+              localStorage.removeItem('rechargemax_admin_token');
+            }
+          } catch {
+            // Network error — restore session optimistically to avoid locking out admins
+            const adminData = JSON.parse(storedAdmin);
+            setAdminUser(adminData);
+            setSessionToken(storedToken);
+          }
         }
       } catch (error) {
         console.error('Error checking admin session:', error);
@@ -70,9 +91,9 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({ children }) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          email: credentials.email || credentials.username, // accept either email or username
-          password: credentials.password
-        })
+          email: credentials.email || credentials.username,
+          password: credentials.password,
+        }),
       });
 
       const data = await response.json();
@@ -80,7 +101,7 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({ children }) => {
       if (data.success && data.token) {
         // Store token
         localStorage.setItem('rechargemax_admin_token', data.token);
-        
+
         // Store admin user data
         const adminData: AdminUser = {
           id: data.admin.id,
@@ -89,7 +110,7 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({ children }) => {
           role: data.admin.role.toLowerCase() as 'super_admin' | 'admin' | 'moderator',
           permissions: data.admin.permissions || [],
           last_login: new Date().toISOString(),
-          created_at: data.admin.created_at
+          created_at: data.admin.created_at,
         };
 
         setAdminUser(adminData);
@@ -122,16 +143,16 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({ children }) => {
 
   const value: AdminContextType = {
     adminUser,
-    admin: adminUser,  // Alias for compatibility
+    admin: adminUser,
     isAdminAuthenticated: !!adminUser,
-    isAuthenticated: !!adminUser,  // Alias for compatibility
+    isAuthenticated: !!adminUser,
     sessionToken,
     adminLogin,
-    login: (username: string, password: string) => adminLogin({ username, password }),  // Alias for compatibility
+    login: (username: string, password: string) => adminLogin({ username, password }),
     adminLogout,
-    logout: adminLogout,  // Alias for compatibility
+    logout: adminLogout,
     hasPermission,
-    isLoading
+    isLoading,
   };
 
   return (

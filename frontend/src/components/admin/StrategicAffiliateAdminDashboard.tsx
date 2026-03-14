@@ -271,8 +271,11 @@ const StrategicAffiliateAdminDashboard: React.FC<StrategicAffiliateAdminDashboar
     }).format(amount);
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return 'N/A';
+    const d = new Date(dateString);
+    if (isNaN(d.getTime())) return 'N/A';
+    return d.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'

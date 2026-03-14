@@ -91,6 +91,7 @@ export const AffiliatePage: React.FC = () => {
 
   // Fetch affiliate data for authenticated users
   useEffect(() => {
+    console.log('[AffiliatePage] useEffect: isAuthenticated=', isAuthenticated, 'user?.msisdn=', user?.msisdn);
     if (isAuthenticated && user?.msisdn) {
       fetchAffiliateData();
     } else {
@@ -105,13 +106,22 @@ export const AffiliatePage: React.FC = () => {
       setDashboardLoading(true);
       
       const response = await getAffiliateDashboard(user.msisdn);
+      console.log('[AffiliatePage] fetchAffiliateData response:', JSON.stringify(response).substring(0, 400));
 
       if (response.success) {
-        setAffiliateData(response.data.affiliate);
-        setStatistics(response.data.statistics);
-        setBankAccounts(response.data.bank_accounts || []);
-        setReferralLink(response.data.referral_link || '');
-        setAffiliateStatus('APPROVED');
+        // Check if user is actually an affiliate
+        if (response.data?.is_affiliate === false) {
+          setAffiliateStatus('NOT_FOUND');
+        } else if (response.data?.affiliate) {
+          setAffiliateData(response.data.affiliate);
+          setStatistics(response.data.statistics);
+          setBankAccounts(response.data.bank_accounts || []);
+          setReferralLink(response.data.referral_link || '');
+          setAffiliateStatus(response.data.affiliate?.status?.toUpperCase() || 'APPROVED');
+        } else {
+          // Response has is_affiliate:true but no affiliate object - treat as not found
+          setAffiliateStatus('NOT_FOUND');
+        }
       } else {
         // Check if it's a status issue (pending approval)
         if (response.status) {
@@ -624,7 +634,7 @@ export const AffiliatePage: React.FC = () => {
     );
   }
 
-  if (affiliateStatus === 'NOT_FOUND') {
+  if (affiliateStatus === 'NOT_FOUND' && !showRegistrationForm) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center p-4">
         <Card className="w-full max-w-md text-center">
@@ -645,6 +655,55 @@ export const AffiliatePage: React.FC = () => {
             </div>
           </CardContent>
         </Card>
+      </div>
+    );
+  }
+
+  // Show registration form for authenticated users who want to apply
+  if (showRegistrationForm) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-4">
+        <div className="max-w-2xl mx-auto space-y-6">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold text-gray-900">Apply as Affiliate</h1>
+            <Button variant="outline" onClick={() => setShowRegistrationForm(false)}>Cancel</Button>
+          </div>
+          <Card>
+            <CardContent className="p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
+                  <input className="w-full border rounded-md px-3 py-2" placeholder="Your full name" value={registrationForm.full_name} onChange={e => setRegistrationForm({...registrationForm, full_name: e.target.value})} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                  <input className="w-full border rounded-md px-3 py-2" type="email" placeholder="your@email.com" value={registrationForm.email} onChange={e => setRegistrationForm({...registrationForm, email: e.target.value})} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
+                  <input className="w-full border rounded-md px-3 py-2" placeholder="08012345678" value={registrationForm.phone_number} onChange={e => setRegistrationForm({...registrationForm, phone_number: e.target.value})} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Bank Name *</label>
+                  <input className="w-full border rounded-md px-3 py-2" placeholder="GTBank" value={registrationForm.bank_name} onChange={e => setRegistrationForm({...registrationForm, bank_name: e.target.value})} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Account Number *</label>
+                  <input className="w-full border rounded-md px-3 py-2" placeholder="0123456789" value={registrationForm.account_number} onChange={e => setRegistrationForm({...registrationForm, account_number: e.target.value})} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Account Name *</label>
+                  <input className="w-full border rounded-md px-3 py-2" placeholder="John Doe" value={registrationForm.account_name} onChange={e => setRegistrationForm({...registrationForm, account_name: e.target.value})} />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">How did you hear about us?</label>
+                <input className="w-full border rounded-md px-3 py-2" placeholder="Social media, friend, etc." value={registrationForm.referral_source} onChange={e => setRegistrationForm({...registrationForm, referral_source: e.target.value})} />
+              </div>
+              <Button className="w-full" onClick={handleAffiliateRegistration}>Submit Application</Button>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }

@@ -12,7 +12,7 @@ if [ -n "${DATABASE_URL:-}" ] && command -v psql >/dev/null 2>&1; then
     for f in $(ls /app/database/*.sql 2>/dev/null | sort); do
       [ -f "$f" ] || continue
       echo "  → $(basename $f)"
-      psql "$DATABASE_URL" -v ON_ERROR_STOP=0 -f "$f" 2>/dev/null || true
+      psql "$DATABASE_URL" -v ON_ERROR_STOP=0 -f "$f" 2>&1 | head -3 || true
     done
   fi
 
@@ -21,7 +21,7 @@ if [ -n "${DATABASE_URL:-}" ] && command -v psql >/dev/null 2>&1; then
     for f in $(ls /app/database/migrations/*.sql 2>/dev/null | sort); do
       [ -f "$f" ] || continue
       echo "  → $(basename $f)"
-      psql "$DATABASE_URL" -v ON_ERROR_STOP=0 -f "$f" 2>/dev/null || true
+      psql "$DATABASE_URL" -v ON_ERROR_STOP=0 -f "$f" 2>&1 | head -3 || true
     done
   fi
 

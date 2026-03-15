@@ -652,10 +652,14 @@ ON CONFLICT (email) DO UPDATE SET
         is_active = true,
         role = EXCLUDED.role`
 		if err := db.Exec(adminSQL).Error; err != nil {
-			log.Printf("⚠️  Admin seed warning: %v", err)
+			log.Printf("❌ Admin seed FAILED: %v", err)
 		} else {
 			log.Println("  ✅ Admin user upserted (admin@rechargemax.ng / Admin@123456)")
 		}
+		// Verify the insert worked
+		var verifyCount int64
+		_ = db.Raw("SELECT COUNT(*) FROM admin_users WHERE email = ?", "admin@rechargemax.ng").Scan(&verifyCount)
+		log.Printf("  ℹ️  Verify admin exists: count=%d", verifyCount)
 	}
 
 	// 2. Seed network configs

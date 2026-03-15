@@ -23,6 +23,7 @@ import (
 	"rechargemax/internal/infrastructure/persistence"
 	"rechargemax/internal/presentation/handlers"
 	"rechargemax/internal/routes"
+	"rechargemax/migrations"
 )
 
 func main() {
@@ -43,7 +44,10 @@ func main() {
 	}
 	log.Println("✅ Database connected successfully")
 
-	// Seed essential data if tables are empty
+	// Run embedded SQL migrations — creates all tables from scratch if they don't exist
+	migrations.RunAll(db)
+
+	// Seed essential data
 	seedDatabase(db)
 
 	// Initialize repositories

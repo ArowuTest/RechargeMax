@@ -97,11 +97,8 @@ export function DailySubscription() {
 
   // Handle success status from URL parameters
   useEffect(() => {
-    // Extract parameters from hash (after #) since we're using HashRouter
-    const hash = window.location.hash
-    const queryStart = hash.indexOf('?')
-    const queryString = queryStart !== -1 ? hash.substring(queryStart + 1) : ''
-    const urlParams = new URLSearchParams(queryString)
+    // Extract parameters from URL search string (BrowserRouter uses standard ?key=val)
+    const urlParams = new URLSearchParams(window.location.search)
     
     const status = urlParams.get('status')
     const amount = urlParams.get('amount')

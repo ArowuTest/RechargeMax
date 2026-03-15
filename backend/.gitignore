@@ -1,2 +1,19 @@
-backend/server
-backend/rechargemax
+# Compiled binaries — never commit these
+server
+rechargemax
+rechargemax-api
+rechargemax-new
+rechargemax-server
+rechargemax.exe
+bin/
+
+# Go installer tarballs
+*.tar.gz
+*.zip
+
+# Environment files (keep .env.example)
+.env
+
+# OS clutter
+.DS_Store
+Thumbs.db

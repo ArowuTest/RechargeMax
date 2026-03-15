@@ -82,7 +82,7 @@ export const useAuth = () => {
       setAuthState({ user: null, isAuthenticated: false, isLoading: false });
 
       toast({ title: "Logged Out", description: "You have been successfully logged out." });
-      window.location.href = '/#/';
+      window.location.href = '/';
     }
   }, [toast]);
 

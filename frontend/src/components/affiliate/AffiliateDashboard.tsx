@@ -549,7 +549,7 @@ export const AffiliateDashboard: React.FC = () => {
                       {registering ? 'Submitting Application...' : 'Apply to Join Program'}
                     </Button>
                     
-                    <Button variant="outline" onClick={() => window.location.href = '/#/login'}>
+                    <Button variant="outline" onClick={() => window.location.href = '/login'}>
                       <User className="w-4 h-4 mr-2" />
                       Already an Affiliate? Login
                     </Button>
@@ -594,7 +594,7 @@ export const AffiliateDashboard: React.FC = () => {
               Your affiliate application is being reviewed by our team. 
               You'll receive approval notification within 24-48 hours.
             </p>
-            <Button onClick={() => window.location.href = '/#/'}>
+            <Button onClick={() => window.location.href = '/'}>
               Back to Home
             </Button>
           </CardContent>
@@ -614,7 +614,7 @@ export const AffiliateDashboard: React.FC = () => {
               Unfortunately, your affiliate application was not approved. 
               Please contact support for more information.
             </p>
-            <Button onClick={() => window.location.href = '/#/'}>
+            <Button onClick={() => window.location.href = '/'}>
               Back to Home
             </Button>
           </CardContent>
@@ -638,7 +638,7 @@ export const AffiliateDashboard: React.FC = () => {
               <Button onClick={() => setShowRegistrationForm(true)} className="flex-1">
                 Apply as New Affiliate
               </Button>
-              <Button variant="outline" onClick={() => window.location.href = '/#/'}>
+              <Button variant="outline" onClick={() => window.location.href = '/'}>
                 Back to Home
               </Button>
             </div>
@@ -677,7 +677,7 @@ export const AffiliateDashboard: React.FC = () => {
               {affiliateData.status} • {affiliateData.commission_tier} ({affiliateData.commission_rate}%)
             </Badge>
           </div>
-          <Button variant="outline" onClick={() => window.location.href = '/#/'}>
+          <Button variant="outline" onClick={() => window.location.href = '/'}>
             Back to Home
           </Button>
         </div>

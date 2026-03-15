@@ -59,11 +59,11 @@ apiClient.interceptors.response.use(
       if (isAdminRoute) {
         // Clear non-sensitive admin profile data (token is in httpOnly cookie, auto-expired by server)
         localStorage.removeItem('rechargemax_admin_user');
-        window.location.href = '/#/admin/login';
+        window.location.href = '/admin/login';
       } else {
         // Clear non-sensitive user profile data
         localStorage.removeItem('rechargemax_user');
-        window.location.href = '/#/login';
+        window.location.href = '/login';
       }
     }
     return Promise.reject(error);

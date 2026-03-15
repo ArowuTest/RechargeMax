@@ -711,7 +711,7 @@ export const UserDashboard: React.FC = () => {
                       <p className="text-sm text-gray-600">Subscribe for more daily draw entries</p>
                     </div>
                     <Button 
-                      onClick={() => navigate('/#/subscription')}
+                      onClick={() => navigate('/subscription')}
                       className="bg-blue-600 hover:bg-blue-700"
                     >
                       Subscribe

@@ -174,17 +174,29 @@ func validateConfig(config *Config) error {
 	if len(config.JWTSecret) < 32 {
 		return fmt.Errorf("JWT_SECRET must be at least 32 characters long (current: %d chars) - use: openssl rand -hex 32", len(config.JWTSecret))
 	}
-	// Admin JWT secret: if explicitly set, enforce minimum length
-	if config.AdminJWTSecret != "" && len(config.AdminJWTSecret) < 32 {
-		return fmt.Errorf("ADMIN_JWT_SECRET must be at least 32 characters long - use: openssl rand -hex 32")
-	}
-	// Warn if admin uses same secret as user
+	// Admin JWT secret — must be explicitly set and distinct from JWT_SECRET.
+	// In production a shared secret is a hard failure: a compromised user token
+	// would grant admin access. In development we allow a fallback with a warning.
 	if config.AdminJWTSecret == "" {
-		log.Println("WARNING: ADMIN_JWT_SECRET not set — admin tokens share JWT_SECRET; set a separate secret in production")
+		if config.Environment == "production" {
+			return fmt.Errorf(
+				"ADMIN_JWT_SECRET is required in production — generate one with: openssl rand -hex 32",
+			)
+		}
+		log.Println("⚠️  ADMIN_JWT_SECRET not set — falling back to JWT_SECRET for development only")
 		config.AdminJWTSecret = config.JWTSecret
-	}
-	if false { // placeholder to avoid duplicate return below
-		return fmt.Errorf("JWT_SECRET must be at least 32 characters long (current: %d chars) - use: openssl rand -hex 32", len(config.JWTSecret))
+	} else {
+		if len(config.AdminJWTSecret) < 32 {
+			return fmt.Errorf("ADMIN_JWT_SECRET must be at least 32 characters — use: openssl rand -hex 32")
+		}
+		if config.AdminJWTSecret == config.JWTSecret {
+			if config.Environment == "production" {
+				return fmt.Errorf(
+					"ADMIN_JWT_SECRET must differ from JWT_SECRET in production — generate a separate secret",
+				)
+			}
+			log.Println("⚠️  ADMIN_JWT_SECRET equals JWT_SECRET — use separate secrets in production")
+		}
 	}
 	
 	// In production, require real API keys

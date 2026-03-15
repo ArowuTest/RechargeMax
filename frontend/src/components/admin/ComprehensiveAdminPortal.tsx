@@ -965,7 +965,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
             <p className="text-gray-600 mb-4">
               Please login with admin credentials to access the admin portal.
             </p>
-            <Button onClick={() => window.location.href = '/#/admin/login'}>
+            <Button onClick={() => window.location.href = '/admin/login'}>
               Admin Login
             </Button>
           </CardContent>
@@ -986,7 +986,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
             <p className="text-gray-600">Welcome, {(admin as any)?.full_name || admin?.email} ({admin?.role})</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => window.location.href = '/#/'}>
+            <Button variant="outline" onClick={() => window.location.href = '/'}>
               Main Site
             </Button>
             <Button variant="outline" onClick={logout}>

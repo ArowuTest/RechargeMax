@@ -44,7 +44,7 @@ export const LoginPage: React.FC = () => {
         setPhoneNumber('');
         
         // Redirect to dashboard
-        window.location.href = '/#/dashboard';
+        window.location.href = '/dashboard';
       } else {
         // This shouldn't happen, but handle it gracefully
         console.error('User data or token not found after OTP verification');
@@ -64,7 +64,7 @@ export const LoginPage: React.FC = () => {
         setPhoneNumber('');
         
         // Redirect to dashboard
-        window.location.href = '/#/dashboard';
+        window.location.href = '/dashboard';
       }
     }
   };
@@ -187,7 +187,7 @@ export const LoginPage: React.FC = () => {
         <div className="text-center">
           <Button 
             variant="ghost" 
-            onClick={() => window.location.href = '/#/'}
+            onClick={() => window.location.href = '/'}
             className="text-gray-600 hover:text-gray-900"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />

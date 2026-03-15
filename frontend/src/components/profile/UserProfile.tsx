@@ -167,7 +167,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ className = "" }) => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={() => window.location.href = '/#/login'} className="w-full">
+            <Button onClick={() => window.location.href = '/login'} className="w-full">
               <User className="w-4 h-4 mr-2" />
               Go to Login
             </Button>
@@ -215,7 +215,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ className = "" }) => {
             <h1 className="text-3xl font-bold text-gray-900">Profile</h1>
             <p className="text-gray-600">Manage your account information</p>
           </div>
-          <Button variant="outline" onClick={() => window.location.href = '/#/'}>
+          <Button variant="outline" onClick={() => window.location.href = '/'}>
             Back to Home
           </Button>
         </div>

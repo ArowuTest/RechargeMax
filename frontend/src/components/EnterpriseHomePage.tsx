@@ -88,8 +88,8 @@ export const EnterpriseHomePage: React.FC = () => {
     fetchPlatformData();
     
     // Check for payment success parameters
-    // Check both hash parameters and URL parameters
-    const hash = window.location.hash;
+    // Read URL search parameters (BrowserRouter standard query string)
+    const hash = window.location.hash; // kept for legacy Paystack redirect compatibility
     const hashQueryString = hash.includes('?') ? hash.split('?')[1] : '';
     const hashParams = new URLSearchParams(hashQueryString);
     const urlParams = new URLSearchParams(window.location.search);
@@ -110,7 +110,7 @@ export const EnterpriseHomePage: React.FC = () => {
     if (paymentSuccess && reference) {
       
       // Clear URL immediately
-      window.history.replaceState({}, document.title, window.location.pathname + window.location.hash.split('?')[0]);
+      window.history.replaceState({}, document.title, window.location.pathname);
       
       // Trigger backend callback to process VTU
       fetch(`/api/v1/payment/callback?reference=${reference}&gateway=paystack`, {
@@ -236,7 +236,7 @@ export const EnterpriseHomePage: React.FC = () => {
       // Subscription success detected
       
       // Clear URL immediately
-      window.history.replaceState({}, document.title, window.location.pathname + window.location.hash.split('?')[0]);
+      window.history.replaceState({}, document.title, window.location.pathname);
       
       // Show subscription success message
       setTimeout(() => {
@@ -254,7 +254,7 @@ export const EnterpriseHomePage: React.FC = () => {
     if (subscriptionStatus === 'failed') {
       
       // Clear URL immediately
-      window.history.replaceState({}, document.title, window.location.pathname + window.location.hash.split('?')[0]);
+      window.history.replaceState({}, document.title, window.location.pathname);
       
       // Show subscription failure message
       setTimeout(() => {
@@ -342,7 +342,7 @@ export const EnterpriseHomePage: React.FC = () => {
         const finalNetwork = txnNetwork || network || 'null';
         const finalPoints = txnPoints || points || 0;
         // CRITICAL: Clear URL parameters immediately to prevent multiple spins
-        const cleanUrl = window.location.pathname + (window.location.hash.includes('?') ? window.location.hash.split('?')[0] : window.location.hash);
+        const cleanUrl = window.location.pathname;
         window.history.replaceState({}, document.title, cleanUrl);
         
         // Set recharge success data
@@ -615,7 +615,7 @@ export const EnterpriseHomePage: React.FC = () => {
                 Subscribe daily for guaranteed draw entries. Never miss a chance to win!
               </p>
               <Button 
-                onClick={() => window.location.href = '/#/subscription'}
+                onClick={() => window.location.href = '/subscription'}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 text-lg"
               >
                 <Gift className="w-5 h-5 mr-2" />

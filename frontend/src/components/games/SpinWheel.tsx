@@ -265,7 +265,7 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
                 <Button 
                   onClick={() => {
                     // Redirect to login page or show login modal
-                    window.location.href = '/#/login';
+                    window.location.href = '/login';
                   }}
                   className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3"
                 >

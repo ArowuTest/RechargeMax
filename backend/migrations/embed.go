@@ -16,7 +16,7 @@ import (
 var sqlFiles embed.FS
 
 // RunAll executes all base schema SQL files then versioned migrations.
-// Errors are logged but do not abort: each file is best-effort (idempotent SQL).
+// Each file runs in its own transaction so failures don't block subsequent files.
 func RunAll(db *gorm.DB) {
 	sqlDB, err := db.DB()
 	if err != nil {
@@ -26,15 +26,33 @@ func RunAll(db *gorm.DB) {
 
 	log.Println("📦 Running embedded SQL migrations...")
 
-	// Base schema files
-	for _, f := range listFiles("sql") {
-		execFile(sqlDB, f)
+	// Base schema files (creates tables, indexes, triggers)
+	baseFiles := listFiles("sql")
+	log.Printf("  📋 %d base schema files", len(baseFiles))
+	ok, fail := 0, 0
+	for _, f := range baseFiles {
+		if err := execFileInTx(sqlDB, f); err != nil {
+			log.Printf("  ⚠️  %s: %v", filepath.Base(f), err)
+			fail++
+		} else {
+			ok++
+		}
 	}
+	log.Printf("  ✓ base schema: %d ok, %d warned", ok, fail)
 
-	// Versioned migrations
-	for _, f := range listFiles("sql/migrations") {
-		execFile(sqlDB, f)
+	// Versioned migrations (alters, seeds, indexes)
+	migFiles := listFiles("sql/migrations")
+	log.Printf("  📋 %d migration files", len(migFiles))
+	ok, fail = 0, 0
+	for _, f := range migFiles {
+		if err := execFileInTx(sqlDB, f); err != nil {
+			log.Printf("  ⚠️  %s: %v", filepath.Base(f), err)
+			fail++
+		} else {
+			ok++
+		}
 	}
+	log.Printf("  ✓ migrations: %d ok, %d warned", ok, fail)
 
 	log.Println("📦 Migrations complete")
 }
@@ -42,7 +60,6 @@ func RunAll(db *gorm.DB) {
 func listFiles(dir string) []string {
 	entries, err := fs.ReadDir(sqlFiles, dir)
 	if err != nil {
-		log.Printf("  ⚠️  Cannot read dir %s: %v", dir, err)
 		return nil
 	}
 	var files []string
@@ -52,19 +69,26 @@ func listFiles(dir string) []string {
 		}
 	}
 	sort.Strings(files)
-	log.Printf("  ℹ️  Found %d files in %s", len(files), dir)
 	return files
 }
 
-func execFile(db *sql.DB, path string) {
+// execFileInTx runs a SQL file inside a new transaction.
+// If the file fails, the transaction is rolled back (so DB stays clean).
+func execFileInTx(db *sql.DB, path string) error {
 	data, err := sqlFiles.ReadFile(path)
 	if err != nil {
-		log.Printf("  ❌ Cannot read %s: %v", filepath.Base(path), err)
-		return
+		return err
 	}
-	if _, err := db.Exec(string(data)); err != nil {
-		log.Printf("  ⚠️  %s: %v", filepath.Base(path), err)
-	} else {
-		log.Printf("  ✓ %s", filepath.Base(path))
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
 	}
+
+	if _, err := tx.Exec(string(data)); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	return tx.Commit()
 }

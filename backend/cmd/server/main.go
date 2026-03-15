@@ -55,7 +55,7 @@ func main() {
 	log.Println("✅ Handlers initialized")
 
 	// Setup router
-	router := setupRouter(hdlrs, svcs)
+	router := setupRouter(hdlrs, svcs, db)
 	log.Println("✅ Router configured")
 
 	// Start server
@@ -601,7 +601,7 @@ func initHandlers(svcs *Services, repos *Repositories, appConfig *Config, db *go
 	}
 }
 
-func setupRouter(hdlrs *Handlers, svcs *Services) *gin.Engine {
+func setupRouter(hdlrs *Handlers, svcs *Services, db *gorm.DB) *gin.Engine {
 	// Set Gin mode based on environment
 	if os.Getenv("ENVIRONMENT") == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -634,9 +634,10 @@ func setupRouter(hdlrs *Handlers, svcs *Services) *gin.Engine {
 	{
 		// Auth routes (public)
 		auth := v1.Group("/auth")
+		otpLimiter := middleware.NewOTPRateLimiter(5, time.Minute)
 		// OTP rate limiting is handled within the handler itself
 		{
-			auth.POST("/send-otp", hdlrs.Auth.SendOTP)
+			auth.POST("/send-otp", middleware.OTPRateLimitMiddleware(otpLimiter), hdlrs.Auth.SendOTP)
 			auth.POST("/verify-otp", hdlrs.Auth.VerifyOTP)
 		}
 
@@ -797,6 +798,7 @@ func setupRouter(hdlrs *Handlers, svcs *Services) *gin.Engine {
 			// Admin routes (require admin authentication)
 			admin := v1.Group("/admin")
 			admin.Use(middleware.AdminAuthMiddleware(svcs.Auth))
+			admin.Use(middleware.AdminAuditMiddleware(db))
 			{
 			admin.GET("/dashboard", hdlrs.Admin.GetDashboardStats)
 			admin.GET("/users", hdlrs.Admin.GetUsers)
@@ -948,9 +950,12 @@ func setupRouter(hdlrs *Handlers, svcs *Services) *gin.Engine {
 			admin.PUT("/settings", hdlrs.PlatformSettings.UpdateSettings)
 			admin.GET("/settings/category/:category", hdlrs.PlatformSettings.GetSettingsByCategory)
 			admin.PUT("/settings/category/:category", hdlrs.PlatformSettings.UpdateCategorySettings)
-			admin.GET("/settings/:key", hdlrs.PlatformSettings.GetSetting)
-			admin.PUT("/settings/:key", hdlrs.PlatformSettings.UpdateSetting)
-		}
+				admin.GET("/settings/:key", hdlrs.PlatformSettings.GetSetting)
+				admin.PUT("/settings/:key", hdlrs.PlatformSettings.UpdateSetting)
+
+				// Audit Logs
+				admin.GET("/audit-logs", middleware.AdminAuditLogsList(db))
+			}
 	}
 
 	return router

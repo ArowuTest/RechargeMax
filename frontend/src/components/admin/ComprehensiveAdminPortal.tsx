@@ -25,6 +25,10 @@ import SystemMonitoringDashboard from './SystemMonitoringDashboard';
 import DrawIntegrationDashboard from './DrawIntegrationDashboard';
 import PrizeTemplateManagement from './PrizeTemplateManagement';
 import StrategicAffiliateAdminDashboard from './StrategicAffiliateAdminDashboard';
+// ── Extracted sub-components (P1 refactor) ────────────────────────────────
+import PlatformSettingsPage from './PlatformSettingsPage';
+import UserManagementTab from './UserManagementTab';
+import AuditLogTab from './AuditLogTab';
 import { 
   Users, 
   DollarSign, 
@@ -1105,6 +1109,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
             {(admin?.role === 'SUPER_ADMIN' || hasPermission('manage_users')) && <TabsTrigger value="users">Users</TabsTrigger>}
             {(admin?.role === 'SUPER_ADMIN' || hasPermission('manage_admins')) && <TabsTrigger value="admins">Admins</TabsTrigger>}
             {(admin?.role === 'SUPER_ADMIN' || hasPermission('manage_settings')) && <TabsTrigger value="settings">Settings</TabsTrigger>}
+            {(admin?.role === 'SUPER_ADMIN' || hasPermission('manage_settings')) && <TabsTrigger value="audit">Audit Log</TabsTrigger>}
           </TabsList>
 
           {/* Dashboard */}
@@ -1841,169 +1846,17 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
 
           {/* User Management */}
           <TabsContent value="users">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Users className="w-6 h-6" />
-                  User Management
-                </CardTitle>
-                <CardDescription>
-                  View and manage platform users
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>User</TableHead>
-                      <TableHead>Phone</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Transactions</TableHead>
-                      <TableHead>Total Spent</TableHead>
-                      <TableHead>Joined</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {users.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8">
-                          <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                          <p className="text-gray-500">No users found</p>
-                          <p className="text-sm text-gray-400">Registered users will appear here</p>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      (users || []).map((user) => (
-                        <TableRow key={user.id}>
-                          <TableCell>
-                            <div>
-                              <div className="font-medium">{[user.first_name, user.last_name].filter(Boolean).join(' ') || user.full_name || `User ${user.msisdn?.slice(-4) || ''}`}</div>
-                              <div className="text-sm text-gray-500">{user.email || 'No email'}</div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <code className="bg-gray-100 px-2 py-1 rounded text-sm">
-                              {user.msisdn}
-                            </code>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={user.is_active ? "default" : "secondary"}>
-                              {user.is_active ? "Active" : "Inactive"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-sm">
-                              <div>{user.transaction_count || 0} transactions</div>
-                              <div className="text-gray-500">{user.points_balance || 0} points</div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {formatCurrency(user.total_spent || 0)}
-                          </TableCell>
-                          <TableCell>
-                            {formatDate(user.created_at)}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-1">
-                              <Button 
-                                size="sm" 
-                                variant="outline"
-                                title="View user details"
-                                onClick={() => {
-                                  const info = [
-                                    `Phone: ${user.msisdn}`,
-                                    `Name: ${[user.first_name, user.last_name].filter(Boolean).join(' ') || 'N/A'}`,
-                                    `Email: ${user.email || 'N/A'}`,
-                                    `Status: ${user.is_active ? 'Active' : 'Inactive'}`,
-                                    `Points: ${user.points_balance || 0}`,
-                                    `Tier: ${user.loyalty_tier || 'N/A'}`,
-                                    `Joined: ${formatDate(user.created_at)}`,
-                                  ].join('\n');
-                                  alert(info);
-                                }}
-                              >
-                                <Eye className="w-3 h-3" />
-                              </Button>
-                              <Button 
-                                size="sm" 
-                                variant={user.is_active ? 'destructive' : 'default'}
-                                title={user.is_active ? 'Suspend user' : 'Activate user'}
-                                disabled={actionLoading === user.id}
-                                onClick={async () => {
-                                  const newStatus = user.is_active ? 'suspended' : 'active';
-                                  try {
-                                    setActionLoading(user.id);
-                                    await callAdminAPI('update_user_status', { user_id: user.id, status: newStatus });
-                                    await fetchUsers();
-                                    toast({ title: 'Success', description: `User ${newStatus === 'active' ? 'activated' : 'suspended'} successfully` });
-                                  } catch (err) {
-                                    toast({ title: 'Error', description: getErrorMessage(err), variant: 'destructive' });
-                                  } finally {
-                                    setActionLoading(null);
-                                  }
-                                }}
-                              >
-                                <Edit className="w-3 h-3" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+            <UserManagementTab />
           </TabsContent>
+
+          
 
           {/* Platform Settings */}
           <TabsContent value="settings">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Settings className="w-6 h-6" />
-                  Platform Settings
-                </CardTitle>
-                <CardDescription>
-                  Configure platform-wide settings and parameters
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-6">
-                  {(settings || []).map((setting) => (
-                    <div key={setting.key || setting.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex-1">
-                        <h4 className="font-medium">{(setting.key || setting.setting_key || '').replace(/_/g, ' ').toUpperCase()}</h4>
-                        <p className="text-sm text-gray-500">{setting.description}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {typeof (setting.value || setting.setting_value) === 'boolean' ? (
-                          <Switch
-                            checked={setting.value || setting.setting_value}
-                            onCheckedChange={(checked) => 
-                              handleSettingUpdate(setting.key || setting.setting_key || '', checked, setting.description)
-                            }
-                            disabled={actionLoading === (setting.key || setting.setting_key)}
-                          />
-                        ) : (
-                          <Input
-                            value={setting.value || setting.setting_value}
-                            onChange={(e) => {
-                              const value = isNaN(Number(e.target.value)) ? e.target.value : Number(e.target.value);
-                              handleSettingUpdate(setting.key || setting.setting_key || '', value, setting.description);
-                            }}
-                            className="w-32"
-                            disabled={actionLoading === (setting.key || setting.setting_key)}
-                          />
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            <PlatformSettingsPage />
           </TabsContent>
+
+          
 
           {/* Admin Management */}
           <TabsContent value="admins">
@@ -2095,6 +1948,12 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Audit Log */}
+          <TabsContent value="audit">
+            <AuditLogTab />
+          </TabsContent>
+
         </Tabs>
 
         {/* Dialog Components */}

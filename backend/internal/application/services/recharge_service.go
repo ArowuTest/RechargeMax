@@ -313,7 +313,65 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 		return fmt.Errorf("payment processing transaction failed: %w", err)
 	}
 
+	// Update the user's cached loyalty_tier field based on their new total points.
+	// This is done asynchronously outside the transaction so a failure here never
+	// rolls back the recharge.
+	go func() {
+		var updatedUser entities.Users
+		if dbErr := s.db.Where("msisdn = ?", recharge.Msisdn).First(&updatedUser).Error; dbErr == nil {
+			newTier := computeLoyaltyTier(s.db, context.Background(), int64(updatedUser.TotalPoints))
+			if newTier != updatedUser.LoyaltyTier {
+				if dbErr2 := s.db.Model(&entities.Users{}).
+					Where("id = ?", updatedUser.ID).
+					Update("loyalty_tier", newTier).Error; dbErr2 != nil {
+					fmt.Printf("[Recharge] Loyalty tier update failed for %s: %v\n", recharge.Msisdn, dbErr2)
+				} else {
+					fmt.Printf("[Recharge] Loyalty tier updated %s: %s -> %s\n",
+						recharge.Msisdn, updatedUser.LoyaltyTier, newTier)
+				}
+			}
+		}
+	}()
+
 	return nil
+}
+
+// computeLoyaltyTier returns the tier name for the given points balance.
+func computeLoyaltyTier(db *gorm.DB, ctx context.Context, points int64) string {
+	type setting struct {
+		Key   string  `gorm:"column:setting_key"`
+		Value float64 `gorm:"column:setting_value"`
+	}
+	defaults := map[string]float64{
+		"loyalty.silver_min_points":   500,
+		"loyalty.gold_min_points":     2000,
+		"loyalty.platinum_min_points": 5000,
+	}
+	var rows []struct {
+		SettingKey   string `gorm:"column:setting_key"`
+		SettingValue string `gorm:"column:setting_value"`
+	}
+	if err := db.WithContext(ctx).
+		Table("platform_settings").
+		Where("setting_key LIKE 'loyalty.%_min_points'").
+		Find(&rows).Error; err == nil {
+		for _, r := range rows {
+			var v float64
+			if n, _ := fmt.Sscanf(r.SettingValue, "%f", &v); n == 1 {
+				defaults[r.SettingKey] = v
+			}
+		}
+	}
+	switch {
+	case float64(points) >= defaults["loyalty.platinum_min_points"]:
+		return "PLATINUM"
+	case float64(points) >= defaults["loyalty.gold_min_points"]:
+		return "GOLD"
+	case float64(points) >= defaults["loyalty.silver_min_points"]:
+		return "SILVER"
+	default:
+		return "BRONZE"
+	}
 }
 
 // GetRechargeHistory retrieves recharge history for a user

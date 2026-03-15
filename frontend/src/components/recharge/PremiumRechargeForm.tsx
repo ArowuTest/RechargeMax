@@ -185,13 +185,19 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
               return rest;
             });
           } else {
-            // Validation failed - network mismatch
-            setNetworkValidation(result.data.data);
-            setShowNetworkWarning(true);
-            setValidationErrors(prev => ({
-              ...prev,
-              networkProvider: result.data?.error?.message || 'Network mismatch detected'
-            }));
+            // Validation failed - check if it's high-confidence (real HLR mismatch)
+            const validationData = result.data.data;
+            setNetworkValidation(validationData);
+            // Only warn if high-confidence mismatch (not just "prefix unavailable")
+            const isHighConfidence = validationData?.confidence !== 'low' && 
+              validationData?.validation_source !== 'user_selection';
+            setShowNetworkWarning(isHighConfidence);
+            if (isHighConfidence) {
+              setValidationErrors(prev => ({
+                ...prev,
+                networkProvider: result.data?.error?.message || 'Network mismatch detected'
+              }));
+            }
           }
         } catch (error) {
           console.error('Network validation error:', error);
@@ -263,8 +269,13 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
       errors.networkProvider = 'Please select a network provider';
     }
 
-    // Check network validation — only block if validation ran AND returned invalid
-    if (showNetworkWarning || (networkValidation !== null && !networkValidation?.valid)) {
+    // Only block if there's a CONFIRMED high-confidence network mismatch
+    // Low confidence / user_selection results are always accepted (HLR unavailable)
+    const isHighConfidenceMismatch = networkValidation !== null && 
+      !networkValidation?.valid && 
+      networkValidation?.confidence !== 'low' &&
+      networkValidation?.validation_source !== 'user_selection';
+    if (isHighConfidenceMismatch) {
       errors.networkProvider = networkValidation?.message || 'Please verify network selection';
     }
 
@@ -480,36 +491,58 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
               {networkValidation && !isValidating && (
                 <div className="mt-2">
                   {networkValidation.valid ? (
-                    <Alert className="border-green-500 bg-green-50">
-                      <CheckCircle className="h-4 w-4 text-green-600" />
-                      <AlertDescription className="text-green-700">
-                        {networkValidation.message}
-                        {networkValidation.validation_source === 'hlr_api' && (
-                          <Badge variant="outline" className="ml-2 text-xs">
-                            Verified
-                          </Badge>
-                        )}
-                      </AlertDescription>
-                    </Alert>
+                    networkValidation.confidence === 'low' || networkValidation.validation_source === 'user_selection' ? (
+                      // Low confidence = HLR unavailable, accepted based on user selection
+                      <Alert className="border-blue-300 bg-blue-50">
+                        <CheckCircle className="h-4 w-4 text-blue-500" />
+                        <AlertDescription className="text-blue-700">
+                          Network accepted: {networkValidation.network || formData.networkProvider}
+                          <Badge variant="outline" className="ml-2 text-xs text-blue-600">User Selected</Badge>
+                        </AlertDescription>
+                      </Alert>
+                    ) : (
+                      <Alert className="border-green-500 bg-green-50">
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <AlertDescription className="text-green-700">
+                          {networkValidation.message}
+                          {networkValidation.validation_source === 'hlr_api' && (
+                            <Badge variant="outline" className="ml-2 text-xs">
+                              Verified
+                            </Badge>
+                          )}
+                        </AlertDescription>
+                      </Alert>
+                    )
                   ) : (
-                    <Alert variant="destructive">
-                      <AlertTriangle className="h-4 w-4" />
-                      <AlertDescription>
-                        {networkValidation.message}
-                        {networkValidation.actual_network && (
-                          <div className="mt-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setFormData({ ...formData, networkProvider: networkValidation.actual_network! })}
-                            >
-                              Switch to {networkValidation.actual_network}
-                            </Button>
-                          </div>
-                        )}
-                      </AlertDescription>
-                    </Alert>
+                    networkValidation.confidence === 'low' || networkValidation.validation_source === 'user_selection' ? (
+                      // Low confidence failure = still accept, just inform
+                      <Alert className="border-blue-300 bg-blue-50">
+                        <CheckCircle className="h-4 w-4 text-blue-500" />
+                        <AlertDescription className="text-blue-700">
+                          Network accepted: {formData.networkProvider}
+                          <Badge variant="outline" className="ml-2 text-xs text-blue-600">User Selected</Badge>
+                        </AlertDescription>
+                      </Alert>
+                    ) : (
+                      <Alert variant="destructive">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertDescription>
+                          {networkValidation.message}
+                          {networkValidation.actual_network && (
+                            <div className="mt-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setFormData({ ...formData, networkProvider: networkValidation.actual_network! })}
+                              >
+                                Switch to {networkValidation.actual_network}
+                              </Button>
+                            </div>
+                          )}
+                        </AlertDescription>
+                      </Alert>
+                    )
                   )}
                 </div>
               )}

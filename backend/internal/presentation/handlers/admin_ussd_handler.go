@@ -144,3 +144,46 @@ func (h *AdminComprehensiveHandler) RetryFailedUSSDWebhooks(c *gin.Context) {
 		"message": "Failed webhooks retried successfully",
 	})
 }
+
+// GetUSSDRechargeByID returns the detail record for a single USSD recharge.
+func (h *AdminComprehensiveHandler) GetUSSDRechargeByID(c *gin.Context) {
+	ctx := c.Request.Context()
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "missing recharge id"})
+		return
+	}
+
+	type ussdRow struct {
+		ID              string    `json:"id"               gorm:"column:id"`
+		MSISDN          string    `json:"msisdn"           gorm:"column:msisdn"`
+		Network         string    `json:"network"          gorm:"column:network"`
+		Amount          int64     `json:"amount"           gorm:"column:amount"`
+		RechargeType    string    `json:"recharge_type"    gorm:"column:recharge_type"`
+		ProductCode     string    `json:"product_code"     gorm:"column:product_code"`
+		TransactionRef  string    `json:"transaction_ref"  gorm:"column:transaction_ref"`
+		ProviderRef     string    `json:"provider_ref"     gorm:"column:provider_ref"`
+		PointsEarned    int       `json:"points_earned"    gorm:"column:points_earned"`
+		Status          string    `json:"status"           gorm:"column:status"`
+		RechargeDate    time.Time `json:"recharge_date"    gorm:"column:recharge_date"`
+		ReceivedAt      time.Time `json:"received_at"      gorm:"column:received_at"`
+		ProcessedAt     *time.Time `json:"processed_at,omitempty" gorm:"column:processed_at"`
+		Notes           string    `json:"notes"            gorm:"column:notes"`
+		CreatedAt       time.Time `json:"created_at"       gorm:"column:created_at"`
+	}
+
+	var row ussdRow
+	err := h.db.WithContext(ctx).
+		Table("ussd_recharges").
+		Where("id = ?", id).
+		First(&row).Error
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"error":   "USSD recharge not found",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": row})
+}

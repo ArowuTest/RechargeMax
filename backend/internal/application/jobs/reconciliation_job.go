@@ -114,7 +114,7 @@ func (j *ReconciliationJob) Run(ctx context.Context) error {
 
 		verified, paidAmount, err := j.payment.VerifyPaystackPayment(ctx, row.PaymentReference)
 		if err != nil {
-			logger.Info("[ReconciliationJob] verify %s", zap.Any("value", row.PaymentReference), zap.Error(err))
+			logger.Info("[ReconciliationJob] verify", zap.Error(err), zap.Any("row.PaymentReference", row.PaymentReference))
 			continue
 		}
 
@@ -123,11 +123,11 @@ func (j *ReconciliationJob) Run(ctx context.Context) error {
 		if verified && paidAmount == row.Amount {
 			// ── Success path ──────────────────────────────────────────────
 			if err := j.recharge.ProcessSuccessfulPayment(ctx, row.PaymentReference); err != nil {
-				logger.Info("[ReconciliationJob] process %s", zap.Any("value", row.PaymentReference), zap.Error(err))
+				logger.Info("[ReconciliationJob] process", zap.Error(err), zap.Any("row.PaymentReference", row.PaymentReference))
 				continue
 			}
 			succeeded++
-			logger.Info("[ReconciliationJob] recovered %s (₦%.2f)", zap.Any("value", row.ID), zap.Any("value", float64(row.Amount)/100))
+			logger.Info("[ReconciliationJob] recovered", zap.String("id", row.ID), zap.Float64("amount_naira", float64(row.Amount)/100))
 
 		} else {
 			// ── Failure path ──────────────────────────────────────────────
@@ -136,7 +136,7 @@ func (j *ReconciliationJob) Run(ctx context.Context) error {
 				`UPDATE transactions SET status='FAILED', updated_at=?, processed_at=? WHERE id=?`,
 				now, now, row.ID,
 			).Error; err != nil {
-				logger.Error("[ReconciliationJob] mark failed %s", zap.Any("value", row.ID), zap.Error(err))
+				logger.Error("[ReconciliationJob] mark failed", zap.Error(err), zap.String("id", row.ID))
 				continue
 			}
 
@@ -159,14 +159,14 @@ func (j *ReconciliationJob) Run(ctx context.Context) error {
 					row.PaymentReference,
 				)
 				if smsErr := j.notifier.SendSMS(ctx, row.Msisdn, msg); smsErr != nil {
-					logger.Info("[ReconciliationJob] SMS to %s", zap.Any("value", row.Msisdn), zap.Error(smsErr))
+					logger.Info("[ReconciliationJob] SMS to", zap.Error(smsErr), zap.Any("row.Msisdn", row.Msisdn))
 				}
 			}
 
-			logger.Error("[ReconciliationJob] marked failed %s", zap.Any("value", row.ID))
+			logger.Error("[ReconciliationJob] marked failed", zap.String("id", row.ID))
 		}
 	}
 
-	logger.Error("[ReconciliationJob] done: total=%d succeeded=%d failed=%d", zap.Any("value", processed), zap.Any("value", succeeded), zap.Any("value", failed))
+	logger.Error("[ReconciliationJob] done: total= succeeded= failed=", zap.Any("processed", processed), zap.Any("succeeded", succeeded), zap.Any("failed", failed))
 	return nil
 }

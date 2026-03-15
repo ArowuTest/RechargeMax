@@ -213,7 +213,7 @@ func (s *WinnerService) ImportWinners(ctx context.Context, drawID uuid.UUID, win
 		)
 		if err != nil {
 			// Log error but continue with other winners
-			logger.Error("Failed to create winner %s: %v", zap.Any("value", w.MSISDN), zap.Error(err))
+			logger.Error("Failed to create winner", zap.Error(err), zap.String("msisdn", w.MSISDN))
 		}
 	}
 
@@ -321,7 +321,7 @@ func (s *WinnerService) sendWinnerNotifications(ctx context.Context, winner *ent
 	// Get user details
 	user, err := s.userRepo.FindByMSISDN(ctx, winner.MSISDN)
 	if err != nil {
-		logger.Error("Failed to get user details for winner %s: %v", zap.Any("value", winner.MSISDN), zap.Error(err))
+		logger.Error("Failed to get user details for winner", zap.Error(err), zap.String("msisdn", winner.MSISDN))
 		return
 	}
 
@@ -1216,7 +1216,7 @@ func (s *WinnerService) ClaimSpinPrize(ctx context.Context, prizeID uuid.UUID, m
 
 // triggerManualFulfillment triggers manual fulfillment for airtime/data prizes
 func (s *WinnerService) triggerManualFulfillment(ctx context.Context, spinPrize *entities.SpinResults) error {
-	logger.Info("🔄 Triggering manual fulfillment for spin %s", zap.Any("value", spinPrize.ID))
+	logger.Info("🔄 Triggering manual fulfillment for spin", zap.String("id", spinPrize.ID.String()))
 	
 	// Detect network
 	networkHint := ""
@@ -1261,7 +1261,7 @@ func (s *WinnerService) triggerManualFulfillment(ctx context.Context, spinPrize 
 		return fmt.Errorf("failed to update spin prize status: %w", err)
 	}
 	
-	logger.Info("✅ Manual fulfillment successful for spin %s", zap.Any("value", spinPrize.ID))
+	logger.Info("✅ Manual fulfillment successful for spin", zap.String("id", spinPrize.ID.String()))
 	return nil
 }
 
@@ -1302,7 +1302,7 @@ func (s *WinnerService) provisionDataManual(ctx context.Context, spinPrize *enti
 		return fmt.Errorf("no data variation code found for value %d on %s", spinPrize.PrizeValue, network)
 	}
 	
-	logger.Info("📱 [Manual] Provisioning data (%s) to %s on %s network", zap.Any("value", variationCode), zap.Any("value", spinPrize.MSISDN), zap.Any("value", network))
+	logger.Info("📱 [Manual] Provisioning data () to on network", zap.Any("variationCode", variationCode), zap.String("msisdn", spinPrize.MSISDN), zap.Any("network", network))
 	
 	// Call VTPass (amount in kobo)
 	response, err := s.telecomService.PurchaseData(ctx, network, spinPrize.MSISDN, variationCode, int(spinPrize.PrizeValue))

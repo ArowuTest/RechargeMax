@@ -284,13 +284,15 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	admin.GET("/daily-subscriptions",             hdlrs.AdminComprehensive.GetDailySubscriptions)
 	admin.GET("/daily-subscriptions/:id",         hdlrs.AdminComprehensive.GetDailySubscriptionDetails)
 	admin.POST("/daily-subscriptions/:id/cancel", hdlrs.AdminComprehensive.CancelDailySubscription)
-	admin.GET("/subscription-billings",           hdlrs.AdminComprehensive.GetSubscriptionBillings)
+	admin.GET("/subscription-billings",               hdlrs.AdminComprehensive.GetSubscriptionBillings)
+	admin.POST("/subscription-billings/:id/retry",    hdlrs.AdminComprehensive.RetrySubscriptionBilling)
 	admin.GET("/daily-subscriptions/analytics",   hdlrs.AdminComprehensive.GetSubscriptionAnalytics)
 	admin.GET("/daily-subscriptions/config",      hdlrs.AdminComprehensive.GetSubscriptionConfig)
 	admin.PUT("/daily-subscriptions/config",      hdlrs.AdminComprehensive.UpdateSubscriptionConfig)
 
 	// ── USSD ─────────────────────────────────────────────────────────────────
-	admin.GET("/ussd/recharges",     hdlrs.AdminComprehensive.GetUSSDRecharges)
+	admin.GET("/ussd/recharges",       hdlrs.AdminComprehensive.GetUSSDRecharges)
+	admin.GET("/ussd/recharges/:id",   hdlrs.AdminComprehensive.GetUSSDRechargeByID)
 	admin.GET("/ussd/statistics",    hdlrs.AdminComprehensive.GetUSSDStatistics)
 	admin.GET("/ussd/webhook-logs",  hdlrs.AdminComprehensive.GetUSSDWebhookLogs)
 	admin.POST("/ussd/retry-failed", hdlrs.AdminComprehensive.RetryFailedUSSDWebhooks)
@@ -300,6 +302,7 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	admin.GET("/points/history",        hdlrs.AdminComprehensive.GetPointsHistory)
 	admin.POST("/points/adjust",        hdlrs.AdminComprehensive.AdjustUserPoints)
 	admin.GET("/points/statistics",     hdlrs.AdminComprehensive.GetPointsStatistics)
+	admin.GET("/points/stats",          hdlrs.AdminComprehensive.GetPointsStatistics) // alias for frontend
 	admin.GET("/points/export/users",   hdlrs.AdminComprehensive.ExportUsersWithPoints)
 	admin.GET("/points/export/history", hdlrs.AdminComprehensive.ExportPointsHistory)
 

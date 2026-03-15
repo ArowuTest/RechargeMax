@@ -120,7 +120,7 @@ func (s *AuthService) SendOTP(ctx context.Context, msisdn string, purpose string
 	// Send SMS (use normalised MSISDN for delivery)
 	if err := s.sendSMS(ctx, normalizedMSISDN, otpCode); err != nil {
 		// Log error but don't fail the request
-		logger.Error("Failed to send SMS to %s: %v", zap.Any("value", normalizedMSISDN), zap.Error(err))
+		logger.Error("Failed to send SMS to", zap.Error(err), zap.String("msisdn", normalizedMSISDN))
 	}
 
 	return nil
@@ -180,7 +180,7 @@ func (s *AuthService) VerifyOTP(ctx context.Context, msisdn, code, purpose strin
 	}
 
 	// Generate JWT token (using normalized MSISDN)
-	logger.Info("[DEBUG] Generating JWT for normalized MSISDN: %s (original: %s)", zap.Any("value", normalizedMSISDN), zap.Any("value", msisdn))
+	logger.Info("[DEBUG] Generating JWT for normalized MSISDN: (original:)", zap.String("msisdn", normalizedMSISDN), zap.String("msisdn", msisdn))
 	token, err := s.GenerateToken(ctx, normalizedMSISDN)
 	if err != nil {
 		return "", nil, false, fmt.Errorf("failed to generate token: %w", err)

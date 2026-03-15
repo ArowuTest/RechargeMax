@@ -111,13 +111,13 @@ func (j *CommissionReleaseJob) Run(ctx context.Context) error {
 			`, s.AffiliateID).Error
 		})
 		if err != nil {
-			logger.Info("[CommissionReleaseJob] ERROR for affiliate %s: %v", zap.Any("value", s.AffiliateID), zap.Error(err))
+			logger.Info("[CommissionReleaseJob] ERROR for affiliate", zap.Error(err), zap.Any("s.AffiliateID", s.AffiliateID))
 			continue
 		}
 		credited++
 	}
 
-	logger.Info("[CommissionReleaseJob] Credited commissions for %d affiliates", zap.Any("value", credited))
+	logger.Info("[CommissionReleaseJob] Credited commissions for affiliates", zap.Any("credited", credited))
 	return nil
 }
 

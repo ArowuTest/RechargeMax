@@ -182,7 +182,7 @@ func (s *AffiliateService) RegisterAffiliate(ctx context.Context, req RegisterAf
 	_, err = s.walletService.CreateWallet(ctx, req.MSISDN)
 	if err != nil {
 		// Log error but don't fail registration
-		logger.Error("Warning: Failed to create wallet for affiliate %s: %v", zap.Any("value", req.MSISDN), zap.Error(err))
+		logger.Error("Warning: Failed to create wallet for affiliate", zap.Error(err), zap.String("msisdn", req.MSISDN))
 	}
 
 	return s.affiliateToResponse(ctx, affiliate, user), nil
@@ -696,7 +696,12 @@ func (s *AffiliateService) RejectAffiliate(ctx context.Context, affiliateID stri
 			msisdn = user.MSISDN
 		}
 	}
-	logger.Info("[AUDIT] Affiliate %s (%s) rejected at %s. Reason: %s", zap.Any("value", affiliate.ID.String()), zap.Any("value", msisdn), zap.Any("value", now.Format(time.RFC3339)), zap.Any("value", reason))
+	logger.Info("[AUDIT] Affiliate rejected",
+		zap.String("affiliate_id", affiliate.ID.String()),
+		zap.String("msisdn", msisdn),
+		zap.String("rejected_at", now.Format(time.RFC3339)),
+		zap.String("reason", reason),
+	)
 	
 	return nil
 }
@@ -769,7 +774,12 @@ func (s *AffiliateService) SuspendAffiliate(ctx context.Context, affiliateID str
 			msisdn = user.MSISDN
 		}
 	}
-	logger.Info("[AUDIT] Affiliate %s (%s) suspended at %s. Reason: %s", zap.Any("value", affiliate.ID.String()), zap.Any("value", msisdn), zap.Any("value", now.Format(time.RFC3339)), zap.Any("value", reason))
+	logger.Info("[AUDIT] Affiliate suspended",
+		zap.String("affiliate_id", affiliate.ID.String()),
+		zap.String("msisdn", msisdn),
+		zap.String("suspended_at", now.Format(time.RFC3339)),
+		zap.String("reason", reason),
+	)
 	
 	return nil
 }

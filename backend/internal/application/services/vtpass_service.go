@@ -141,16 +141,16 @@ func NewVTPassService(config VTPassConfig) *VTPassService {
 	}
 
 	logger.Info("🔧 Initializing VTPassService with:")
-	logger.Info("   API Key: %s", zap.Any("value", config.APIKey))
-	logger.Info("   Public Key: %s", zap.Any("value", config.PublicKey))
+	logger.Info("   API Key", zap.Any("config.APIKey", config.APIKey))
+	logger.Info("   Public Key", zap.Any("config.PublicKey", config.PublicKey))
 	// Only show first 20 chars of secret if it's long enough
 	if len(config.SecretKey) > 20 {
-		logger.Info("   Secret Key: %s...", zap.Any("value", config.SecretKey[:20]))
+		logger.Info("   Secret Key (truncated)", zap.String("prefix", config.SecretKey[:20]))
 	} else {
-		logger.Info("   Secret Key: %s", zap.Any("value", config.SecretKey))
+		logger.Info("   Secret Key", zap.Any("config.SecretKey", config.SecretKey))
 	}
-	logger.Info("   Base URL: %s", zap.Any("value", baseURL))
-	logger.Info("   Is Sandbox: %v", zap.Any("value", config.IsSandbox))
+	logger.Info("   Base URL", zap.Any("baseURL", baseURL))
+	logger.Info("   Is Sandbox", zap.Any("config.IsSandbox", config.IsSandbox))
 	
 	return &VTPassService{
 		apiKey:    config.APIKey,

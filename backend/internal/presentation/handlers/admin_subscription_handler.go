@@ -401,3 +401,51 @@ func (h *AdminComprehensiveHandler) GetSubscriptionBillings(c *gin.Context) {
 		"meta": gin.H{"page": page, "limit": limit, "total": total},
 	})
 }
+
+// RetrySubscriptionBilling retries a failed subscription billing record.
+// It resets the billing status to "pending" so the next billing cycle picks it up,
+// and optionally re-triggers payment via the subscription service.
+func (h *AdminComprehensiveHandler) RetrySubscriptionBilling(c *gin.Context) {
+	ctx := c.Request.Context()
+	billingID := c.Param("id")
+	if billingID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "missing billing id"})
+		return
+	}
+
+	// Load the billing record
+	var billing entities.SubscriptionBilling
+	if err := h.db.WithContext(ctx).Where("id = ?", billingID).First(&billing).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "billing record not found"})
+		return
+	}
+
+	// Only allow retry on failed billings
+	if billing.Status != "failed" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "only failed billing records can be retried",
+			"current_status": billing.Status,
+		})
+		return
+	}
+
+	// Reset to pending so the subscription billing job can pick it up
+	if err := h.db.WithContext(ctx).Model(&billing).Updates(map[string]interface{}{
+		"status":         "pending",
+		"failure_reason": "",
+		"processed_at":   nil,
+	}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "failed to reset billing status",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Billing queued for retry",
+		"data":    gin.H{"id": billingID, "status": "pending"},
+	})
+}

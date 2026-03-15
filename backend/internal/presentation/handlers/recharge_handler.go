@@ -91,7 +91,7 @@ func (h *RechargeHandler) InitiateRecharge(c *gin.Context) {
 func (h *RechargeHandler) InitiateAirtimeRecharge(c *gin.Context) {
 	// Get msisdn from auth context (if authenticated) or use phone number from request
 	msisdn := c.GetString("msisdn")
-	logger.Info("[DEBUG] InitiateAirtimeRecharge called, msisdn from context: %s", zap.Any("value", msisdn))
+	logger.Info("[DEBUG] InitiateAirtimeRecharge called, msisdn from context", zap.String("msisdn", msisdn))
 
 	var req validation.AirtimeRechargeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -99,7 +99,7 @@ func (h *RechargeHandler) InitiateAirtimeRecharge(c *gin.Context) {
 		middleware.RespondWithError(c, errors.BadRequest("Invalid request format"))
 		return
 	}
-	logger.Info("[DEBUG] Request parsed: phone=%s, network=%s, amount=%.2f", zap.Any("value", req.PhoneNumber), zap.Any("value", req.Network), zap.Any("value", req.Amount))
+	logger.Info("[DEBUG] Request parsed: phone=, network=, amount=%.2f", zap.String("msisdn", req.PhoneNumber), zap.Any("req.Network", req.Network), zap.Any("req.Amount", req.Amount))
 
 	// Validate request
 	if err := req.Validate(); err != nil {
@@ -129,7 +129,7 @@ func (h *RechargeHandler) InitiateAirtimeRecharge(c *gin.Context) {
 		middleware.RespondWithError(c, err)
 		return
 	}
-	logger.Info("[DEBUG] CreateRecharge succeeded, result: %+v", zap.Any("value", result))
+	logger.Info("[DEBUG] CreateRecharge succeeded, result:v", zap.Any("result", result))
 
 	// Log transaction
 	errors.LogTransaction("AIRTIME_RECHARGE", result.ID.String(), msisdn, float64(amountKobo)/100, "INITIATED")
@@ -361,7 +361,7 @@ func (h *RechargeHandler) HandleTelecomWebhook(c *gin.Context) {
 // @Router /api/v1/recharge/reference/{reference} [get]
 func (h *RechargeHandler) GetRechargeByReference(c *gin.Context) {
 	reference := c.Param("reference")
-	logger.Info("[DEBUG] GetRechargeByReference called with reference: %s", zap.Any("value", reference))
+	logger.Info("[DEBUG] GetRechargeByReference called with reference", zap.Any("reference", reference))
 
 	if reference == "" {
 		logger.Info("[ERROR] Reference is empty")
@@ -377,7 +377,7 @@ func (h *RechargeHandler) GetRechargeByReference(c *gin.Context) {
 		middleware.RespondWithError(c, errors.NotFound("Recharge not found"))
 		return
 	}
-	logger.Info("[DEBUG] Recharge found: %+v", zap.Any("value", recharge))
+	logger.Info("[DEBUG] Recharge found:v", zap.Any("recharge", recharge))
 
 	middleware.RespondWithSuccess(c, recharge)
 }

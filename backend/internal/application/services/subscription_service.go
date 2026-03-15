@@ -64,7 +64,7 @@ func NewSubscriptionService(
 
 // CreateSubscription creates a new subscription
 func (s *SubscriptionService) CreateSubscription(ctx context.Context, req CreateSubscriptionRequest) (*SubscriptionResponse, error) {
-	logger.Info("[DEBUG] CreateSubscription called for MSISDN: %s, PaymentMethod: %s", zap.Any("value", req.MSISDN), zap.Any("value", req.PaymentMethod))
+	logger.Info("[DEBUG] CreateSubscription called for MSISDN:, PaymentMethod", zap.String("msisdn", req.MSISDN), zap.Any("req.PaymentMethod", req.PaymentMethod))
 	// Detect network (optional)
 	networkHint := ""
 	if req.Network != "" {
@@ -77,12 +77,12 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 
 	// Check for existing active subscription
 	// Query all subscriptions for this MSISDN
-	logger.Info("[DEBUG] Looking up user by MSISDN: %s", zap.Any("value", req.MSISDN))
+	logger.Info("[DEBUG] Looking up user by MSISDN", zap.String("msisdn", req.MSISDN))
 	user, err := s.userRepo.FindByMSISDN(ctx, req.MSISDN)
 	if err != nil {
 		logger.Error("[DEBUG] FindByMSISDN error: %v", zap.Error(err))
 	} else if user != nil {
-		logger.Info("[DEBUG] Found user: %s", zap.Any("value", user.ID))
+		logger.Info("[DEBUG] Found user", zap.String("id", user.ID.String()))
 		existingSubs, err := s.subscriptionRepo.FindByUserID(ctx, user.ID)
 		if err != nil {
 			logger.Error("[DEBUG] FindByUserID error: %v", zap.Error(err))

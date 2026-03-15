@@ -22,16 +22,19 @@ WORKDIR /app
 # Binary
 COPY --from=builder /app/rechargemax .
 
-# Entrypoint script (runs migrations then starts server)
+# Entrypoint script
 COPY docker-entrypoint.sh .
 RUN chmod +x docker-entrypoint.sh
+
+# Migrations (now lives inside backend/ so it's in the Docker build context)
+COPY database/ /app/database/
 
 RUN mkdir -p /app/logs && chown -R appuser:appuser /app
 
 USER appuser
 EXPOSE 8080
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
 CMD ["./docker-entrypoint.sh"]

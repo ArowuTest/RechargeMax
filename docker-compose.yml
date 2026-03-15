@@ -17,6 +17,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       # Init scripts + schema run once on first container start (alphabetical order)
       - ./database/docker-init:/docker-entrypoint-initdb.d:ro
+      - ./database/tables:/docker-entrypoint-initdb.d/tables:ro
       - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
       - ./database/seeds:/docker-entrypoint-initdb.d/seeds:ro
     healthcheck:

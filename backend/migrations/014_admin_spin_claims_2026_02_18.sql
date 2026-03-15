@@ -29,7 +29,7 @@ CHECK (claim_status IN ('PENDING', 'CLAIMED', 'EXPIRED', 'PENDING_ADMIN_REVIEW',
 -- ============================================================================
 
 CREATE INDEX IF NOT EXISTS idx_spin_results_claim_status ON spin_results(claim_status);
-CREATE INDEX IF NOT EXISTS idx_spin_results_claim_date ON spin_results(claim_date DESC);
+CREATE INDEX IF NOT EXISTS idx_spin_results_created_at2 ON spin_results(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_spin_results_prize_type ON spin_results(prize_type);
 CREATE INDEX IF NOT EXISTS idx_spin_results_reviewed_at ON spin_results(reviewed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_spin_results_msisdn_claim_status ON spin_results(msisdn, claim_status);
@@ -39,27 +39,23 @@ CREATE INDEX IF NOT EXISTS idx_spin_results_reviewed_by ON spin_results(reviewed
 -- 4. Create admin_activity_logs table if it doesn't exist
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS admin_activity_logs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    admin_user_id UUID NOT NULL,
-    admin_email VARCHAR(255) NOT NULL,
-    action_type VARCHAR(50) NOT NULL, -- 'APPROVE_CLAIM', 'REJECT_CLAIM', 'VIEW_CLAIM', 'EXPORT_CLAIMS'
-    resource_type VARCHAR(50) NOT NULL, -- 'SPIN_CLAIM'
-    resource_id UUID NOT NULL,
-    details JSONB,
-    ip_address INET,
-    user_agent TEXT,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW()
-);
+-- admin_activity_logs already created in 009; add missing columns if needed
+ALTER TABLE admin_activity_logs
+    ADD COLUMN IF NOT EXISTS admin_email VARCHAR(255),
+    ADD COLUMN IF NOT EXISTS action_type VARCHAR(50),
+    ADD COLUMN IF NOT EXISTS resource_type VARCHAR(50),
+    ADD COLUMN IF NOT EXISTS details JSONB,
+    ADD COLUMN IF NOT EXISTS ip_address INET,
+    ADD COLUMN IF NOT EXISTS user_agent TEXT;
 
 -- ============================================================================
 -- 5. Create indexes for admin_activity_logs
 -- ============================================================================
 
 CREATE INDEX IF NOT EXISTS idx_admin_activity_logs_admin_user_id ON admin_activity_logs(admin_user_id);
-CREATE INDEX IF NOT EXISTS idx_admin_activity_logs_resource ON admin_activity_logs(resource_type, resource_id);
+CREATE INDEX IF NOT EXISTS idx_admin_activity_logs_resource ON admin_activity_logs(resource, resource_id);
 CREATE INDEX IF NOT EXISTS idx_admin_activity_logs_created_at ON admin_activity_logs(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_admin_activity_logs_action_type ON admin_activity_logs(action_type);
+CREATE INDEX IF NOT EXISTS idx_admin_activity_logs_action_type ON admin_activity_logs(action);
 
 -- ============================================================================
 -- 6. Add comments for documentation

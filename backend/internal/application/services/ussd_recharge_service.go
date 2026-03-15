@@ -13,9 +13,10 @@ import (
 
 // USSDRechargeService handles USSD recharge tracking and points allocation
 type USSDRechargeService struct {
-	ussdRepo repositories.USSDRechargeRepository
-	userRepo repositories.UserRepository
+	ussdRepo            repositories.USSDRechargeRepository
+	userRepo            repositories.UserRepository
 	notificationService *NotificationService
+	drawRepo            repositories.DrawRepository
 }
 
 // NewUSSDRechargeService creates a new USSD recharge service
@@ -23,11 +24,13 @@ func NewUSSDRechargeService(
 	ussdRepo repositories.USSDRechargeRepository,
 	userRepo repositories.UserRepository,
 	notificationService *NotificationService,
+	drawRepo repositories.DrawRepository,
 ) *USSDRechargeService {
 	return &USSDRechargeService{
-		ussdRepo: ussdRepo,
-		userRepo: userRepo,
+		ussdRepo:            ussdRepo,
+		userRepo:            userRepo,
 		notificationService: notificationService,
+		drawRepo:            drawRepo,
 	}
 }
 
@@ -141,10 +144,47 @@ func (s *USSDRechargeService) createUSSDRecharge(ctx context.Context, payload US
 		return nil, fmt.Errorf("failed to allocate points: %w", err)
 	}
 
+	// Create draw entries (1 entry per ₦200 recharged)
+	if ussdRecharge.PointsEarned > 0 && userID != nil {
+		s.createDrawEntries(ctx, ussdRecharge, *userID)
+	}
+
 	// TODO: Implement SendUSSDRechargeNotification
 	// s.notificationService.SendUSSDRechargeNotification(ctx, payload.MSISDN, amountInKobo, pointsEarned)
 
 	return ussdRecharge, nil
+}
+
+func (s *USSDRechargeService) createDrawEntries(ctx context.Context, ussdRecharge *entities.USSDRecharge, userID uuid.UUID) {
+	// Find active draw
+	activeDraw, err := s.drawRepo.FindByStatus(ctx, "ACTIVE", 1, 0)
+	if err != nil || len(activeDraw) == 0 {
+		// No active draw - entries will be created when draw opens
+		fmt.Printf("No active draw found for USSD recharge %s - draw entries not created\n", ussdRecharge.ID)
+		return
+	}
+
+	draw := activeDraw[0]
+	now := time.Now()
+
+	// Create one entry per point earned
+	for i := 0; i < ussdRecharge.PointsEarned; i++ {
+		entry := &entities.DrawEntries{
+			ID:        uuid.New(),
+			DrawID:    draw.ID,
+			UserID:    &userID,
+			Msisdn:    ussdRecharge.MSISDN,
+			CreatedAt: &now,
+		}
+		if err := s.drawRepo.CreateEntry(ctx, entry); err != nil {
+			fmt.Printf("Failed to create draw entry for USSD recharge %s: %v\n", ussdRecharge.ID, err)
+			break
+		}
+	}
+
+	// Update draw total entries count
+	draw.TotalEntries += ussdRecharge.PointsEarned
+	s.drawRepo.Update(ctx, draw)
 }
 
 func (s *USSDRechargeService) allocatePoints(ctx context.Context, ussdRecharge *entities.USSDRecharge) error {

@@ -2,11 +2,11 @@ package entities
 
 import (
 	"time"
-
 )
 
 // PlatformSettings represents the platform_settings table
 type PlatformSettings struct {
+	SettingKey   string     `json:"setting_key" gorm:"column:setting_key;primaryKey"`
 	SettingValue string     `json:"setting_value" gorm:"column:setting_value;not null" validate:"required"`
 	Description  string     `json:"description" gorm:"column:description"`
 	IsPublic     *bool      `json:"is_public" gorm:"column:is_public"`

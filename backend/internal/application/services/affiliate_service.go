@@ -5,9 +5,11 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 
 	"rechargemax/internal/domain/entities"
 	"rechargemax/internal/domain/repositories"
@@ -22,6 +24,7 @@ type AffiliateService struct {
 	transactionRepo     repositories.TransactionRepository
 	walletService       *WalletService
 	notificationService *NotificationService
+	db                  *gorm.DB
 }
 
 // RegisterAffiliateRequest represents affiliate registration request
@@ -85,6 +88,7 @@ type ReferralSummary struct {
 
 // NewAffiliateService creates a new affiliate service
 func NewAffiliateService(
+	db *gorm.DB,
 	affiliateRepo repositories.AffiliateRepository,
 	userRepo repositories.UserRepository,
 	commissionRepo repositories.AffiliateCommissionRepository,
@@ -99,7 +103,29 @@ func NewAffiliateService(
 		transactionRepo:     transactionRepo,
 		walletService:       walletService,
 		notificationService: notificationService,
+		db:                  db,
 	}
+}
+
+// getDefaultCommissionRate reads the affiliate commission rate from platform_settings.
+// Falls back to 1.0 (1%) if the key is not found or cannot be parsed.
+func (s *AffiliateService) getDefaultCommissionRate(ctx context.Context) float64 {
+	const fallback = 1.0
+	if s.db == nil {
+		return fallback
+	}
+	var settingValue string
+	err := s.db.WithContext(ctx).
+		Raw("SELECT setting_value FROM platform_settings WHERE setting_key = ?", "affiliate.commission_rate").
+		Scan(&settingValue).Error
+	if err != nil || settingValue == "" {
+		return fallback
+	}
+	rate, err := strconv.ParseFloat(settingValue, 64)
+	if err != nil {
+		return fallback
+	}
+	return rate
 }
 
 // RegisterAffiliate registers a new affiliate
@@ -140,7 +166,7 @@ func (s *AffiliateService) RegisterAffiliate(ctx context.Context, req RegisterAf
 		AffiliateCode:  affiliateCode,
 		Status:         "PENDING", // Requires approval
 		Tier:           "BRONZE",
-		CommissionRate: 5.00, // 5% default commission rate
+		CommissionRate: s.getDefaultCommissionRate(ctx),
 		BankName:       req.BankName,
 		AccountNumber:  req.AccountNumber,
 		AccountName:    req.AccountName,

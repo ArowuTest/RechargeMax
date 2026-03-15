@@ -33,7 +33,7 @@ type Winner struct {
 	ProvisionError       *string        `json:"provision_error" gorm:"column:provision_error"`
 	
 	// Claim management
-	ClaimStatus          string         `json:"claim_status" gorm:"column:claim_status;default:pending;not null;index" validate:"required,oneof=pending claimed expired"`
+	ClaimStatus          string         `json:"claim_status" gorm:"column:claim_status;default:PENDING;not null;index" validate:"required,oneof=PENDING CLAIMED EXPIRED"`
 	ClaimDeadline        *time.Time     `json:"claim_deadline" gorm:"column:claim_deadline;index"`
 	ClaimedAt            *time.Time     `json:"claimed_at" gorm:"column:claimed_at"`
 	

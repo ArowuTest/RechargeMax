@@ -3,9 +3,11 @@ package services
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 
 	"rechargemax/internal/domain/entities"
 	"rechargemax/internal/domain/repositories"
@@ -20,6 +22,70 @@ type WinnerService struct {
 	hlrService          *HLRService
 	telecomService      *TelecomServiceIntegrated
 	notificationService *NotificationService
+	db                  *gorm.DB
+}
+
+// safeStr safely dereferences a *string, returning empty string if nil
+func safeStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+// setStr sets a *string field, allocating if necessary
+func setStr(s *string, val string) *string {
+	if s == nil {
+		return &val
+	}
+	*s = val
+	return s
+}
+
+// safeInt64 safely dereferences a *int64
+func safeInt64(n *int64) int64 {
+	if n == nil {
+		return 0
+	}
+	return *n
+}
+
+// safeTime safely dereferences a *time.Time
+func safeTime(t *time.Time) time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	return *t
+}
+
+// safeUUID safely dereferences a *uuid.UUID, returning uuid.Nil if nil
+func safeUUID(u *uuid.UUID) uuid.UUID {
+	if u == nil {
+		return uuid.Nil
+	}
+	return *u
+}
+
+// getClaimWindowDays reads the claim window from platform_settings, defaulting to 30
+func (s *WinnerService) getClaimWindowDays(ctx context.Context) int {
+	if s.db == nil {
+		return 30
+	}
+	var setting struct {
+		SettingValue string `gorm:"column:setting_value"`
+	}
+	if err := s.db.WithContext(ctx).
+		Table("platform_settings").
+		Where("setting_key = ?", "draw.claim_window_days").
+		Select("setting_value").
+		First(&setting).Error; err != nil {
+		return 30
+	}
+	days, err := strconv.Atoi(setting.SettingValue)
+	if err != nil || days <= 0 {
+		return 30
+	}
+	return days
 }
 
 // WinnerResponse represents winner data for API responses
@@ -50,6 +116,7 @@ func NewWinnerService(
 	hlrService *HLRService,
 	telecomService *TelecomServiceIntegrated,
 	notificationService *NotificationService,
+	db *gorm.DB,
 ) *WinnerService {
 	return &WinnerService{
 		winnerRepo:          winnerRepo,
@@ -59,6 +126,7 @@ func NewWinnerService(
 		hlrService:          hlrService,
 		telecomService:      telecomService,
 		notificationService: notificationService,
+		db:                  db,
 	}
 }
 
@@ -71,7 +139,8 @@ func (s *WinnerService) CreateWinner(ctx context.Context, drawID uuid.UUID, msis
 	}
 
 	// Create winner record
-	claimDeadline := time.Now().AddDate(0, 0, 30) // 30 days to claim
+	claimWindowDays := s.getClaimWindowDays(ctx)
+	claimDeadline := time.Now().AddDate(0, 0, claimWindowDays)
 	winner := &entities.Winner{
 		ID:               uuid.New(),
 		DrawID:           &drawID,
@@ -83,7 +152,7 @@ func (s *WinnerService) CreateWinner(ctx context.Context, drawID uuid.UUID, msis
 		DataPackage:      &dataPackage,
 		AirtimeAmount:    &airtimeAmount,
 		Network:          &network,
-		ClaimStatus:      "pending",
+		ClaimStatus:      "PENDING",
 		ClaimDeadline:    &claimDeadline,
 		NotificationSent: false,
 	}
@@ -91,7 +160,7 @@ func (s *WinnerService) CreateWinner(ctx context.Context, drawID uuid.UUID, msis
 	// Determine if auto-provision is possible
 	if prizeType == "data" || prizeType == "airtime" {
 		winner.AutoProvision = true
-		*winner.ProvisionStatus = "pending"
+		winner.ProvisionStatus = setStr(winner.ProvisionStatus, "pending")
 	}
 
 	err = s.winnerRepo.Create(ctx, winner)
@@ -146,19 +215,18 @@ func (s *WinnerService) ImportWinners(ctx context.Context, drawID uuid.UUID, win
 // provisionPrize auto-provisions data or airtime prizes
 func (s *WinnerService) provisionPrize(ctx context.Context, winner *entities.Winner) {
 	// Detect network if not provided
-	network := *winner.Network
+	network := safeStr(winner.Network)
 	if network == "" {
 		detectedNetwork, err := s.hlrService.DetectNetwork(ctx, winner.MSISDN, nil)
 		if err != nil {
-			provisionStatus := "failed"
-			*winner.ProvisionStatus = provisionStatus
+			winner.ProvisionStatus = setStr(winner.ProvisionStatus, "failed")
 			provisionError := fmt.Sprintf("Network detection failed: %v", err)
 			winner.ProvisionError = &provisionError
 			s.winnerRepo.Update(ctx, winner)
 			return
 		}
-			network = detectedNetwork.Network
-			*winner.Network = network
+		network = detectedNetwork.Network
+		winner.Network = setStr(winner.Network, network)
 	}
 
 	// Integrate with TelecomService for actual provisioning
@@ -190,9 +258,9 @@ func (s *WinnerService) provisionPrize(ctx context.Context, winner *entities.Win
 	// }
 	
 	// For now, mark as completed (when TelecomService is integrated, uncomment above)
-	*winner.ProvisionStatus = "completed"
+	winner.ProvisionStatus = setStr(winner.ProvisionStatus, "completed")
 	winner.ProvisionedAt = timePtr(time.Now())
-	winner.ClaimStatus = "claimed"
+	winner.ClaimStatus = "CLAIMED"
 	winner.ClaimedAt = timePtr(time.Now())
 
 	err := s.winnerRepo.Update(ctx, winner)
@@ -216,11 +284,11 @@ func (s *WinnerService) sendWinnerNotifications(ctx context.Context, winner *ent
 	// Prepare message
 	var message string
 	if winner.PrizeType == "cash" {
-		message = fmt.Sprintf("🎉 Congratulations! You won ₦%d in the %s draw! Login to claim your prize within 30 days.", *winner.PrizeAmount/100, draw.Name)
+		message = fmt.Sprintf("🎉 Congratulations! You won ₦%d in the %s draw! Login to claim your prize within 30 days.", safeInt64(winner.PrizeAmount)/100, draw.Name)
 	} else if winner.PrizeType == "data" {
-		message = fmt.Sprintf("🎉 Congratulations! You won %s data in the %s draw! Your data has been credited to your number.", *winner.DataPackage, draw.Name)
+		message = fmt.Sprintf("🎉 Congratulations! You won %s data in the %s draw! Your data has been credited to your number.", safeStr(winner.DataPackage), draw.Name)
 	} else if winner.PrizeType == "airtime" {
-		message = fmt.Sprintf("🎉 Congratulations! You won ₦%d airtime in the %s draw! Your airtime has been credited to your number.", *winner.AirtimeAmount/100, draw.Name)
+		message = fmt.Sprintf("🎉 Congratulations! You won ₦%d airtime in the %s draw! Your airtime has been credited to your number.", safeInt64(winner.AirtimeAmount)/100, draw.Name)
 	} else {
 		message = fmt.Sprintf("🎉 Congratulations! You won %s in the %s draw! Login to claim your prize within 30 days.", winner.PrizeDescription, draw.Name)
 	}
@@ -254,9 +322,9 @@ func (s *WinnerService) sendWinnerNotifications(ctx context.Context, winner *ent
 func (s *WinnerService) sendProvisionSuccessNotification(ctx context.Context, winner *entities.Winner) {
 	var message string
 	if winner.PrizeType == "data" {
-		message = fmt.Sprintf("Your %s data prize has been successfully credited to %s!", *winner.DataPackage, winner.MSISDN)
+		message = fmt.Sprintf("Your %s data prize has been successfully credited to %s!", safeStr(winner.DataPackage), winner.MSISDN)
 	} else if winner.PrizeType == "airtime" {
-		message = fmt.Sprintf("Your ₦%d airtime prize has been successfully credited to %s!", *winner.AirtimeAmount/100, winner.MSISDN)
+		message = fmt.Sprintf("Your ₦%d airtime prize has been successfully credited to %s!", safeInt64(winner.AirtimeAmount)/100, winner.MSISDN)
 	}
 
 	if s.notificationService != nil {
@@ -274,7 +342,7 @@ func (s *WinnerService) GetWinnersByMSISDN(ctx context.Context, msisdn string) (
 
 	var responses []*WinnerResponse
 	for _, winner := range winners {
-		draw, _ := s.drawRepo.FindByID(ctx, *winner.DrawID)
+		draw, _ := s.drawRepo.FindByID(ctx, safeUUID(winner.DrawID))
 		drawName := ""
 		if draw != nil {
 			drawName = draw.Name
@@ -282,19 +350,19 @@ func (s *WinnerService) GetWinnersByMSISDN(ctx context.Context, msisdn string) (
 
 		responses = append(responses, &WinnerResponse{
 			ID:               winner.ID,
-			DrawID:           *winner.DrawID,
+			DrawID:           safeUUID(winner.DrawID),
 			DrawName:         drawName,
 			MSISDN:           winner.MSISDN,
 			Position:         winner.Position,
 			PrizeType:        winner.PrizeType,
 			PrizeDescription: winner.PrizeDescription,
-			CashAmount:       *winner.PrizeAmount,
-			DataPackage:      *winner.DataPackage,
-			AirtimeAmount:    *winner.AirtimeAmount,
+			CashAmount:       safeInt64(winner.PrizeAmount),
+			DataPackage:      safeStr(winner.DataPackage),
+			AirtimeAmount:    safeInt64(winner.AirtimeAmount),
 			ClaimStatus:      winner.ClaimStatus,
-			ClaimDeadline:    *winner.ClaimDeadline,
+			ClaimDeadline:    safeTime(winner.ClaimDeadline),
 			ClaimedAt:        winner.ClaimedAt,
-			ProvisionStatus:  *winner.ProvisionStatus,
+			ProvisionStatus:  safeStr(winner.ProvisionStatus),
 			CreatedAt:        winner.CreatedAt,
 		})
 	}
@@ -319,19 +387,19 @@ func (s *WinnerService) GetWinnersByDrawID(ctx context.Context, drawID uuid.UUID
 	for _, winner := range winners {
 		responses = append(responses, &WinnerResponse{
 			ID:               winner.ID,
-			DrawID:           *winner.DrawID,
+			DrawID:           safeUUID(winner.DrawID),
 			DrawName:         drawName,
 			MSISDN:           winner.MSISDN,
 			Position:         winner.Position,
 			PrizeType:        winner.PrizeType,
 			PrizeDescription: winner.PrizeDescription,
-			CashAmount:       *winner.PrizeAmount,
-			DataPackage:      *winner.DataPackage,
-			AirtimeAmount:    *winner.AirtimeAmount,
+			CashAmount:       safeInt64(winner.PrizeAmount),
+			DataPackage:      safeStr(winner.DataPackage),
+			AirtimeAmount:    safeInt64(winner.AirtimeAmount),
 			ClaimStatus:      winner.ClaimStatus,
-			ClaimDeadline:    *winner.ClaimDeadline,
+			ClaimDeadline:    safeTime(winner.ClaimDeadline),
 			ClaimedAt:        winner.ClaimedAt,
-			ProvisionStatus:  *winner.ProvisionStatus,
+			ProvisionStatus:  safeStr(winner.ProvisionStatus),
 			CreatedAt:        winner.CreatedAt,
 		})
 	}
@@ -350,7 +418,7 @@ func (s *WinnerService) ProcessCashPayout(ctx context.Context, winnerID uuid.UUI
 		return fmt.Errorf("prize is not cash")
 	}
 
-	if winner.ClaimStatus != "pending" {
+	if winner.ClaimStatus != "PENDING" {
 		return fmt.Errorf("prize already claimed or expired")
 	}
 
@@ -385,7 +453,7 @@ func (s *WinnerService) ProcessCashPayout(ctx context.Context, winnerID uuid.UUI
 	// winner.PaymentReference = &transferRef
 	
 	// For now, mark as claimed (when PaymentService is integrated, uncomment above)
-	winner.ClaimStatus = "claimed"
+	winner.ClaimStatus = "CLAIMED"
 	winner.ClaimedAt = timePtr(time.Now())
 	winner.BankName = &bankName
 	winner.AccountNumber = &accountNumber
@@ -405,14 +473,14 @@ func (s *WinnerService) ProcessGoodsShipment(ctx context.Context, winnerID uuid.
 		return fmt.Errorf("prize is not goods")
 	}
 
-	if winner.ClaimStatus != "pending" {
+	if winner.ClaimStatus != "PENDING" {
 		return fmt.Errorf("prize already claimed or expired")
 	}
 
 	winner.ShippingAddress = &shippingAddress
 	shippingStatus := "pending"
 	winner.ShippingStatus = &shippingStatus
-	winner.ClaimStatus = "claimed"
+	winner.ClaimStatus = "CLAIMED"
 	winner.ClaimedAt = timePtr(time.Now())
 
 	return s.winnerRepo.Update(ctx, winner)
@@ -429,13 +497,12 @@ func (s *WinnerService) RetryProvisioning(ctx context.Context, winnerID uuid.UUI
 		return fmt.Errorf("prize does not support auto-provisioning")
 	}
 
-	if *winner.ProvisionStatus == "completed" {
+	if safeStr(winner.ProvisionStatus) == "completed" {
 		return fmt.Errorf("prize already provisioned")
 	}
 
 	// Reset provision status and retry
-	provisionStatus := "pending"
-	*winner.ProvisionStatus = provisionStatus
+	winner.ProvisionStatus = setStr(winner.ProvisionStatus, "pending")
 	emptyError := ""
 	winner.ProvisionError = &emptyError
 	err = s.winnerRepo.Update(ctx, winner)
@@ -536,7 +603,7 @@ func (s *WinnerService) GetAllWinners(ctx context.Context, page, perPage int, dr
 	var responses []*WinnerResponse
 	for _, winner := range winners {
 		// Get draw name
-		draw, _ := s.drawRepo.FindByID(ctx, *winner.DrawID)
+		draw, _ := s.drawRepo.FindByID(ctx, safeUUID(winner.DrawID))
 		drawName := ""
 		if draw != nil {
 			drawName = draw.Name
@@ -545,32 +612,32 @@ func (s *WinnerService) GetAllWinners(ctx context.Context, page, perPage int, dr
 		// Handle nil pointers safely
 		var cashAmount int64
 		if winner.PrizeAmount != nil {
-			cashAmount = *winner.PrizeAmount
+			cashAmount = safeInt64(winner.PrizeAmount)
 		}
 		
 		var dataPackage string
 		if winner.DataPackage != nil {
-			dataPackage = *winner.DataPackage
+			dataPackage = safeStr(winner.DataPackage)
 		}
 		
 		var airtimeAmount int64
 		if winner.AirtimeAmount != nil {
-			airtimeAmount = *winner.AirtimeAmount
+			airtimeAmount = safeInt64(winner.AirtimeAmount)
 		}
 		
 		var provisionStatus string
 		if winner.ProvisionStatus != nil {
-			provisionStatus = *winner.ProvisionStatus
+			provisionStatus = safeStr(winner.ProvisionStatus)
 		}
 		
 		var claimDeadline time.Time
 		if winner.ClaimDeadline != nil {
-			claimDeadline = *winner.ClaimDeadline
+			claimDeadline = safeTime(winner.ClaimDeadline)
 		}
 		
 		responses = append(responses, &WinnerResponse{
 			ID:               winner.ID,
-			DrawID:           *winner.DrawID,
+			DrawID:           safeUUID(winner.DrawID),
 			DrawName:         drawName,
 			MSISDN:           winner.MSISDN,
 			Position:         winner.Position,
@@ -610,7 +677,7 @@ func (s *WinnerService) GetWinnerByID(ctx context.Context, winnerID string, msis
 	}
 	
 	// Get draw name
-	draw, _ := s.drawRepo.FindByID(ctx, *winner.DrawID)
+	draw, _ := s.drawRepo.FindByID(ctx, safeUUID(winner.DrawID))
 	drawName := ""
 	if draw != nil {
 		drawName = draw.Name
@@ -619,32 +686,32 @@ func (s *WinnerService) GetWinnerByID(ctx context.Context, winnerID string, msis
 	// Handle nil pointers safely
 	var cashAmount int64
 	if winner.PrizeAmount != nil {
-		cashAmount = *winner.PrizeAmount
+		cashAmount = safeInt64(winner.PrizeAmount)
 	}
 	
 	var dataPackage string
 	if winner.DataPackage != nil {
-		dataPackage = *winner.DataPackage
+		dataPackage = safeStr(winner.DataPackage)
 	}
 	
 	var airtimeAmount int64
 	if winner.AirtimeAmount != nil {
-		airtimeAmount = *winner.AirtimeAmount
+		airtimeAmount = safeInt64(winner.AirtimeAmount)
 	}
 	
 	var provisionStatus string
 	if winner.ProvisionStatus != nil {
-		provisionStatus = *winner.ProvisionStatus
+		provisionStatus = safeStr(winner.ProvisionStatus)
 	}
 	
 	var claimDeadline time.Time
 	if winner.ClaimDeadline != nil {
-		claimDeadline = *winner.ClaimDeadline
+		claimDeadline = safeTime(winner.ClaimDeadline)
 	}
 	
 	response := &WinnerResponse{
 		ID:               winner.ID,
-		DrawID:           *winner.DrawID,
+		DrawID:           safeUUID(winner.DrawID),
 		DrawName:         drawName,
 		MSISDN:           winner.MSISDN,
 		Position:         winner.Position,
@@ -746,7 +813,7 @@ func (s *WinnerService) UpdateWinnerStatus(ctx context.Context, winnerID string,
 	}
 	
 	// Get draw name for response
-	draw, _ := s.drawRepo.FindByID(ctx, *winner.DrawID)
+	draw, _ := s.drawRepo.FindByID(ctx, safeUUID(winner.DrawID))
 	drawName := ""
 	if draw != nil {
 		drawName = draw.Name
@@ -755,32 +822,32 @@ func (s *WinnerService) UpdateWinnerStatus(ctx context.Context, winnerID string,
 	// Handle nil pointers safely
 	var cashAmount int64
 	if winner.PrizeAmount != nil {
-		cashAmount = *winner.PrizeAmount
+		cashAmount = safeInt64(winner.PrizeAmount)
 	}
 	
 	var dataPackage string
 	if winner.DataPackage != nil {
-		dataPackage = *winner.DataPackage
+		dataPackage = safeStr(winner.DataPackage)
 	}
 	
 	var airtimeAmount int64
 	if winner.AirtimeAmount != nil {
-		airtimeAmount = *winner.AirtimeAmount
+		airtimeAmount = safeInt64(winner.AirtimeAmount)
 	}
 	
 	var provisionStatus string
 	if winner.ProvisionStatus != nil {
-		provisionStatus = *winner.ProvisionStatus
+		provisionStatus = safeStr(winner.ProvisionStatus)
 	}
 	
 	var claimDeadline time.Time
 	if winner.ClaimDeadline != nil {
-		claimDeadline = *winner.ClaimDeadline
+		claimDeadline = safeTime(winner.ClaimDeadline)
 	}
 	
 	response := &WinnerResponse{
 		ID:               winner.ID,
-		DrawID:           *winner.DrawID,
+		DrawID:           safeUUID(winner.DrawID),
 		DrawName:         drawName,
 		MSISDN:           winner.MSISDN,
 		Position:         winner.Position,
@@ -914,7 +981,7 @@ func (s *WinnerService) ApproveClaim(ctx context.Context, winnerID string, notes
 	}
 	
 	// Update winner status to claimed
-	winner.ClaimStatus = "claimed"
+	winner.ClaimStatus = "CLAIMED"
 	now := time.Now()
 	winner.ClaimedAt = &now
 	if notes != "" {

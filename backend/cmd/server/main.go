@@ -338,6 +338,7 @@ func initServices(repos *Repositories, config *Config, db *gorm.DB) *Services {
 	)
 
 	affiliateService := services.NewAffiliateService(
+		db,
 		repos.Affiliate,
 		repos.User,
 		persistence.NewAffiliateCommissionRepository(db), // Add commission repo
@@ -418,6 +419,7 @@ func initServices(repos *Repositories, config *Config, db *gorm.DB) *Services {
 		hlrService,
 		telecomServiceIntegrated,
 		notificationService,
+		db,
 	)
 
 	authService := services.NewAuthService(
@@ -446,6 +448,7 @@ func initServices(repos *Repositories, config *Config, db *gorm.DB) *Services {
 		repos.USSDRecharge,
 		repos.User,
 		notificationService,
+		repos.Draw,
 	)
 
 	pointsService := services.NewPointsService(

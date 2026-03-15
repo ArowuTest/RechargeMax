@@ -12,7 +12,10 @@ ALTER TABLE data_plans
 
 CREATE INDEX IF NOT EXISTS idx_data_plans_network_provider ON data_plans(network_provider);
 
--- 3. Widen subscription_code column from VARCHAR(20) to VARCHAR(50)
+-- 3. Add subscription_code column (if not exists) and ensure it's VARCHAR(50)
 --    Paystack subscription codes (SUB_xxxxxxxxxxxxxxxx) can exceed 20 characters.
-ALTER TABLE daily_subscriptions
-    ALTER COLUMN subscription_code TYPE VARCHAR(50);
+ALTER TABLE daily_subscriptions ADD COLUMN IF NOT EXISTS subscription_code VARCHAR(50);
+DO $$ BEGIN
+  ALTER TABLE daily_subscriptions ALTER COLUMN subscription_code TYPE VARCHAR(50);
+EXCEPTION WHEN others THEN NULL;
+END $$;

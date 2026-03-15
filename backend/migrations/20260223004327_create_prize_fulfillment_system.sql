@@ -74,8 +74,8 @@ ADD COLUMN IF NOT EXISTS provision_completed_at TIMESTAMP,
 ADD COLUMN IF NOT EXISTS claim_reference VARCHAR(100);
 
 ALTER TABLE spin_results
-ADD CONSTRAINT IF NOT EXISTS check_fulfillment_mode 
-CHECK (fulfillment_mode IN ('AUTO', 'MANUAL'));
+DROP CONSTRAINT IF EXISTS check_fulfillment_mode;
+ALTER TABLE spin_results ADD CONSTRAINT check_fulfillment_mode CHECK (fulfillment_mode IN ('AUTO', 'MANUAL'));
 
 CREATE INDEX IF NOT EXISTS idx_spin_results_fulfillment_mode ON spin_results(fulfillment_mode);
 CREATE INDEX IF NOT EXISTS idx_spin_results_can_retry ON spin_results(can_retry) WHERE can_retry = TRUE;

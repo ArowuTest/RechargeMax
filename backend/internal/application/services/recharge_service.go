@@ -2,6 +2,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -212,8 +213,15 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 	// ₦200 = 20000 kobo, so points = amount / 20000
 	pointsEarned := recharge.Amount / 20000
 	
-	// Calculate draw entries (1 point = 1 draw entry)
-	drawEntries := pointsEarned
+	// Calculate draw entries with loyalty tier multiplier
+	// Get user's current total points to determine their tier
+	var userForTier entities.Users
+	_ = s.db.Where("msisdn = ?", recharge.Msisdn).First(&userForTier).Error
+	multiplier := getTierMultiplier(s.db, ctx, userForTier.TotalPoints)
+	drawEntries := int64(float64(pointsEarned) * multiplier)
+	if drawEntries < pointsEarned {
+		drawEntries = pointsEarned // Minimum 1:1 ratio
+	}
 
 	// Check if eligible for wheel spin (₦1000 minimum)
 	// ₦1000 = 100000 kobo
@@ -294,7 +302,10 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 				// Don't return error - spin opportunity failure shouldn't rollback recharge
 			}
 		}
-		
+
+		// Create draw_entries rows for the active draw
+		s.createRechargeDrawEntries(ctx, tx, &user, int(drawEntries), recharge.Msisdn)
+
 		return nil // Commit transaction
 	})
 	
@@ -815,4 +826,80 @@ func (s *RechargeService) handlePendingRecharge(ctx context.Context, recharge *e
 	// TODO: Schedule background job to requery VTPass after 2 minutes
 	// For now, return success - background job will handle requery
 	return nil
+}
+
+// getTierMultiplier returns the draw entry multiplier for a user's point balance.
+// Multipliers are loaded from platform_settings with fallback to hardcoded defaults.
+func getTierMultiplier(db *gorm.DB, ctx context.Context, totalPoints int) float64 {
+	settings := map[string]float64{
+		"loyalty.silver_min_points":   500,
+		"loyalty.gold_min_points":     2000,
+		"loyalty.platinum_min_points": 5000,
+		"loyalty.silver_multiplier":   1.25,
+		"loyalty.gold_multiplier":     1.5,
+		"loyalty.platinum_multiplier": 2.0,
+	}
+
+	// Try to load overrides from DB
+	var rows []struct {
+		Key   string `gorm:"column:setting_key"`
+		Value string `gorm:"column:setting_value"`
+	}
+	db.WithContext(ctx).Table("platform_settings").
+		Where("setting_key LIKE 'loyalty.%'").
+		Select("setting_key, setting_value").
+		Find(&rows)
+
+	for _, row := range rows {
+		if v, err := strconv.ParseFloat(row.Value, 64); err == nil {
+			settings[row.Key] = v
+		}
+	}
+
+	points := float64(totalPoints)
+	switch {
+	case points >= settings["loyalty.platinum_min_points"]:
+		return settings["loyalty.platinum_multiplier"]
+	case points >= settings["loyalty.gold_min_points"]:
+		return settings["loyalty.gold_multiplier"]
+	case points >= settings["loyalty.silver_min_points"]:
+		return settings["loyalty.silver_multiplier"]
+	default:
+		return 1.0
+	}
+}
+
+// createRechargeDrawEntries creates individual draw_entries rows for an active draw.
+// Called inside the payment-processing DB transaction so entries are created atomically.
+func (s *RechargeService) createRechargeDrawEntries(ctx context.Context, tx *gorm.DB, user *entities.Users, entryCount int, msisdn string) {
+	if entryCount <= 0 {
+		return
+	}
+
+	// Find the most recent active draw
+	var activeDraw entities.Draw
+	if err := tx.WithContext(ctx).Where("status = 'ACTIVE'").Order("start_time DESC").First(&activeDraw).Error; err != nil {
+		// No active draw - entries will be created via CSV import at draw time
+		return
+	}
+
+	now := time.Now()
+	count := entryCount
+	entry := entities.DrawEntries{
+		ID:           uuid.New(),
+		DrawID:       activeDraw.ID,
+		UserID:       &user.ID,
+		Msisdn:       msisdn,
+		EntriesCount: &count,
+		CreatedAt:    &now,
+	}
+	if err := tx.WithContext(ctx).Create(&entry).Error; err != nil {
+		// Log but don't fail the transaction - draw entries are non-critical
+		fmt.Printf("Failed to create draw entries for %s: %v\n", msisdn, err)
+		return
+	}
+
+	// Increment total_entries counter on the draw
+	tx.WithContext(ctx).Model(&activeDraw).
+		Update("total_entries", gorm.Expr("total_entries + ?", entryCount))
 }

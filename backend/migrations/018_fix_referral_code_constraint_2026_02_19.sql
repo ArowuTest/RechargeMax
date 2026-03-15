@@ -1,3 +1,6 @@
+-- Add user_code column if not yet created (029 adds it; guard here for ordering)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS user_code VARCHAR(20);
+
 -- Migration: Fix referral code unique constraint to allow NULL values
 -- Date: 2026-02-19
 -- Purpose: Allow multiple users with NULL referral codes while maintaining uniqueness for non-NULL values

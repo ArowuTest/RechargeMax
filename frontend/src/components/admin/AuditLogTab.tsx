@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useToast } from '@/hooks/useToast';
 import { ClipboardList, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+import apiClient from '@/lib/api-client';
 const PAGE_SIZE = 50;
 
 interface AuditLog {
@@ -67,8 +67,8 @@ export const AuditLogTab: React.FC = () => {
       });
       if (actionFilter.trim()) params.set('action', actionFilter.trim());
 
-      const res = await fetch(`${API_BASE}/admin/audit-logs?${params}`, { credentials: 'include' });
-      const data = await res.json();
+      const res = await apiClient.get<{ success: boolean; data?: { logs: typeof logs; total: number }; message?: string }>(`/admin/audit-logs?${params}`);
+      const data = res.data;
       if (data.success) {
         setLogs(data.data?.logs ?? []);
         setTotal(data.data?.total ?? 0);

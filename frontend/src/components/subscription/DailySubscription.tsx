@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+import apiClient from '@/lib/api-client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -63,12 +62,9 @@ export function DailySubscription() {
         
         // Use Go backend API instead of Supabase
         
-        const response = await fetch(`${API_BASE}/subscription/config`, {
-          method: 'GET',
-          credentials: 'include'
-        })
+        const response = await apiClient.get<{ success: boolean; config: typeof subscriptionConfig }>('/subscription/config')
         
-        const result = await response.json()
+        const result = response.data
         
         if (result.success && result.config) {
           setSubscriptionConfig(result.config)

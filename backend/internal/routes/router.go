@@ -276,21 +276,25 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	admin.DELETE("/prize-categories/:id",            hdlrs.AdminComprehensive.DeletePrizeCategory)
 
 	// ── Subscriptions ────────────────────────────────────────────────────────
-	admin.GET("/subscription-tiers",              hdlrs.AdminComprehensive.GetSubscriptionTiers)
-	admin.POST("/subscription-tiers",             hdlrs.AdminComprehensive.CreateSubscriptionTier)
-	admin.PUT("/subscription-tiers/:id",          hdlrs.AdminComprehensive.UpdateSubscriptionTier)
-	admin.DELETE("/subscription-tiers/:id",       hdlrs.AdminComprehensive.DeleteSubscriptionTier)
+	admin.GET("/subscription-tiers",                       hdlrs.AdminComprehensive.GetSubscriptionTiers)
+	admin.POST("/subscription-tiers",                      hdlrs.AdminComprehensive.CreateSubscriptionTier)
+	admin.PUT("/subscription-tiers/:id",                   hdlrs.AdminComprehensive.UpdateSubscriptionTier)
+	admin.DELETE("/subscription-tiers/:id",                hdlrs.AdminComprehensive.DeleteSubscriptionTier)
+	admin.PATCH("/subscription-tiers/:id/toggle-active",   hdlrs.AdminComprehensive.ToggleSubscriptionTier)
 	admin.GET("/subscription-pricing/current",    hdlrs.AdminComprehensive.GetCurrentPricing)
 	admin.GET("/subscription-pricing/history",    hdlrs.AdminComprehensive.GetPricingHistory)
 	admin.POST("/subscription-pricing",           hdlrs.AdminComprehensive.UpdatePricing)
-	admin.GET("/daily-subscriptions",             hdlrs.AdminComprehensive.GetDailySubscriptions)
-	admin.GET("/daily-subscriptions/:id",         hdlrs.AdminComprehensive.GetDailySubscriptionDetails)
-	admin.POST("/daily-subscriptions/:id/cancel", hdlrs.AdminComprehensive.CancelDailySubscription)
-	admin.GET("/subscription-billings",               hdlrs.AdminComprehensive.GetSubscriptionBillings)
-	admin.POST("/subscription-billings/:id/retry",    hdlrs.AdminComprehensive.RetrySubscriptionBilling)
-	admin.GET("/daily-subscriptions/analytics",   hdlrs.AdminComprehensive.GetSubscriptionAnalytics)
-	admin.GET("/daily-subscriptions/config",      hdlrs.AdminComprehensive.GetSubscriptionConfig)
-	admin.PUT("/daily-subscriptions/config",      hdlrs.AdminComprehensive.UpdateSubscriptionConfig)
+	admin.GET("/daily-subscriptions",                  hdlrs.AdminComprehensive.GetDailySubscriptions)
+	admin.GET("/daily-subscriptions/analytics",        hdlrs.AdminComprehensive.GetSubscriptionAnalytics)
+	admin.GET("/daily-subscriptions/config",           hdlrs.AdminComprehensive.GetSubscriptionConfig)
+	admin.PUT("/daily-subscriptions/config",           hdlrs.AdminComprehensive.UpdateSubscriptionConfig)
+	admin.GET("/daily-subscriptions/:id",              hdlrs.AdminComprehensive.GetDailySubscriptionDetails)
+	admin.POST("/daily-subscriptions/:id/cancel",      hdlrs.AdminComprehensive.CancelDailySubscription)
+	admin.POST("/daily-subscriptions/:id/pause",       hdlrs.AdminComprehensive.PauseDailySubscription)
+	admin.POST("/daily-subscriptions/:id/resume",      hdlrs.AdminComprehensive.ResumeDailySubscription)
+	admin.GET("/daily-subscriptions/:id/billings",     hdlrs.AdminComprehensive.GetSubscriptionBillingsByID)
+	admin.GET("/subscription-billings",                hdlrs.AdminComprehensive.GetSubscriptionBillings)
+	admin.POST("/subscription-billings/:id/retry",     hdlrs.AdminComprehensive.RetrySubscriptionBilling)
 
 	// ── USSD ─────────────────────────────────────────────────────────────────
 	admin.GET("/ussd/recharges",       hdlrs.AdminComprehensive.GetUSSDRecharges)
@@ -308,11 +312,17 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	admin.GET("/points/export/users",   hdlrs.AdminComprehensive.ExportUsersWithPoints)
 	admin.GET("/points/export/history", hdlrs.AdminComprehensive.ExportPointsHistory)
 
-	// ── Winner claims ────────────────────────────────────────────────────────
+	// ── Winners — list, detail, actions ────────────────────────────────────
+	admin.GET("/winners",                              hdlrs.AdminComprehensive.GetAllWinners)
 	admin.GET("/winners/pending-claims",              hdlrs.AdminComprehensive.GetPendingClaims)
+	admin.GET("/winners/claim-statistics",            hdlrs.AdminComprehensive.GetClaimStatistics)
+	admin.GET("/winners/:id",                         hdlrs.AdminComprehensive.GetWinnerByID)
 	admin.POST("/winners/:id/approve-claim",          hdlrs.AdminComprehensive.ApproveWinnerClaim)
 	admin.POST("/winners/:id/reject-claim",           hdlrs.AdminComprehensive.RejectWinnerClaim)
-	admin.GET("/winners/claim-statistics",            hdlrs.AdminComprehensive.GetClaimStatistics)
+	admin.POST("/winners/:id/process-payout",         hdlrs.AdminComprehensive.ProcessWinnerPayout)
+	admin.POST("/winners/:id/mark-shipped",           hdlrs.AdminComprehensive.MarkWinnerShipped)
+	admin.POST("/winners/:id/send-notification",      hdlrs.AdminComprehensive.SendWinnerNotification)
+	admin.POST("/winners/:id/invoke-runner-up",       hdlrs.AdminComprehensive.InvokeWinnerRunnerUp)
 	admin.GET("/prize-fulfillment/failed-provisions", hdlrs.AdminSpinClaims.GetPendingClaims)
 	admin.POST("/prize-fulfillment/retry/:id",        hdlrs.AdminSpinClaims.ApproveClaim)
 	admin.POST("/prize-fulfillment/retry-all",        hdlrs.AdminSpinClaims.GetPendingClaims)
@@ -339,13 +349,17 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	admin.POST("/spin/claims/:id/reject",  hdlrs.AdminSpinClaims.RejectClaim)
 
 	// ── Recharge monitoring ──────────────────────────────────────────────────
-	admin.GET("/recharge/transactions",    hdlrs.AdminComprehensive.GetRechargeTransactions)
-	admin.GET("/recharge/stats",           hdlrs.AdminComprehensive.GetRechargeStats)
-	admin.POST("/recharge/:id/retry",      hdlrs.AdminComprehensive.RetryFailedRecharge)
-	admin.GET("/recharge/vtpass/status",   hdlrs.AdminComprehensive.GetVTPassStatus)
-	admin.PUT("/recharge/provider-config", hdlrs.AdminComprehensive.UpdateProviderConfig)
-	admin.GET("/recharge/network-configs", hdlrs.AdminComprehensive.GetNetworkConfigurations)
-	admin.GET("/recharge/data-plans",      hdlrs.AdminComprehensive.GetDataPlans)
+	admin.GET("/recharge/transactions",        hdlrs.AdminComprehensive.GetRechargeTransactions)
+	admin.GET("/recharge/transactions/:id",    hdlrs.AdminComprehensive.GetRechargeByID)
+	admin.GET("/recharge/stats",               hdlrs.AdminComprehensive.GetRechargeStats)
+	admin.POST("/recharge/:id/retry",          hdlrs.AdminComprehensive.RetryFailedRecharge)
+	admin.POST("/recharge/:id/refund",         hdlrs.AdminComprehensive.RefundRecharge)
+	admin.POST("/recharge/:id/mark-success",   hdlrs.AdminComprehensive.MarkRechargeSuccess)
+	admin.POST("/recharge/:id/mark-failed",    hdlrs.AdminComprehensive.MarkRechargeFailed)
+	admin.GET("/recharge/vtpass/status",       hdlrs.AdminComprehensive.GetVTPassStatus)
+	admin.PUT("/recharge/provider-config",     hdlrs.AdminComprehensive.UpdateProviderConfig)
+	admin.GET("/recharge/network-configs",     hdlrs.AdminComprehensive.GetNetworkConfigurations)
+	admin.GET("/recharge/data-plans",          hdlrs.AdminComprehensive.GetDataPlans)
 
 	// ── Network & data plan CRUD ─────────────────────────────────────────────
 	admin.GET("/networks",        hdlrs.AdminComprehensive.GetNetworkConfigurations) // list
@@ -357,21 +371,32 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	admin.DELETE("/data-plans/:id", hdlrs.AdminComprehensive.DeleteDataPlan)
 
 	// ── User management ──────────────────────────────────────────────────────
-	admin.GET("/users/all",         hdlrs.AdminComprehensive.GetAllUsers)
-	admin.GET("/users/:id/details", hdlrs.AdminComprehensive.GetUserDetails)
-	admin.PUT("/users/:id/status",  hdlrs.AdminComprehensive.UpdateUserStatus)
+	admin.GET("/users/all",                  hdlrs.AdminComprehensive.GetAllUsers)
+	admin.GET("/users/:id/details",          hdlrs.AdminComprehensive.GetUserDetails)
+	admin.GET("/users/:id",                  hdlrs.AdminComprehensive.GetUser)           // alias — no /details suffix
+	admin.PUT("/users/:id",                  hdlrs.AdminComprehensive.UpdateUser)        // status + tier update
+	admin.PUT("/users/:id/status",           hdlrs.AdminComprehensive.UpdateUserStatus)
+	admin.DELETE("/users/:id",               hdlrs.AdminComprehensive.DeleteUser)
+	admin.POST("/users/:id/suspend",         hdlrs.AdminComprehensive.SuspendUser)
+	admin.POST("/users/:id/activate",        hdlrs.AdminComprehensive.ActivateUser)
+	admin.GET("/users/:id/points-history",   hdlrs.AdminComprehensive.GetUserPointsHistory)
 
 	// ── Affiliate management ─────────────────────────────────────────────────
-	admin.GET("/affiliates/all",                 hdlrs.AdminComprehensive.GetAllAffiliates)
-	admin.GET("/affiliates/:id/stats",           hdlrs.AdminComprehensive.GetAffiliateStats)
-	admin.POST("/affiliates/:id/approve",        hdlrs.AdminComprehensive.ApproveAffiliate)
-	admin.POST("/affiliates/:id/reject",         hdlrs.AdminComprehensive.RejectAffiliate)
-	admin.POST("/affiliates/:id/suspend",        hdlrs.AdminComprehensive.SuspendAffiliate)
-	admin.GET("/affiliates/:id/commissions",     hdlrs.AdminComprehensive.GetAffiliateCommissions)
-	admin.PUT("/affiliates/:id/commission-rate", hdlrs.AdminComprehensive.UpdateAffiliateCommissionRate)
-	admin.GET("/affiliates/:id/payouts",         hdlrs.AdminComprehensive.GetAffiliatePayouts)
-	admin.POST("/affiliates/:id/payout",         hdlrs.AdminComprehensive.ProcessAffiliatePayout)
-	admin.GET("/affiliates/analytics",           hdlrs.AdminComprehensive.GetAffiliateAnalytics)
+	admin.GET("/affiliates/all",                   hdlrs.AdminComprehensive.GetAllAffiliates)
+	admin.POST("/affiliates",                      hdlrs.AdminComprehensive.CreateAffiliate)
+	admin.PUT("/affiliates/:id",                   hdlrs.AdminComprehensive.UpdateAffiliate)
+	admin.DELETE("/affiliates/:id",                hdlrs.AdminComprehensive.DeleteAffiliate)
+	admin.GET("/affiliates/:id/stats",             hdlrs.AdminComprehensive.GetAffiliateStats)
+	admin.POST("/affiliates/:id/approve",          hdlrs.AdminComprehensive.ApproveAffiliate)
+	admin.POST("/affiliates/:id/reject",           hdlrs.AdminComprehensive.RejectAffiliate)
+	admin.POST("/affiliates/:id/suspend",          hdlrs.AdminComprehensive.SuspendAffiliate)
+	admin.GET("/affiliates/:id/commissions",       hdlrs.AdminComprehensive.GetAffiliateCommissions)
+	admin.PUT("/affiliates/:id/commission-rate",   hdlrs.AdminComprehensive.UpdateAffiliateCommissionRate)
+	admin.GET("/affiliates/:id/payouts",           hdlrs.AdminComprehensive.GetAffiliatePayouts)
+	admin.POST("/affiliates/:id/payout",           hdlrs.AdminComprehensive.ProcessAffiliatePayout)
+	admin.POST("/affiliates/:id/process-payout",   hdlrs.AdminComprehensive.ProcessAffiliatePayout)   // alias
+	admin.GET("/affiliates/:id/payout-history",    hdlrs.AdminComprehensive.GetAffiliatePayoutHistory)
+	admin.GET("/affiliates/analytics",             hdlrs.AdminComprehensive.GetAffiliateAnalytics)
 
 	// ── Admin user management ────────────────────────────────────────────────
 	admin.GET("/admins",            hdlrs.AdminUserManagement.GetAllAdmins)

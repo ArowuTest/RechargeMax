@@ -262,6 +262,7 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	admin.POST("/draws/:id/import-winners",      hdlrs.Draw.ImportWinners)
 	admin.GET("/draws/:id/csv/export",           hdlrs.AdminComprehensive.ExportDrawToCSV)
 	admin.POST("/draws/:id/csv/import-winners",  hdlrs.AdminComprehensive.ImportWinnersFromCSV)
+	admin.GET("/draws/export-history",           hdlrs.AdminComprehensive.GetDrawExportHistory)
 
 	// ── Prize tier system ────────────────────────────────────────────────────
 	admin.GET("/draw-types",                         hdlrs.AdminComprehensive.GetDrawTypes)

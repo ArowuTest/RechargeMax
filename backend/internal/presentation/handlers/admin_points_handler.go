@@ -8,6 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+
+	"rechargemax/internal/domain/entities"
 )
 
 // ============================================================================
@@ -217,6 +219,28 @@ func (h *AdminComprehensiveHandler) ExportDrawToCSV(c *gin.Context) {
 		buf.WriteString(fmt.Sprintf("%s,%s,%s,%s\n", e.ID, e.MSISDN, e.Source, e.CreatedAt))
 	}
 
+	// Write audit log so export-history can surface this operation
+	drawIDStr := drawID.String()
+	ip := c.ClientIP()
+	ua := c.Request.UserAgent()
+	auditEntry := entities.AuditLog{
+		Action:      "export_entries",
+		EntityType:  "draw",
+		EntityID:    &drawIDStr,
+		IPAddress:   &ip,
+		UserAgent:   &ua,
+		Status:      "success",
+	}
+	if raw, ok := c.Get("admin_id"); ok {
+		if adminStr, ok := raw.(string); ok {
+			if adminUID, parseErr := uuid.Parse(adminStr); parseErr == nil {
+				auditEntry.AdminUserID = adminUID
+			}
+		}
+	}
+	// Best-effort — do not block the CSV download on an audit failure
+	h.db.WithContext(c.Request.Context()).Create(&auditEntry) //nolint:errcheck
+
 	c.Header("Content-Type", "text/csv")
 	c.Header("Content-Disposition", "attachment; filename=draw_entries.csv")
 	c.String(http.StatusOK, buf.String())
@@ -296,5 +320,59 @@ func (h *AdminComprehensiveHandler) ImportWinnersFromCSV(c *gin.Context) {
 		"message":  fmt.Sprintf("Import complete: %d imported, %d skipped", imported, skipped),
 		"imported": imported,
 		"skipped":  skipped,
+	})
+}
+
+// GetDrawExportHistory returns the audit log of draw CSV export operations.
+// It queries audit_logs for action=export_entries / entity_type=draw and
+// maps them to the DrawExportHistory shape the frontend expects.
+// Optional query param: draw_id (UUID) to filter by a specific draw.
+func (h *AdminComprehensiveHandler) GetDrawExportHistory(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	type exportHistoryRow struct {
+		ID           string  `json:"id"            gorm:"column:id"`
+		DrawID       string  `json:"draw_id"       gorm:"column:entity_id"`
+		ExportedBy   string  `json:"exported_by"   gorm:"column:admin_email"`
+		ExportedAt   string  `json:"exported_at"   gorm:"column:created_at"`
+		TotalMSISDNs int     `json:"total_msisdns" gorm:"column:total_msisdns"`
+		TotalPoints  int     `json:"total_points"  gorm:"column:total_points"`
+		FileURL      string  `json:"file_url"      gorm:"column:file_url"`
+	}
+
+	q := h.db.WithContext(ctx).
+		Table("audit_logs").
+		Select(`id,
+		        COALESCE(entity_id, '')          AS entity_id,
+		        COALESCE(admin_email, admin_user_id::text, 'unknown') AS admin_email,
+		        created_at::text                  AS created_at,
+		        0                                 AS total_msisdns,
+		        0                                 AS total_points,
+		        ''                                AS file_url`).
+		Where("action = ? AND entity_type = ?", "export_entries", "draw").
+		Order("created_at DESC").
+		Limit(100)
+
+	if drawID := c.Query("draw_id"); drawID != "" {
+		q = q.Where("entity_id = ?", drawID)
+	}
+
+	var rows []exportHistoryRow
+	if err := q.Scan(&rows).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to retrieve export history",
+		})
+		return
+	}
+
+	// Return empty slice (not null) so the frontend table renders cleanly
+	if rows == nil {
+		rows = []exportHistoryRow{}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    rows,
 	})
 }

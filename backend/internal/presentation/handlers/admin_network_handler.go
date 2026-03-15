@@ -26,8 +26,8 @@ func (h *AdminComprehensiveHandler) CreateNetwork(c *gin.Context) {
 		AirtimeEnabled *bool    `json:"airtime_enabled"`
 		DataEnabled    *bool    `json:"data_enabled"`
 		CommissionRate *float64 `json:"commission_rate"`
-		MinimumAmount  *int64   `json:"minimum_amount"`
-		MaximumAmount  *int64   `json:"maximum_amount"`
+		MinimumAmount  *float64 `json:"minimum_amount"`
+		MaximumAmount  *float64 `json:"maximum_amount"`
 		SortOrder      *int     `json:"sort_order"`
 	}
 
@@ -112,8 +112,8 @@ func (h *AdminComprehensiveHandler) UpdateNetwork(c *gin.Context) {
 		AirtimeEnabled *bool    `json:"airtime_enabled"`
 		DataEnabled    *bool    `json:"data_enabled"`
 		CommissionRate *float64 `json:"commission_rate"`
-		MinimumAmount  *int64   `json:"minimum_amount"`
-		MaximumAmount  *int64   `json:"maximum_amount"`
+		MinimumAmount  *float64 `json:"minimum_amount"`
+		MaximumAmount  *float64 `json:"maximum_amount"`
 		SortOrder      *int     `json:"sort_order"`
 	}
 

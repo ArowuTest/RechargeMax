@@ -41,7 +41,8 @@ func (s *NetworkConfigService) GetDataPackages(ctx context.Context, network stri
 	}
 	
 	if len(plans) == 0 {
-		return nil, fmt.Errorf("no data plans found for network: %s", network)
+		// No plans in DB yet - return empty slice (not an error)
+		return []DataPackage{}, nil
 	}
 	
 	var packages []DataPackage

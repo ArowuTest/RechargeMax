@@ -698,5 +698,34 @@ ON CONFLICT (id) DO NOTHING`
 		}
 	}
 
+	// 4. Seed data plans
+	var planCount int64
+	if err := db.Table("data_plans").Count(&planCount).Error; err == nil && planCount == 0 {
+		sql := `INSERT INTO data_plans (id, plan_code, plan_name, data_amount, price, network_provider, validity_days, is_active, sort_order, created_at, updated_at) VALUES
+('d50e8400-0001-41d4-a716-446655440001','MTN_500MB','500MB Data','500MB',300,'MTN',30,true,1,NOW(),NOW()),
+('d50e8400-0002-41d4-a716-446655440002','MTN_1GB','1GB Data','1GB',500,'MTN',30,true,2,NOW(),NOW()),
+('d50e8400-0003-41d4-a716-446655440003','MTN_2GB','2GB Data','2GB',1000,'MTN',30,true,3,NOW(),NOW()),
+('d50e8400-0004-41d4-a716-446655440004','MTN_5GB','5GB Data','5GB',2000,'MTN',30,true,4,NOW(),NOW()),
+('d50e8400-0005-41d4-a716-446655440005','MTN_10GB','10GB Data','10GB',3500,'MTN',30,true,5,NOW(),NOW()),
+('d50e8400-0011-41d4-a716-446655440011','GLO_500MB','500MB Data','500MB',250,'GLO',30,true,1,NOW(),NOW()),
+('d50e8400-0012-41d4-a716-446655440012','GLO_1GB','1GB Data','1GB',450,'GLO',30,true,2,NOW(),NOW()),
+('d50e8400-0013-41d4-a716-446655440013','GLO_2GB','2GB Data','2GB',900,'GLO',30,true,3,NOW(),NOW()),
+('d50e8400-0014-41d4-a716-446655440014','GLO_5GB','5GB Data','5GB',1800,'GLO',30,true,4,NOW(),NOW()),
+('d50e8400-0021-41d4-a716-446655440021','AIRTEL_500MB','500MB Data','500MB',300,'AIRTEL',30,true,1,NOW(),NOW()),
+('d50e8400-0022-41d4-a716-446655440022','AIRTEL_1GB','1GB Data','1GB',500,'AIRTEL',30,true,2,NOW(),NOW()),
+('d50e8400-0023-41d4-a716-446655440023','AIRTEL_2GB','2GB Data','2GB',1000,'AIRTEL',30,true,3,NOW(),NOW()),
+('d50e8400-0024-41d4-a716-446655440024','AIRTEL_5GB','5GB Data','5GB',2000,'AIRTEL',30,true,4,NOW(),NOW()),
+('d50e8400-0031-41d4-a716-446655440031','9MOBILE_500MB','500MB Data','500MB',250,'9MOBILE',30,true,1,NOW(),NOW()),
+('d50e8400-0032-41d4-a716-446655440032','9MOBILE_1GB','1GB Data','1GB',400,'9MOBILE',30,true,2,NOW(),NOW()),
+('d50e8400-0033-41d4-a716-446655440033','9MOBILE_2GB','2GB Data','2GB',800,'9MOBILE',30,true,3,NOW(),NOW()),
+('d50e8400-0034-41d4-a716-446655440034','9MOBILE_5GB','5GB Data','5GB',1600,'9MOBILE',30,true,4,NOW(),NOW())
+ON CONFLICT (id) DO NOTHING`
+		if err := db.Exec(sql).Error; err != nil {
+			log.Printf("⚠️  Data plans seed warning: %v", err)
+		} else {
+			log.Println("  ✅ Data plans seeded (4 networks × 4 plans)")
+		}
+	}
+
 	log.Println("🌱 Seed check complete")
 }

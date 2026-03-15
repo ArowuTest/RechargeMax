@@ -224,12 +224,12 @@ func (h *AdminComprehensiveHandler) GetNetworkConfigurations(c *gin.Context) {
 			commissionRate = *network.CommissionRate
 		}
 
-		minAmount := int64(0)
+		minAmount := float64(0)
 		if network.MinimumAmount != nil {
 			minAmount = *network.MinimumAmount
 		}
 
-		maxAmount := int64(0)
+		maxAmount := float64(0)
 		if network.MaximumAmount != nil {
 			maxAmount = *network.MaximumAmount
 		}

@@ -178,7 +178,7 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
           
           if (result.data?.success) {
             // Validation passed
-            setNetworkValidation(result.data);
+            setNetworkValidation(result.data.data);
             setShowNetworkWarning(false);
             setValidationErrors(prev => {
               const { networkProvider, ...rest } = prev;
@@ -186,7 +186,7 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
             });
           } else {
             // Validation failed - network mismatch
-            setNetworkValidation(result.data);
+            setNetworkValidation(result.data.data);
             setShowNetworkWarning(true);
             setValidationErrors(prev => ({
               ...prev,
@@ -263,8 +263,8 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
       errors.networkProvider = 'Please select a network provider';
     }
 
-    // Check network validation
-    if (showNetworkWarning || !networkValidation?.valid) {
+    // Check network validation — only block if validation ran AND returned invalid
+    if (showNetworkWarning || (networkValidation !== null && !networkValidation?.valid)) {
       errors.networkProvider = networkValidation?.message || 'Please verify network selection';
     }
 

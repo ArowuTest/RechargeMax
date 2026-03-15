@@ -45,6 +45,10 @@ func Register(
 	// ── Infrastructure endpoints (no auth, no versioning) ───────────────────
 	registerInfra(router)
 
+	// ── Debug endpoint (temp) ────────────────────────────────────────────────
+	debugHandler := handlers.NewHealthHandler(db)
+	router.GET("/debug/db", debugHandler.DebugDB)
+
 	// ── API v1 ───────────────────────────────────────────────────────────────
 	v1 := router.Group("/api/v1")
 	registerPublic(v1, hdlrs, db)

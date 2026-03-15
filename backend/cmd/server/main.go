@@ -644,7 +644,7 @@ VALUES ('950e8400-e29b-41d4-a716-446655440001',
         '$2a$10$GSv3/EaeIzohXsGy6jIMfuoOCMkBLZJF/OiqtG7kVdVoD/dKXypoe',
         'Super Administrator',
         'SUPER_ADMIN',
-        '["view_analytics","manage_users","manage_transactions","manage_networks","manage_prizes","manage_affiliates","manage_settings","manage_admins","view_monitoring","manage_draws"]'::jsonb,
+        '["view_analytics","manage_users","manage_transactions","manage_networks","manage_prizes","manage_affiliates","manage_settings","manage_admins","view_monitoring","manage_draws"]',
         true,
         NOW(), NOW())
 ON CONFLICT (email) DO UPDATE SET

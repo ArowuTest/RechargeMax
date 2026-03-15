@@ -44,3 +44,30 @@ func (h *HealthHandler) HealthCheck(c *gin.Context) {
 		"timestamp": time.Now().Format(time.RFC3339),
 	})
 }
+
+// DebugDB returns diagnostic info about the database (TEMPORARY - remove before prod)
+func (h *HealthHandler) DebugDB(c *gin.Context) {
+	type AdminRow struct {
+		ID       string `gorm:"column:id"`
+		Email    string `gorm:"column:email"`
+		IsActive *bool  `gorm:"column:is_active"`
+		Role     string `gorm:"column:role"`
+	}
+
+	var admins []AdminRow
+	var adminCount int64
+
+	_ = h.db.Table("admin_users").Count(&adminCount)
+	_ = h.db.Table("admin_users").Find(&admins)
+
+	var netCount, tierCount int64
+	_ = h.db.Table("network_configs").Count(&netCount)
+	_ = h.db.Table("subscription_tiers").Count(&tierCount)
+
+	c.JSON(http.StatusOK, gin.H{
+		"admin_count":      adminCount,
+		"network_count":    netCount,
+		"tier_count":       tierCount,
+		"admins":           admins,
+	})
+}

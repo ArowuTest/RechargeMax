@@ -84,7 +84,8 @@ INSERT INTO transaction_limits (limit_type, limit_scope, min_amount, max_amount,
 
 -- Monthly cumulative limits
 ('AIRTIME', 'MONTHLY_CUMULATIVE', 10000, 1000000000, NULL, 1000000000, NULL, 'Global monthly airtime limit (₦10,000,000)'),
-('DATA', 'MONTHLY_CUMULATIVE', 10000, 1000000000, NULL, 1000000000, NULL, 'Global monthly data limit (₦10,000,000)');
+('DATA', 'MONTHLY_CUMULATIVE', 10000, 1000000000, NULL, 1000000000, NULL, 'Global monthly data limit (₦10,000,000)')
+ON CONFLICT DO NOTHING;
 
 -- Create helper function to get active limit for a specific context
 CREATE OR REPLACE FUNCTION get_transaction_limit(

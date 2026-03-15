@@ -2,37 +2,85 @@ services:
   - type: web
     name: rechargemax-backend
     env: docker
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     plan: starter
+    region: oregon
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: rechargemax-db
+          name: rechargemax-db-v2
           property: connectionString
       - key: JWT_SECRET
         generateValue: true
       - key: ADMIN_JWT_SECRET
         generateValue: true
       - key: PORT
-        value: 8080
+        value: "8080"
       - key: ENVIRONMENT
-        value: production
+        value: staging
+      - key: GIN_MODE
+        value: release
+      - key: APP_NAME
+        value: RechargeMax
       - key: ALLOWED_ORIGINS
-        value: https://rechargemax-frontend.onrender.com
-
-  - type: web
-    name: rechargemax-frontend
-    env: docker
-    dockerfilePath: ./frontend/Dockerfile
-    dockerContext: ./frontend
-    plan: starter
-    buildArgs:
-      VITE_API_BASE_URL: https://rechargemax-backend.onrender.com/api/v1
+        value: https://rechargemax-frontend-81yagmfv7-demo-twos-projects.vercel.app,https://rechargemax-frontend.vercel.app
+      - key: FRONTEND_URL
+        value: https://rechargemax-frontend-81yagmfv7-demo-twos-projects.vercel.app
+      - key: BACKEND_URL
+        value: https://rechargemax-backend.onrender.com
+      - key: APP_URL
+        value: https://rechargemax-backend.onrender.com
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: COOKIE_DOMAIN
+        value: onrender.com
+      - key: ADMIN_DEFAULT_EMAIL
+        value: admin@rechargemax.ng
+      - key: ADMIN_DEFAULT_PASSWORD
+        value: Admin@123456
+      - key: PAYSTACK_SECRET_KEY
+        value: sk_test_f7d6e367111d8603cc7aec4b1af46e980291454a
+      - key: PAYSTACK_PUBLIC_KEY
+        value: pk_test_2970ea1f4e24df3bcc551d67d48fc1a933b93c93
+      - key: PAYSTACK_MODE
+        value: test
+      - key: TERMII_API_KEY
+        value: TLGsjLmgibquzwTeEDPKtwpiShZkKxjammuQgZwEzshkdkzrEe
+      - key: TERMII_SECRET_KEY
+        value: tsk_GqS1leDfuNdcGlvGsmucVgyLW8
+      - key: TERMII_BASE_URL
+        value: https://v3.api.termii.com
+      - key: TERMII_SENDER_ID
+        value: RechargeMax
+      - key: SMS_PROVIDER
+        value: termii
+      - key: SMS_SENDER_ID
+        value: RechargeMax
+      - key: VTPASS_API_KEY
+        value: c5bd97e357820f85ace13c7926e9c925
+      - key: VTPASS_PUBLIC_KEY
+        value: PK_761bd8cb3f9783c8f94258234e4618fbecadca22b9e
+      - key: VTPASS_SECRET_KEY
+        value: SK_8221e655104cd4459259c3d4d840103565d4376b027
+      - key: VTPASS_BASE_URL
+        value: https://sandbox.vtpass.com/api
+      - key: VTPASS_SANDBOX_MODE
+        value: "true"
+      - key: VTPASS_MODE
+        value: sandbox
+      - key: RECHARGE_PROVIDER
+        value: vtpass
+      - key: JWT_EXPIRY
+        value: 24h
+      - key: ADMIN_JWT_EXPIRY
+        value: 8h
 
 databases:
-  - name: rechargemax-db
-    plan: starter
+  - name: rechargemax-db-v2
+    plan: basic_256mb
     databaseName: rechargemax
-    user: rechargemax
+    user: rechargemax_app
+    region: oregon
+    version: "16"

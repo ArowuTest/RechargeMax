@@ -11,6 +11,7 @@ import (
 	"rechargemax/internal/domain/entities"
 	"rechargemax/internal/domain/repositories"
 	"rechargemax/internal/errors"
+	"gorm.io/gorm"
 )
 
 // SubscriptionService handles subscription operations
@@ -19,6 +20,7 @@ type SubscriptionService struct {
 	userRepo         repositories.UserRepository
 	paymentService   *PaymentService
 	hlrService       *HLRService
+	db               *gorm.DB
 }
 
 // CreateSubscriptionRequest represents subscription creation request
@@ -47,12 +49,14 @@ func NewSubscriptionService(
 	userRepo repositories.UserRepository,
 	paymentService *PaymentService,
 	hlrService *HLRService,
+	db *gorm.DB,
 ) *SubscriptionService {
 	return &SubscriptionService{
 		subscriptionRepo: subscriptionRepo,
 		userRepo:         userRepo,
 		paymentService:   paymentService,
 		hlrService:       hlrService,
+		db:               db,
 	}
 }
 
@@ -362,72 +366,70 @@ func (s *SubscriptionService) GetAllSubscriptions(ctx context.Context, page, per
 	return subscriptions, total, nil
 }
 
-// GetConfig returns subscription configuration
+// GetConfig returns subscription configuration from the daily_subscription_config table.
 func (s *SubscriptionService) GetConfig(ctx context.Context) (map[string]interface{}, error) {
-	config := map[string]interface{}{
-		"daily_price":         2000, // ₦20 in kobo
-		"weekly_price":        10000, // ₦100 in kobo
-		"monthly_price":       30000, // ₦300 in kobo
-		"daily_spins":         3,
-		"weekly_spins":        25,
-		"monthly_spins":       100,
-		"auto_renewal":        true,
-		"grace_period_days":   3,
-		"max_subscriptions":   1, // One active subscription per user
+	var cfg entities.DailySubscriptionConfig
+	if err := s.db.WithContext(ctx).First(&cfg).Error; err != nil {
+		// Table empty — return sensible defaults so the API never hard-fails
+		entries := 1
+		isPaid := true
+		return map[string]interface{}{
+			"amount":               int64(2000),
+			"draw_entries_earned":  &entries,
+			"is_paid":              &isPaid,
+			"description":          "",
+			"terms_and_conditions": "",
+		}, nil
 	}
-	
-	return config, nil
+	return map[string]interface{}{
+		"id":                   cfg.ID,
+		"amount":               cfg.Amount,
+		"draw_entries_earned":  cfg.DrawEntriesEarned,
+		"is_paid":              cfg.IsPaid,
+		"description":          cfg.Description,
+		"terms_and_conditions": cfg.TermsAndConditions,
+		"updated_at":           cfg.UpdatedAt,
+	}, nil
 }
 
-// UpdateConfig updates subscription configuration (admin)
+// UpdateConfig updates subscription configuration in the daily_subscription_config table.
 func (s *SubscriptionService) UpdateConfig(ctx context.Context, config map[string]interface{}) error {
-	// Validate required fields
-	requiredFields := []string{"daily_price", "weekly_price", "monthly_price"}
-	for _, field := range requiredFields {
-		if _, ok := config[field]; !ok {
-			return fmt.Errorf("missing required field: %s", field)
+	var cfg entities.DailySubscriptionConfig
+	// Load existing row (there should be exactly one)
+	if err := s.db.WithContext(ctx).First(&cfg).Error; err != nil {
+		// No row yet — create one
+		cfg = entities.DailySubscriptionConfig{}
+	}
+
+	if v, ok := config["amount"]; ok {
+		switch val := v.(type) {
+		case float64:
+			cfg.Amount = int64(val)
+		case int64:
+			cfg.Amount = val
+		case int:
+			cfg.Amount = int64(val)
 		}
 	}
-	
-	// Validate price values are positive
-	for _, priceField := range []string{"daily_price", "weekly_price", "monthly_price"} {
-		if price, ok := config[priceField].(float64); ok {
-			if price <= 0 {
-				return fmt.Errorf("%s must be positive", priceField)
-			}
+	if v, ok := config["draw_entries_earned"]; ok {
+		if val, ok := v.(float64); ok {
+			n := int(val)
+			cfg.DrawEntriesEarned = &n
 		}
 	}
-	
-	// Store configuration in database
-	// In a production system, this would use a dedicated ConfigurationRepository
-	// For now, we'll implement a simple key-value storage approach
-	// 
-	// Configuration storage strategy:
-	// 1. Create/update configuration records in a config table
-	// 2. Each config item has: key, value, type, updated_by, updated_at
-	// 3. Cache configuration in memory for fast access
-	// 4. Invalidate cache on update
-	//
-	// Example implementation:
-	// for key, value := range config {
-	//     configRecord := &entities.Configuration{
-	//         Key:       fmt.Sprintf("subscription.%s", key),
-	//         Value:     fmt.Sprintf("%v", value),
-	//         UpdatedAt: time.Now(),
-	//     }
-	//     err := s.configRepo.Upsert(ctx, configRecord)
-	//     if err != nil {
-	//         return fmt.Errorf("failed to save config %s: %w", key, err)
-	//     }
-	// }
-	
-	// For now, configuration is validated but stored in memory
-	// When ConfigurationRepository is implemented, uncomment the above code
-	
-	// Log the configuration change for audit trail
-	// In production: s.auditService.Log(ctx, "subscription_config_updated", config)
-	
-	return nil
+	if v, ok := config["is_paid"]; ok {
+		if val, ok := v.(bool); ok {
+			cfg.IsPaid = &val
+		}
+	}
+	if v, ok := config["description"]; ok {
+		cfg.Description = fmt.Sprintf("%v", v)
+	}
+	if v, ok := config["terms_and_conditions"]; ok {
+		cfg.TermsAndConditions = fmt.Sprintf("%v", v)
+	}
+
+	return s.db.WithContext(ctx).Save(&cfg).Error
 }
 
 // ============================================================================

@@ -358,6 +358,7 @@ func initServices(repos *Repositories, config *Config, db *gorm.DB) *Services {
 		config.TermiiKey,
 		config.SendgridKey,
 		config.FCMKey,
+		db,
 	)
 
 	walletService := services.NewWalletService(
@@ -400,6 +401,7 @@ func initServices(repos *Repositories, config *Config, db *gorm.DB) *Services {
 		repos.User,
 		paymentService,
 		hlrService,
+		db,
 	)
 
 	// Prize Fulfillment Config Service

@@ -10,6 +10,7 @@ import (
 	"gorm.io/datatypes"
 
 	"rechargemax/internal/domain/entities"
+	"gorm.io/gorm"
 	"rechargemax/internal/domain/repositories"
 )
 
@@ -21,6 +22,7 @@ type NotificationService struct {
 	smsAPIKey        string
 	emailAPIKey      string
 	fcmServerKey     string
+	db               *gorm.DB
 }
 
 // NotificationChannel represents notification delivery channels
@@ -39,6 +41,7 @@ func NewNotificationService(
 	deviceRepo repositories.DeviceRepository,
 	userRepo repositories.UserRepository,
 	smsAPIKey, emailAPIKey, fcmServerKey string,
+	db *gorm.DB,
 ) *NotificationService {
 	return &NotificationService{
 		notificationRepo: notificationRepo,
@@ -47,7 +50,25 @@ func NewNotificationService(
 		smsAPIKey:        smsAPIKey,
 		emailAPIKey:      emailAPIKey,
 		fcmServerKey:     fcmServerKey,
+		db:               db,
 	}
+}
+
+// logDelivery records a send attempt to notification_delivery_log.
+// Called asynchronously — never blocks the calling goroutine.
+func (s *NotificationService) logDelivery(channel, status, provider, errorMsg string) {
+	if s.db == nil {
+		return
+	}
+	go func() {
+		entry := entities.NotificationDeliveryLog{
+			Channel:        channel,
+			DeliveryStatus: status,
+			ProviderName:   provider,
+			ErrorMessage:   errorMsg,
+		}
+		s.db.Create(&entry) // best-effort; ignore errors
+	}()
 }
 
 // SendSMS sends SMS notification via Termii or similar service
@@ -91,8 +112,10 @@ func (s *NotificationService) SendSMS(ctx context.Context, msisdn, message strin
 	if s.smsAPIKey != "" {
 		fmt.Printf("[SMS] To: %s, Message: %s\n", msisdn, message)
 		// Actual API call would go here
+		s.logDelivery("sms", "sent", "termii", "")
 	} else {
 		fmt.Printf("[SMS-MOCK] To: %s, Message: %s\n", msisdn, message)
+		s.logDelivery("sms", "sent", "mock", "")
 	}
 	return nil
 }

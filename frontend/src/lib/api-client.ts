@@ -106,12 +106,26 @@ apiClient.interceptors.response.use(
 
     if (status === 401) {
       const isAdminRoute = requestUrl.includes('/admin/');
+      // Silent endpoints: 401 just means "not logged in" — never redirect for these
+      const isSilentEndpoint =
+        requestUrl.includes('/user/profile') ||
+        requestUrl.includes('/user/me');
+      // Public pages: don't redirect if the user is browsing unauthenticated
+      const publicPages = ['/', '/recharge', '/draws', '/subscription', '/affiliate', '/login'];
+      const isOnPublicPage = publicPages.some(
+        (p) => window.location.pathname === p || window.location.pathname.startsWith(p + '/')
+      );
+
       if (isAdminRoute) {
         localStorage.removeItem('rechargemax_admin_user');
         window.location.href = '/admin/login';
-      } else {
+      } else if (!isSilentEndpoint && !isOnPublicPage) {
+        // Only redirect to /login if we're on a protected page
         localStorage.removeItem('rechargemax_user');
         window.location.href = '/login';
+      } else {
+        // Silent: just clear the user state without redirecting
+        localStorage.removeItem('rechargemax_user');
       }
     }
 

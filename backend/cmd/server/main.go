@@ -633,10 +633,12 @@ func initHandlers(svcs *services.Registry, repos *Repositories, appConfig *Confi
 func seedDatabase(db *gorm.DB) {
 	log.Println("🌱 Checking seed data...")
 
-	// 1. Seed admin user
-	var adminCount int64
-	if err := db.Table("admin_users").Count(&adminCount).Error; err == nil && adminCount == 0 {
-		sql := `INSERT INTO admin_users (id, email, password_hash, full_name, role, permissions, is_active, created_at, updated_at)
+	// 1. Seed admin user — always UPSERT so password/role is always correct
+	{
+		var adminCount int64
+		_ = db.Table("admin_users").Count(&adminCount)
+		log.Printf("  ℹ️  admin_users count = %d (upserting default admin)", adminCount)
+		adminSQL := `INSERT INTO admin_users (id, email, password_hash, full_name, role, permissions, is_active, created_at, updated_at)
 VALUES ('950e8400-e29b-41d4-a716-446655440001',
         'admin@rechargemax.ng',
         '$2a$10$GSv3/EaeIzohXsGy6jIMfuoOCMkBLZJF/OiqtG7kVdVoD/dKXypoe',
@@ -649,13 +651,11 @@ ON CONFLICT (email) DO UPDATE SET
         password_hash = EXCLUDED.password_hash,
         is_active = true,
         role = EXCLUDED.role`
-		if err := db.Exec(sql).Error; err != nil {
+		if err := db.Exec(adminSQL).Error; err != nil {
 			log.Printf("⚠️  Admin seed warning: %v", err)
 		} else {
-			log.Println("  ✅ Admin user seeded (admin@rechargemax.ng / Admin@123456)")
+			log.Println("  ✅ Admin user upserted (admin@rechargemax.ng / Admin@123456)")
 		}
-	} else {
-		log.Printf("  ℹ️  Admin users already exist (%d)", adminCount)
 	}
 
 	// 2. Seed network configs

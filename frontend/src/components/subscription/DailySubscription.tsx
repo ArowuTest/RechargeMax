@@ -113,13 +113,9 @@ export function DailySubscription() {
     const type = urlParams.get('type')
 
     // Debug: Log URL parameters
-    console.log('Hash:', hash)
-    console.log('Query string:', queryString)
-    console.log('Subscription URL params:', { status, amount, entries, totalEntries, totalPoints, points, ref, type })
 
     // Only handle subscription success, not recharge success
     if (status === 'success' && type === 'subscription') {
-      console.log('Showing subscription success toast!')
       const isAdditional = totalEntries && parseInt(totalEntries) > parseInt(entries || '0')
       
       toast({
@@ -215,7 +211,6 @@ export function DailySubscription() {
         subscription_amount: subscriptionConfig.amount // Dynamic subscription amount per entry
       };
       
-      // console.log('🔍 SENDING TO BACKEND:', JSON.stringify(subscriptionData, null, 2));
       
       const response = await processDailySubscription(subscriptionData);
 

@@ -1031,7 +1031,6 @@ export const UserDashboard: React.FC = () => {
           transactionAmount={1000} // Default amount, actual spins are managed by backend
           userPhone={user?.msisdn || ''}
           onPrizeWon={(prize) => {
-            console.log('Prize won:', prize);
             // Decrease available spins
             setAvailableSpins(prev => Math.max(0, prev - 1));
             // If no more spins, close wheel

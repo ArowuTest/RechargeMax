@@ -99,9 +99,6 @@ export const EnterpriseHomePage: React.FC = () => {
     hashParams.forEach((value, key) => allParams.set(key, value));
     urlParams.forEach((value, key) => allParams.set(key, value));
     
-    console.log('Hash:', hash);
-    console.log('Hash query string:', hashQueryString);
-    console.log('URL params:', Object.fromEntries(allParams.entries()));
     
     // Check for payment success (both formats)
     const paymentStatus = allParams.get('payment');
@@ -111,7 +108,6 @@ export const EnterpriseHomePage: React.FC = () => {
     
     // Handle simple callback format
     if (paymentSuccess && reference) {
-      console.log('Payment success detected, fetching transaction details for:', reference);
       
       // Clear URL immediately
       window.history.replaceState({}, document.title, window.location.pathname + window.location.hash.split('?')[0]);
@@ -129,7 +125,6 @@ export const EnterpriseHomePage: React.FC = () => {
         const maxWaitTime = 60000; // Max 60 seconds
         
         if (attempt === 0) {
-          console.log('⏳ Polling transaction status...');
         }
         
         setTimeout(() => {
@@ -138,7 +133,6 @@ export const EnterpriseHomePage: React.FC = () => {
             .then(response => {
               // Extract transaction data from nested response
               const txn = response.data || response;
-              console.log(`Polling attempt ${attempt + 1}/${maxAttempts} - Status: ${txn.status}`);
               
               if (txn.status === 'SUCCESS' || txn.status === 'COMPLETED') {
                 const amount = txn.amount / 100; // Convert from kobo to naira
@@ -176,11 +170,9 @@ export const EnterpriseHomePage: React.FC = () => {
                 alert(`❌ Recharge Failed\n\nReason: ${txn.failure_reason || 'Unknown error'}\nReference: ${reference}`);
               } else if (attempt < maxAttempts - 1) {
                 // Still processing, poll again
-                console.log(`Transaction still processing (${txn.status}), polling again...`);
                 pollTransaction(attempt + 1, maxAttempts);
               } else {
                 // Max attempts reached
-                console.log('Max polling attempts reached');
                 alert(`⏳ Transaction is taking longer than expected.\n\nReference: ${reference}\n\nPlease check your transaction history in a few minutes.`);
               }
             })
@@ -204,7 +196,6 @@ export const EnterpriseHomePage: React.FC = () => {
     
     // Handle subscription success
     if (subscriptionSuccess && reference) {
-      console.log('Subscription success detected:', reference);
       
       // Clear URL immediately
       window.history.replaceState({}, document.title, window.location.pathname);
@@ -212,7 +203,7 @@ export const EnterpriseHomePage: React.FC = () => {
       // Trigger backend callback to process subscription
       fetch(`/api/v1/payment/callback?reference=${reference}&gateway=paystack`, { credentials: 'include' })
         .then(res => res.json())
-        .then(data => console.log('Backend callback triggered:', data))
+        
         .catch(err => console.error('Backend callback failed:', err));
       
       const amount = parseFloat(allParams.get('amount') || '0');
@@ -242,12 +233,7 @@ export const EnterpriseHomePage: React.FC = () => {
     const subscriptionRef = allParams.get('ref');
     
     if (subscriptionStatus === 'success' && subscriptionRecorded && subscriptionAmount > 0) {
-      console.log('Subscription success detected:', {
-        amount: subscriptionAmount,
-        entries: subscriptionEntries,
-        msisdn: subscriptionMsisdn,
-        reference: subscriptionRef
-      });
+      // Subscription success detected
       
       // Clear URL immediately
       window.history.replaceState({}, document.title, window.location.pathname + window.location.hash.split('?')[0]);
@@ -266,7 +252,6 @@ export const EnterpriseHomePage: React.FC = () => {
     
     // Handle subscription failure
     if (subscriptionStatus === 'failed') {
-      console.log('Subscription failed');
       
       // Clear URL immediately
       window.history.replaceState({}, document.title, window.location.pathname + window.location.hash.split('?')[0]);
@@ -870,7 +855,6 @@ export const EnterpriseHomePage: React.FC = () => {
           transactionAmount={rechargeSuccess?.amount || 1000}
           userPhone={userPhone || ''}
           onPrizeWon={(prize) => {
-            console.log('🎉 Prize won from backend:', prize);
             // Prize already recorded in backend by /spin/play endpoint
             // No need for additional API calls - backend handles everything
           }}

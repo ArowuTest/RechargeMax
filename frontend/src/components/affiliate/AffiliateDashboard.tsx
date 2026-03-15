@@ -119,7 +119,6 @@ export const AffiliateDashboard: React.FC = () => {
         } else {
           setAffiliateStatus('NOT_FOUND');
         }
-        console.log('Affiliate fetch result:', response.error);
       }
     } catch (error) {
       console.error('Failed to fetch affiliate data:', error);

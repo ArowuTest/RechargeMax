@@ -260,7 +260,6 @@ export const logError = async (errorData: any) => {
 export const logPerformance = async (performanceData: any) => {
   try {
     // Log to console in development
-    console.log('Performance logged:', performanceData);
     // In production, send to logging service
     // await apiClient.post('/logs/performance', performanceData);
   } catch (err) {

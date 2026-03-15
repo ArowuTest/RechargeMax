@@ -95,14 +95,11 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
   adminSession, 
   onLogout 
 }) => {
-  console.log('🚀 ComprehensiveAdminPortal RENDERING');
   const { admin: contextAdmin, sessionToken, isAuthenticated, isLoading, hasPermission, logout } = useAdminContext();
-  console.log('📊 Admin Context:', { contextAdmin, sessionToken, isAuthenticated, isLoading });
   const { toast } = useToast();
   
   // Use props admin session if provided, otherwise fall back to context
   const admin = adminSession?.admin || contextAdmin;
-  console.log('👤 Final Admin Object:', admin);
   const isAuth = adminSession ? true : isAuthenticated;
   const isLoad = adminSession ? false : isLoading;
   
@@ -167,7 +164,6 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
       const firstTab = getFirstAvailableTab();
       if (activeTab !== firstTab) {
         setActiveTab(firstTab);
-        console.log('🎯 Setting initial tab to:', firstTab);
       }
     }
   }, [admin]);
@@ -182,7 +178,6 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
       
       // Check for suspicious values that indicate corruption
       if (dailySubscription?.amount === 80 && dailySubscription?.draw_entries_earned === 4) {
-        console.log('❌ CORRUPTION DETECTED! Resetting to correct values');
         setDailySubscription({
           id: dailySubscription.id || 'corrected',
           amount: 30,
@@ -194,9 +189,6 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
   }, [dailySubscription]);
 
   const initializeAdminPortal = async () => {
-    console.log('=== INITIALIZING ADMIN PORTAL ===');
-    console.log('Admin:', admin);
-    console.log('Session Token:', sessionToken);
     try {
       const promises = [];
       
@@ -298,9 +290,10 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
         return { success: true, affiliates: Array.isArray(affiliatesData) ? affiliatesData : [] };
       }
       
-      case 'get_transactions':
-        // TODO: Implement backend endpoint for transactions
-        return { success: true, transactions: [] };
+      case 'get_transactions': {
+        const txResp = await adminApi.get('/admin/recharge/history', { params: data });
+        return { success: true, transactions: txResp.success ? (txResp.data || []) : [] };
+      }
       
       case 'get_prizes':
         // Get wheel prizes (same as get_wheel_prizes)
@@ -420,7 +413,6 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
       
       case 'delete_admin':
         await adminApi.delete(`/admin/admins/${data.admin_id}`);
-        // TODO: Implement delete admin endpoint
         return { success: true };
       
       case 'update_setting': {
@@ -446,10 +438,8 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
   };
 
   const fetchDashboardStats = async () => {
-    console.log('Fetching dashboard stats...');
     try {
       const data = await callAdminAPI('get_dashboard_stats');
-      console.log('Dashboard stats received:', data);
       setStats(data || {
         total_users: 0,
         new_users_today: 0,
@@ -513,7 +503,6 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
         };
         setDailySubscription(cleanConfig);
       } else {
-        console.log('❌ No daily_subscription in response');
         setDailySubscription(null);
       }
     } catch (error) {
@@ -585,11 +574,9 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
   };
 
   const fetchAllDailySubscriptions = async () => {
-    console.log('Fetching all daily subscriptions from unified table...');
     try {
       setActionLoading('fetch_all_subscriptions');
       const data = await callAdminAPI('get_all_daily_subscriptions', { limit: 100 });
-      console.log('All daily subscriptions received:', data);
       setAllDailySubscriptions(data?.data?.subscriptions || []);
     } catch (error) {
       console.error('Failed to fetch all daily subscriptions:', error);

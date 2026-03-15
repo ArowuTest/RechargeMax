@@ -559,7 +559,8 @@ type Handlers struct {
 	AdminComprehensive *handlers.AdminComprehensiveHandler
 	AdminSpinTiers *handlers.AdminSpinTiersHandler
 	AdminUserManagement *handlers.AdminUserManagementHandler
-	PlatformSettings *handlers.PlatformSettingsHandler
+	PlatformSettings       *handlers.PlatformSettingsHandler
+	TransactionLimits      *handlers.TransactionLimitsHandler
 	Network      *handlers.NetworkHandler
 	Platform     *handlers.PlatformHandler
 	Payment      *handlers.PaymentHandler
@@ -604,7 +605,8 @@ func initHandlers(svcs *Services, repos *Repositories, appConfig *Config, db *go
 			),
 			AdminSpinTiers: handlers.NewAdminSpinTiersHandler(db),
 		AdminUserManagement: handlers.NewAdminUserManagementHandler(repos.Admin),
-		PlatformSettings: handlers.NewPlatformSettingsHandler(db),
+		PlatformSettings:  handlers.NewPlatformSettingsHandler(db),
+		TransactionLimits: handlers.NewTransactionLimitsHandler(db),
 		Network: handlers.NewNetworkHandler(svcs.NetworkConfig, svcs.HLR),
 		Platform: handlers.NewPlatformHandler(db),
 		Payment: handlers.NewPaymentHandler(svcs.Payment, svcs.Recharge, svcs.Subscription, appConfig.FrontendURL),
@@ -976,6 +978,13 @@ func setupRouter(hdlrs *Handlers, svcs *Services, db *gorm.DB) *gin.Engine {
 
 				// Audit Logs
 				admin.GET("/audit-logs", middleware.AdminAuditLogsList(db))
+
+			// Transaction Limits
+			admin.GET("/transaction-limits", hdlrs.TransactionLimits.ListTransactionLimits)
+			admin.GET("/transaction-limits/:id", hdlrs.TransactionLimits.GetTransactionLimit)
+			admin.POST("/transaction-limits", hdlrs.TransactionLimits.CreateTransactionLimit)
+			admin.PUT("/transaction-limits/:id", hdlrs.TransactionLimits.UpdateTransactionLimit)
+			admin.DELETE("/transaction-limits/:id", hdlrs.TransactionLimits.DeleteTransactionLimit)
 			}
 	}
 

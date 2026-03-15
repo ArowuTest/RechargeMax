@@ -105,7 +105,6 @@ export const AffiliatePage: React.FC = () => {
       setDashboardLoading(true);
       
       const response = await getAffiliateDashboard(user.msisdn);
-      console.log('[AffiliatePage] fetchAffiliateData response:', JSON.stringify(response).substring(0, 400));
 
       if (response.success) {
         // Check if user is actually an affiliate
@@ -128,7 +127,6 @@ export const AffiliatePage: React.FC = () => {
         } else {
           setAffiliateStatus('NOT_FOUND');
         }
-        console.log('Affiliate fetch result:', response.error);
       }
     } catch (error) {
       console.error('Failed to fetch affiliate data:', error);

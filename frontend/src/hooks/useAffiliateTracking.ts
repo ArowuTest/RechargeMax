@@ -17,7 +17,6 @@ export const useAffiliateTracking = () => {
           // Track the click
           await trackAffiliateClick();
           
-          console.log('Affiliate click tracked:', affiliateCode);
         } catch (error) {
           console.error('Failed to track affiliate click:', error);
         }
@@ -90,7 +89,6 @@ export const useAdvancedAffiliateTracking = () => {
           // Track the click with enhanced data
           await trackAffiliateClick();
           
-          console.log('Advanced affiliate tracking:', trackingData);
         } catch (error) {
           console.error('Failed to track advanced affiliate click:', error);
         }
@@ -126,7 +124,6 @@ export const useAdvancedAffiliateTracking = () => {
       };
       
       // You would send this to your backend
-      console.log('Conversion tracked:', conversionData);
       
       // Store conversion in session for potential retry
       const conversions = JSON.parse(sessionStorage.getItem('affiliate_conversions') || '[]');

@@ -1,14 +1,46 @@
 name: Deploy to Production
 
 on:
+  # Trigger on version tags (e.g. v1.2.3) — NOT on every main push
   push:
-    branches: [main]
+    tags:
+      - 'v*.*.*'
+  # Also allow fully manual deployment from the GitHub Actions UI
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "deploy" to confirm production deployment'
+        required: true
 
 jobs:
+  # ── Guard: only proceed when secrets exist and (if manual) confirm matches ──
+  guard:
+    name: Pre-flight checks
+    runs-on: ubuntu-latest
+    outputs:
+      proceed: ${{ steps.check.outputs.proceed }}
+    steps:
+      - name: Check secrets and confirmation
+        id: check
+        run: |
+          if [ -z "${{ secrets.DOCKER_USERNAME }}" ]; then
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::DOCKER_USERNAME secret is not set – deployment skipped."
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && \
+               [ "${{ github.event.inputs.confirm }}" != "deploy" ]; then
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Manual trigger confirmation did not match 'deploy' – skipped."
+          else
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          fi
+
   deploy-prod:
     name: Build & Push Docker Images (Production)
     runs-on: ubuntu-latest
-    environment: production   # requires manual approval in GitHub Environments
+    needs: guard
+    if: needs.guard.outputs.proceed == 'true'
+    environment: production   # requires manual approval gate in GitHub Environments
+
     steps:
       - uses: actions/checkout@v4
 
@@ -45,4 +77,4 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Notify production deployment
-        run: echo "Production deployment triggered for ${{ github.sha }}"
+        run: echo "Production deployment complete for ${{ github.sha }}"

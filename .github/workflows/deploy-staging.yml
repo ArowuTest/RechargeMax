@@ -3,12 +3,15 @@ name: Deploy to Staging
 on:
   push:
     branches: [develop]
+  workflow_dispatch:        # allow manual trigger
 
 jobs:
   deploy-staging:
     name: Build & Push Docker Images (Staging)
     runs-on: ubuntu-latest
     environment: staging
+    # Skip the entire job if Docker credentials are not configured
+    if: ${{ secrets.DOCKER_USERNAME != '' }}
     steps:
       - uses: actions/checkout@v4
 

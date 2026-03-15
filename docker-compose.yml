@@ -15,11 +15,9 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Init scripts + schema run once on first container start (alphabetical order)
-      - ./database/docker-init:/docker-entrypoint-initdb.d:ro
-      - ./database/tables:/docker-entrypoint-initdb.d/tables:ro
-      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
-      - ./database/seeds:/docker-entrypoint-initdb.d/seeds:ro
+      # On first start, Docker runs all .sql files in initdb.d alphabetically.
+      # Table files (01_*.sql ... 46_*.sql) run first, then seeds/
+      - ./database:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U rechargemax -d rechargemax_db"]
       interval: 10s

@@ -100,6 +100,17 @@ ON CONFLICT (email) DO UPDATE SET
 		countErrStr = countErr.Error()
 	}
 
+	// List all tables
+	type TableRow struct {
+		Tablename string `gorm:"column:tablename"`
+	}
+	var tables []TableRow
+	_ = h.db.Raw("SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename").Scan(&tables)
+	tableNames := make([]string, 0)
+	for _, t := range tables {
+		tableNames = append(tableNames, t.Tablename)
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"admin_count":   adminCount,
 		"network_count": netCount,
@@ -108,5 +119,6 @@ ON CONFLICT (email) DO UPDATE SET
 		"insert_error":  insertErr,
 		"rls_status":    rlsErr,
 		"count_error":   countErrStr,
+		"tables":        tableNames,
 	})
 }

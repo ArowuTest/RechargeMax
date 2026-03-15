@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -113,7 +115,7 @@ export const EnterpriseHomePage: React.FC = () => {
       window.history.replaceState({}, document.title, window.location.pathname);
       
       // Trigger backend callback to process VTU
-      fetch(`/api/v1/payment/callback?reference=${reference}&gateway=paystack`, {
+      fetch(`${API_BASE}/payment/callback?reference=${reference}&gateway=paystack`, {
         credentials: 'include'
       })
         .then(res => res.json())
@@ -128,7 +130,7 @@ export const EnterpriseHomePage: React.FC = () => {
         }
         
         setTimeout(() => {
-          fetch(`/api/v1/recharge/reference/${reference}`, { credentials: 'include' })
+          fetch(`${API_BASE}/recharge/reference/${reference}`, { credentials: 'include' })
             .then(res => res.json())
             .then(response => {
               // Extract transaction data from nested response
@@ -201,7 +203,7 @@ export const EnterpriseHomePage: React.FC = () => {
       window.history.replaceState({}, document.title, window.location.pathname);
       
       // Trigger backend callback to process subscription
-      fetch(`/api/v1/payment/callback?reference=${reference}&gateway=paystack`, { credentials: 'include' })
+      fetch(`${API_BASE}/payment/callback?reference=${reference}&gateway=paystack`, { credentials: 'include' })
         .then(res => res.json())
         
         .catch(err => console.error('Backend callback failed:', err));
@@ -300,7 +302,7 @@ export const EnterpriseHomePage: React.FC = () => {
         
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
           try {
-            const response = await fetch(`/api/v1/recharge/reference/${ref}`, { credentials: 'include' });
+            const response = await fetch(`${API_BASE}/recharge/reference/${ref}`, { credentials: 'include' });
             if (!response.ok) {
               throw new Error('Failed to fetch transaction details');
             }

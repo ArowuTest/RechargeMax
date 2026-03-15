@@ -26,7 +26,7 @@ import {
   Wifi
 } from 'lucide-react';
 
-const API_BASE = '/api/v1';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
 interface ValidationStats {
   summary: {
@@ -85,7 +85,7 @@ const ValidationStatsDashboard: React.FC = () => {
     setError(null);
 
     try {
-      const response = await fetch(`/api/v1/admin/validation/stats`, {
+      const response = await fetch(`${API_BASE}/admin/validation/stats`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

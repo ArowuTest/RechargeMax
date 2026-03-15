@@ -20,6 +20,7 @@ import DailySubscriptionPage from "./pages/DailySubscriptionPage";
 import { UserDashboard } from "./components/dashboard/UserDashboard";
 import { AffiliateDashboard } from "./components/affiliate/AffiliateDashboard";
 import { AdminLoginPage } from "./pages/AdminLoginPage";
+import { UserProfile } from "./components/profile/UserProfile";
 
 // ── Lazy-loaded (admin — only fetched after /admin/login) ─────────────────
 const AdminDashboardPage            = lazy(() => import("./pages/AdminDashboardPage").then(m => ({ default: m.AdminDashboardPage })));
@@ -63,6 +64,7 @@ function App() {
                   <Route path="/affiliate" element={<AffiliatePage />} />
                   <Route path="/affiliate/dashboard" element={<AffiliateDashboard />} />
                   <Route path="/subscription" element={<DailySubscriptionPage />} />
+                  <Route path="/profile" element={<UserProfile />} />
 
                   {/* Admin Routes */}
                   <Route path="/admin/login" element={<AdminLoginPage />} />

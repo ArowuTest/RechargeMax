@@ -243,7 +243,7 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
     setIsLoadingDataPlans(true);
     try {
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1';
-      const response = await fetch(`${apiBaseUrl}/networks/${formData.networkProvider}/bundles`);
+      const response = await fetch(`${apiBaseUrl}/networks/${formData.networkProvider}/bundles`, { credentials: 'include' });
       const result = await response.json();
       
       if (result.success && result.data) {

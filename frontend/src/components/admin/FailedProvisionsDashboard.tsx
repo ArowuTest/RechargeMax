@@ -12,7 +12,7 @@ import {
   Filter
 } from 'lucide-react';
 
-const API_BASE = '/api/v1';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
 interface FailedProvision {
   id: string;
@@ -65,7 +65,7 @@ const FailedProvisionsDashboard: React.FC = () => {
     setError(null);
     
     try {
-      const response = await fetch(`/api/v1/admin/prize-fulfillment/retry/${provisionId}`, {
+      const response = await fetch(`${API_BASE}/admin/prize-fulfillment/retry/${provisionId}`, {
         method: 'POST',
         credentials: 'include'
       });
@@ -90,7 +90,7 @@ const FailedProvisionsDashboard: React.FC = () => {
     setError(null);
     
     try {
-      const response = await fetch(`/api/v1/admin/prize-fulfillment/retry-all`, {
+      const response = await fetch(`${API_BASE}/admin/prize-fulfillment/retry-all`, {
         method: 'POST',
         credentials: 'include'
       });

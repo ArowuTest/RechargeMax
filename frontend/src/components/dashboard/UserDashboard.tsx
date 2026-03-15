@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 import { getUserDashboard, claimPrize } from '@/lib/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -167,7 +169,7 @@ export const UserDashboard: React.FC = () => {
 
     try {
       setCheckingSpins(true);
-      const response = await fetch('/api/v1/spin/eligibility', {
+      const response = await fetch(`${API_BASE}/spin/eligibility`, {
         credentials: 'include'
       });
 
@@ -266,7 +268,7 @@ export const UserDashboard: React.FC = () => {
 
     try {
       setUpdatingEmail(true);
-      const response = await fetch('/api/v1/user/profile', {
+      const response = await fetch(`${API_BASE}/user/profile`, {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

@@ -55,7 +55,8 @@ if [ "$WITH_SEEDS" = true ]; then
   for f in \
     "$DB_DIR/seeds/004_reference_data.sql" \
     "$DB_DIR/seeds/005_notification_templates.sql" \
-    "$DB_DIR/seeds/006_platform_settings.sql"
+    "$DB_DIR/seeds/006_platform_settings.sql" \
+    "$DB_DIR/seeds/007_draw_prize_config.sql"
   do
     printf "  %-50s " "$(basename $f)"
     psql "$DB_URL" -v ON_ERROR_STOP=0 -f "$f" > /dev/null 2>&1 && echo "✓" || echo "⚠"

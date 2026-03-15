@@ -35,7 +35,8 @@ echo "▶ Seeding reference data..."
 for f in \
   "$INIT_DIR/seeds/004_reference_data.sql" \
   "$INIT_DIR/seeds/005_notification_templates.sql" \
-  "$INIT_DIR/seeds/006_platform_settings.sql"
+  "$INIT_DIR/seeds/006_platform_settings.sql" \
+  "$INIT_DIR/seeds/007_draw_prize_config.sql"
 do
   [ -f "$f" ] && run_sql "$f" || true
 done

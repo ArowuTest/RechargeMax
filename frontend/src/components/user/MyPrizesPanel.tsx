@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -44,7 +46,7 @@ const MyPrizesPanel: React.FC = () => {
   const fetchMyPrizes = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/v1/user/prizes', {
+      const response = await fetch(`${API_BASE}/user/prizes`, {
         credentials: 'include'
       });
       
@@ -73,7 +75,7 @@ const MyPrizesPanel: React.FC = () => {
     setShowClaimModal(false);
     
     try {
-      const response = await fetch(`/api/v1/winner/${selectedPrize.id}/claim`, {
+      const response = await fetch(`${API_BASE}/winner/${selectedPrize.id}/claim`, {
         method: 'POST',
         credentials: 'include',
         headers: {

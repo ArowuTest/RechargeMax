@@ -20,9 +20,10 @@ database/
     ├── 001_comprehensive_seed_data.sql
     ├── 002_test_data.sql                ← Dev/staging only
     ├── 003_test_numbers.sql
-    ├── 004_reference_data.sql
+    ├── 004_reference_data.sql           ← networks, data_plans, network_configs, wheel_prizes
     ├── 005_notification_templates.sql
-    └── 006_platform_settings.sql
+    ├── 006_platform_settings.sql
+    └── 007_draw_prize_config.sql        ← draw_types, prize_templates, prize_categories, subscription_tiers
 ```
 
 ---
@@ -55,6 +56,7 @@ for f in database/[0-9]*.sql; do psql $DB_URL -f "$f"; done
 psql $DB_URL -f database/seeds/004_reference_data.sql
 psql $DB_URL -f database/seeds/005_notification_templates.sql
 psql $DB_URL -f database/seeds/006_platform_settings.sql
+psql $DB_URL -f database/seeds/007_draw_prize_config.sql
 ```
 
 ## Updating an existing database
@@ -89,12 +91,14 @@ Docker runs all `.sql` files alphabetically on first container start:
 
 ---
 
-## Why backend/migrations/ also exists
+## Seed file ownership
 
-The Go server's manual migration runner reads from `backend/migrations/`.  
-That folder contains the **full history** (CREATE TABLE + ALTER TABLE combined),  
-which lets it bootstrap a database from scratch in CI and production pipelines  
-without needing the `database/` folder.
+All seed data lives exclusively in `database/seeds/`. There is no `backend/seeds/` folder.
+The content previously in `backend/seeds/` has been consolidated here:
 
-`database/` = clean, human-readable, split by purpose  
-`backend/migrations/` = complete ordered history for the automated runner
+| Former file | Now in |
+|---|---|
+| `backend/seeds/essential_data.sql` | `004_reference_data.sql` (networks, data_plans, wheel_prizes) |
+| `backend/seeds/prize_tier_seed.sql` | `007_draw_prize_config.sql` (draw_types, prize_templates, prize_categories) |
+| `backend/seeds/subscription_tiers_seed.sql` | `007_draw_prize_config.sql` (subscription_tiers) |
+| `backend/seeds/development_data.sql` | Duplicate of `002_test_data.sql` — removed |

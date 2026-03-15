@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -43,7 +45,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSucce
     if (success) {
       try {
         // Fetch user profile (auth cookie set by verifyOTP)
-        const profileRes = await fetch('/api/v1/user/profile', { credentials: 'include' });
+        const profileRes = await fetch(`${API_BASE}/user/profile`, { credentials: 'include' });
         const result = await profileRes.json();
         
         if (result.success && result.data) {

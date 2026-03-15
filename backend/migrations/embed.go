@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"log"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -16,7 +17,7 @@ import (
 var sqlFiles embed.FS
 
 // RunAll executes all base schema SQL files then versioned migrations.
-// Each file runs in its own transaction so failures don't block subsequent files.
+// Each STATEMENT runs independently so a failing trigger/index doesn't block table creation.
 func RunAll(db *gorm.DB) {
 	sqlDB, err := db.DB()
 	if err != nil {
@@ -29,30 +30,24 @@ func RunAll(db *gorm.DB) {
 	// Base schema files (creates tables, indexes, triggers)
 	baseFiles := listFiles("sql")
 	log.Printf("  📋 %d base schema files", len(baseFiles))
-	ok, fail := 0, 0
+	totalOK, totalFail := 0, 0
 	for _, f := range baseFiles {
-		if err := execFileInTx(sqlDB, f); err != nil {
-			log.Printf("  ⚠️  %s: %v", filepath.Base(f), err)
-			fail++
-		} else {
-			ok++
-		}
+		ok, fail := execFileByStatement(sqlDB, f)
+		totalOK += ok
+		totalFail += fail
 	}
-	log.Printf("  ✓ base schema: %d ok, %d warned", ok, fail)
+	log.Printf("  ✓ base schema: %d statements ok, %d warned", totalOK, totalFail)
 
-	// Versioned migrations (alters, seeds, indexes)
+	// Versioned migrations
 	migFiles := listFiles("sql/migrations")
 	log.Printf("  📋 %d migration files", len(migFiles))
-	ok, fail = 0, 0
+	totalOK, totalFail = 0, 0
 	for _, f := range migFiles {
-		if err := execFileInTx(sqlDB, f); err != nil {
-			log.Printf("  ⚠️  %s: %v", filepath.Base(f), err)
-			fail++
-		} else {
-			ok++
-		}
+		ok, fail := execFileByStatement(sqlDB, f)
+		totalOK += ok
+		totalFail += fail
 	}
-	log.Printf("  ✓ migrations: %d ok, %d warned", ok, fail)
+	log.Printf("  ✓ migrations: %d statements ok, %d warned", totalOK, totalFail)
 
 	log.Println("📦 Migrations complete")
 }
@@ -72,23 +67,94 @@ func listFiles(dir string) []string {
 	return files
 }
 
-// execFileInTx runs a SQL file inside a new transaction.
-// If the file fails, the transaction is rolled back (so DB stays clean).
-func execFileInTx(db *sql.DB, path string) error {
+// splitStatements splits a SQL file into individual statements.
+// It handles $$ dollar-quoted blocks (used in PL/pgSQL functions).
+func splitStatements(sql string) []string {
+	// Replace line comments
+	reLineComment := regexp.MustCompile(`--[^\n]*`)
+	cleaned := reLineComment.ReplaceAllString(sql, "")
+
+	var stmts []string
+	var buf strings.Builder
+	inDollarQuote := false
+	dollarTag := ""
+	i := 0
+	runes := []rune(cleaned)
+
+	for i < len(runes) {
+		// Check for dollar-quote start/end
+		if !inDollarQuote {
+			// Look for $tag$ pattern
+			if runes[i] == '$' {
+				end := strings.Index(string(runes[i+1:]), "$")
+				if end >= 0 {
+					tag := "$" + string(runes[i+1:i+1+end]) + "$"
+					inDollarQuote = true
+					dollarTag = tag
+					buf.WriteString(tag)
+					i += len([]rune(tag))
+					continue
+				}
+			}
+			if runes[i] == ';' {
+				stmt := strings.TrimSpace(buf.String())
+				if stmt != "" {
+					stmts = append(stmts, stmt)
+				}
+				buf.Reset()
+				i++
+				continue
+			}
+		} else {
+			// Check if we're closing the dollar quote
+			remaining := string(runes[i:])
+			if strings.HasPrefix(remaining, dollarTag) {
+				buf.WriteString(dollarTag)
+				i += len([]rune(dollarTag))
+				inDollarQuote = false
+				dollarTag = ""
+				continue
+			}
+		}
+		buf.WriteRune(runes[i])
+		i++
+	}
+
+	// Last statement without semicolon
+	if stmt := strings.TrimSpace(buf.String()); stmt != "" {
+		stmts = append(stmts, stmt)
+	}
+
+	return stmts
+}
+
+// execFileByStatement executes each statement in the SQL file independently.
+// Returns (successCount, failureCount).
+func execFileByStatement(db *sql.DB, path string) (int, int) {
 	data, err := sqlFiles.ReadFile(path)
 	if err != nil {
-		return err
+		log.Printf("  ❌ Cannot read %s: %v", filepath.Base(path), err)
+		return 0, 1
 	}
 
-	tx, err := db.Begin()
-	if err != nil {
-		return err
+	stmts := splitStatements(string(data))
+	ok, fail := 0, 0
+	for _, stmt := range stmts {
+		if strings.TrimSpace(stmt) == "" {
+			continue
+		}
+		if _, err := db.Exec(stmt); err != nil {
+			// Only log non-trivial errors (ignore "already exists" etc.)
+			errStr := err.Error()
+			if !strings.Contains(errStr, "already exists") &&
+				!strings.Contains(errStr, "duplicate key") &&
+				!strings.Contains(errStr, "does not exist") {
+				log.Printf("  ⚠️  %s: %v", filepath.Base(path), err)
+			}
+			fail++
+		} else {
+			ok++
+		}
 	}
-
-	if _, err := tx.Exec(string(data)); err != nil {
-		_ = tx.Rollback()
-		return err
-	}
-
-	return tx.Commit()
+	return ok, fail
 }

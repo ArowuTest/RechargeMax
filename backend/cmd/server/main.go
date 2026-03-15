@@ -226,9 +226,21 @@ func initDatabase(dbURL string) (*gorm.DB, error) {
 		return nil, fmt.Errorf("DATABASE_URL environment variable is required")
 	}
 
-	db, err := gorm.Open(postgres.Open(dbURL), &gorm.Config{})
+	// Retry loop: Render managed postgres may take a few seconds to accept connections
+	// on first deploy. Retry up to 15 times with 2s backoff (30s total).
+	var db *gorm.DB
+	var err error
+	maxRetries := 15
+	for i := 1; i <= maxRetries; i++ {
+		db, err = gorm.Open(postgres.Open(dbURL), &gorm.Config{})
+		if err == nil {
+			break
+		}
+		log.Printf("⏳ DB connection attempt %d/%d failed: %v — retrying in 2s...", i, maxRetries, err)
+		time.Sleep(2 * time.Second)
+	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to connect to database after %d attempts: %w", maxRetries, err)
 	}
 
 	sqlDB, err := db.DB()
@@ -238,13 +250,21 @@ func initDatabase(dbURL string) (*gorm.DB, error) {
 
 	// Connection pool tuning — enough headroom for concurrent requests while
 	// preventing resource exhaustion on a shared DB instance.
-	sqlDB.SetMaxOpenConns(50)                // max concurrent DB connections
-	sqlDB.SetMaxIdleConns(10)                // kept open between requests
-	sqlDB.SetConnMaxLifetime(30 * time.Minute) // recycle before DB-side timeout
-	sqlDB.SetConnMaxIdleTime(5 * time.Minute)  // retire idle connections promptly
+	sqlDB.SetMaxOpenConns(25)                 // reduced for basic_256mb plan
+	sqlDB.SetMaxIdleConns(5)
+	sqlDB.SetConnMaxLifetime(30 * time.Minute)
+	sqlDB.SetConnMaxIdleTime(5 * time.Minute)
 
-	if err := sqlDB.Ping(); err != nil {
-		return nil, fmt.Errorf("database ping failed: %w", err)
+	// Ping with retries
+	for i := 1; i <= maxRetries; i++ {
+		if err = sqlDB.Ping(); err == nil {
+			break
+		}
+		log.Printf("⏳ DB ping attempt %d/%d failed — retrying in 2s...", i, maxRetries)
+		time.Sleep(2 * time.Second)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("database ping failed after %d attempts: %w", maxRetries, err)
 	}
 
 	// STRATEGIC PRODUCTION APPROACH: Manual SQL Migrations

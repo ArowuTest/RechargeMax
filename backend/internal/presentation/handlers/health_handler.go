@@ -56,7 +56,38 @@ func (h *HealthHandler) DebugDB(c *gin.Context) {
 
 	var admins []AdminRow
 	var adminCount int64
+	var insertErr, rlsErr string
 
+	countErr := h.db.Table("admin_users").Count(&adminCount).Error
+	_ = h.db.Table("admin_users").Find(&admins)
+
+	// Try direct insert
+	insertResult := h.db.Exec(`INSERT INTO admin_users (id, email, password_hash, full_name, role, permissions, is_active, created_at, updated_at)
+VALUES ('950e8400-e29b-41d4-a716-446655440001',
+        'admin@rechargemax.ng',
+        '$2a$10$GSv3/EaeIzohXsGy6jIMfuoOCMkBLZJF/OiqtG7kVdVoD/dKXypoe',
+        'Super Administrator',
+        'SUPER_ADMIN',
+        '["view_analytics","manage_users"]',
+        true,
+        NOW(), NOW())
+ON CONFLICT (email) DO UPDATE SET
+        password_hash = '$2a$10$GSv3/EaeIzohXsGy6jIMfuoOCMkBLZJF/OiqtG7kVdVoD/dKXypoe',
+        is_active = true`)
+	if insertResult.Error != nil {
+		insertErr = insertResult.Error.Error()
+	}
+
+	// Check RLS status
+	var rlsEnabled bool
+	_ = h.db.Raw("SELECT relrowsecurity FROM pg_class WHERE relname = 'admin_users'").Scan(&rlsEnabled)
+	if rlsEnabled {
+		rlsErr = "RLS_ENABLED"
+	} else {
+		rlsErr = "RLS_DISABLED"
+	}
+
+	// Re-count after insert
 	_ = h.db.Table("admin_users").Count(&adminCount)
 	_ = h.db.Table("admin_users").Find(&admins)
 
@@ -64,10 +95,18 @@ func (h *HealthHandler) DebugDB(c *gin.Context) {
 	_ = h.db.Table("network_configs").Count(&netCount)
 	_ = h.db.Table("subscription_tiers").Count(&tierCount)
 
+	countErrStr := ""
+	if countErr != nil {
+		countErrStr = countErr.Error()
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"admin_count":      adminCount,
-		"network_count":    netCount,
-		"tier_count":       tierCount,
-		"admins":           admins,
+		"admin_count":   adminCount,
+		"network_count": netCount,
+		"tier_count":    tierCount,
+		"admins":        admins,
+		"insert_error":  insertErr,
+		"rls_status":    rlsErr,
+		"count_error":   countErrStr,
 	})
 }

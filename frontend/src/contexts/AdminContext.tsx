@@ -33,29 +33,32 @@ export const AdminProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // On mount, check if there is a valid session by calling the backend.
-    // The httpOnly cookie is sent automatically — we don't touch localStorage for the token.
+    // On mount, restore admin session from localStorage.
+    // We use Bearer token auth (cross-domain: httpOnly cookie won't work Vercel→Render).
     const checkAdminSession = async () => {
       try {
         const storedAdmin = localStorage.getItem('rechargemax_admin_user');
-        if (!storedAdmin) {
+        const storedToken = localStorage.getItem('rechargemax_admin_token');
+        
+        if (!storedAdmin || !storedToken) {
+          // No stored session
           setIsLoading(false);
           return;
         }
 
-        // Validate session against backend (cookie sent automatically)
-        const res = await apiClient.get('/admin/dashboard');
-
+        // Validate the JWT token is still valid by calling a lightweight admin endpoint
+        const res = await apiClient.get('/admin/users?page=1&limit=1');
         if (res.data?.success !== false) {
           setAdminUser(JSON.parse(storedAdmin));
         } else {
-          // Cookie expired or invalid — clear stale profile cache
+          // Token expired — clear session
           localStorage.removeItem('rechargemax_admin_user');
+          localStorage.removeItem('rechargemax_admin_token');
         }
       } catch {
-        // Network error — restore session optimistically to avoid locking out admins
-        const storedAdmin = localStorage.getItem('rechargemax_admin_user');
-        if (storedAdmin) setAdminUser(JSON.parse(storedAdmin));
+        // Network error or 401: clear stale session to force fresh login
+        localStorage.removeItem('rechargemax_admin_user');
+        localStorage.removeItem('rechargemax_admin_token');
       } finally {
         setIsLoading(false);
       }
@@ -88,6 +91,12 @@ export const AdminProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         };
         setAdminUser(adminData);
         localStorage.setItem('rechargemax_admin_user', JSON.stringify(adminData));
+        // Store token for cross-domain admin API calls (Bearer token needed since
+        // httpOnly cookie is same-domain only and won't work cross-domain on Render→Vercel)
+        const jwtToken = data.token;
+        if (jwtToken) {
+          localStorage.setItem('rechargemax_admin_token', jwtToken);
+        }
         return true;
       }
 

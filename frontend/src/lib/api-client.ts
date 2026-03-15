@@ -79,6 +79,12 @@ fetchCSRFToken().catch(() => {});
 apiClient.interceptors.request.use(
   async (config) => {
     // httpOnly cookies are sent automatically via withCredentials: true
+    // For admin routes: also attach JWT as Bearer token (cross-domain: cookie won't work)
+    const adminToken = localStorage.getItem('rechargemax_admin_token');
+    if (adminToken && config.url?.includes('/admin/')) {
+      config.headers = config.headers || {};
+      config.headers['Authorization'] = `Bearer ${adminToken}`;
+    }
     // For state-changing methods, also attach the CSRF token header (SEC-007)
     if (requiresCSRF(config.method)) {
       try {
@@ -118,7 +124,11 @@ apiClient.interceptors.response.use(
 
       if (isAdminRoute) {
         localStorage.removeItem('rechargemax_admin_user');
-        window.location.href = '/admin/login';
+        localStorage.removeItem('rechargemax_admin_token');
+        // Don't redirect if already on login page
+        if (window.location.pathname !== '/admin/login') {
+          window.location.href = '/admin/login';
+        }
       } else if (!isSilentEndpoint && !isOnPublicPage) {
         // Only redirect to /login if we're on a protected page
         localStorage.removeItem('rechargemax_user');
@@ -242,9 +252,17 @@ export const adminAuthApi = {
       password,
     });
     
-    // Token stored as httpOnly cookie by server — only cache non-sensitive admin profile data
-    if (response.data.success && response.data.data) {
-      localStorage.setItem('rechargemax_admin_user', JSON.stringify(response.data.data.admin));
+    // Store admin profile data and JWT token (cross-domain requires Bearer token)
+    if (response.data.success) {
+      // The response has: { success, token, admin } at top level (not nested under data)
+      const adminData = response.data.data?.admin || (response.data as any).admin;
+      const jwtToken = response.data.data?.token || (response.data as any).token;
+      if (adminData) {
+        localStorage.setItem('rechargemax_admin_user', JSON.stringify(adminData));
+      }
+      if (jwtToken) {
+        localStorage.setItem('rechargemax_admin_token', jwtToken);
+      }
     }
     
     return response.data;
@@ -256,8 +274,9 @@ export const adminAuthApi = {
       // Backend clears the httpOnly admin cookie
       await apiClient.post('/admin/auth/logout');
     } finally {
-      // Clear non-sensitive admin profile cache
+      // Clear admin session data
       localStorage.removeItem('rechargemax_admin_user');
+      localStorage.removeItem('rechargemax_admin_token');
     }
   },
 };

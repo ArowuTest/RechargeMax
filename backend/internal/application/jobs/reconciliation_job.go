@@ -1,9 +1,10 @@
 package jobs
 
 import (
+	"go.uber.org/zap"
+	"rechargemax/internal/logger"
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"gorm.io/gorm"
@@ -61,11 +62,11 @@ func (j *ReconciliationJob) StartScheduled(ctx context.Context, interval time.Du
 		for {
 			select {
 			case <-ctx.Done():
-				log.Println("[ReconciliationJob] Stopping")
+				logger.Info("[ReconciliationJob] Stopping")
 				return
 			case <-ticker.C:
 				if err := j.Run(ctx); err != nil {
-					log.Printf("[ReconciliationJob] Error: %v", err)
+					logger.Error("[ReconciliationJob] Error", zap.Error(err))
 				}
 			}
 		}
@@ -83,7 +84,7 @@ type stuckTransaction struct {
 
 // Run executes one reconciliation pass.
 func (j *ReconciliationJob) Run(ctx context.Context) error {
-	log.Println("[ReconciliationJob] Starting pass…")
+	logger.Info("[ReconciliationJob] Starting pass…")
 
 	cutoff := time.Now().Add(-1 * time.Hour)
 
@@ -113,7 +114,7 @@ func (j *ReconciliationJob) Run(ctx context.Context) error {
 
 		verified, paidAmount, err := j.payment.VerifyPaystackPayment(ctx, row.PaymentReference)
 		if err != nil {
-			log.Printf("[ReconciliationJob] verify %s: %v", row.PaymentReference, err)
+			logger.Info("[ReconciliationJob] verify %s", zap.Any("value", row.PaymentReference), zap.Error(err))
 			continue
 		}
 
@@ -122,11 +123,11 @@ func (j *ReconciliationJob) Run(ctx context.Context) error {
 		if verified && paidAmount == row.Amount {
 			// ── Success path ──────────────────────────────────────────────
 			if err := j.recharge.ProcessSuccessfulPayment(ctx, row.PaymentReference); err != nil {
-				log.Printf("[ReconciliationJob] process %s: %v", row.PaymentReference, err)
+				logger.Info("[ReconciliationJob] process %s", zap.Any("value", row.PaymentReference), zap.Error(err))
 				continue
 			}
 			succeeded++
-			log.Printf("[ReconciliationJob] recovered %s (₦%.2f)", row.ID, float64(row.Amount)/100)
+			logger.Info("[ReconciliationJob] recovered %s (₦%.2f)", zap.Any("value", row.ID), zap.Any("value", float64(row.Amount)/100))
 
 		} else {
 			// ── Failure path ──────────────────────────────────────────────
@@ -135,7 +136,7 @@ func (j *ReconciliationJob) Run(ctx context.Context) error {
 				`UPDATE transactions SET status='FAILED', updated_at=?, processed_at=? WHERE id=?`,
 				now, now, row.ID,
 			).Error; err != nil {
-				log.Printf("[ReconciliationJob] mark failed %s: %v", row.ID, err)
+				logger.Error("[ReconciliationJob] mark failed %s", zap.Any("value", row.ID), zap.Error(err))
 				continue
 			}
 
@@ -158,14 +159,14 @@ func (j *ReconciliationJob) Run(ctx context.Context) error {
 					row.PaymentReference,
 				)
 				if smsErr := j.notifier.SendSMS(ctx, row.Msisdn, msg); smsErr != nil {
-					log.Printf("[ReconciliationJob] SMS to %s: %v", row.Msisdn, smsErr)
+					logger.Info("[ReconciliationJob] SMS to %s", zap.Any("value", row.Msisdn), zap.Error(smsErr))
 				}
 			}
 
-			log.Printf("[ReconciliationJob] marked failed %s", row.ID)
+			logger.Error("[ReconciliationJob] marked failed %s", zap.Any("value", row.ID))
 		}
 	}
 
-	log.Printf("[ReconciliationJob] done: total=%d succeeded=%d failed=%d", processed, succeeded, failed)
+	logger.Error("[ReconciliationJob] done: total=%d succeeded=%d failed=%d", zap.Any("value", processed), zap.Any("value", succeeded), zap.Any("value", failed))
 	return nil
 }

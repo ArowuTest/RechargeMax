@@ -1,11 +1,12 @@
 package services
 
 import (
+	"go.uber.org/zap"
+	"rechargemax/internal/logger"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"strconv"
 	"time"
 
@@ -181,7 +182,7 @@ func (s *AffiliateService) RegisterAffiliate(ctx context.Context, req RegisterAf
 	_, err = s.walletService.CreateWallet(ctx, req.MSISDN)
 	if err != nil {
 		// Log error but don't fail registration
-		log.Printf("Warning: Failed to create wallet for affiliate %s: %v\n", req.MSISDN, err)
+		logger.Error("Warning: Failed to create wallet for affiliate %s: %v", zap.Any("value", req.MSISDN), zap.Error(err))
 	}
 
 	return s.affiliateToResponse(ctx, affiliate, user), nil
@@ -636,7 +637,7 @@ func (s *AffiliateService) ApproveAffiliate(ctx context.Context, affiliateID str
 			msisdn = user.MSISDN
 		}
 	}
-	log.Printf("[AUDIT] Affiliate %s (%s) approved at %s\n", affiliate.ID.String(), msisdn, now.Format(time.RFC3339))
+	logger.Info("[AUDIT] Affiliate approved", zap.String("affiliate_id", affiliate.ID.String()), zap.String("msisdn", msisdn), zap.String("approved_at", now.Format(time.RFC3339)))
 	
 	return nil
 }
@@ -695,7 +696,7 @@ func (s *AffiliateService) RejectAffiliate(ctx context.Context, affiliateID stri
 			msisdn = user.MSISDN
 		}
 	}
-	log.Printf("[AUDIT] Affiliate %s (%s) rejected at %s. Reason: %s\n", affiliate.ID.String(), msisdn, now.Format(time.RFC3339), reason)
+	logger.Info("[AUDIT] Affiliate %s (%s) rejected at %s. Reason: %s", zap.Any("value", affiliate.ID.String()), zap.Any("value", msisdn), zap.Any("value", now.Format(time.RFC3339)), zap.Any("value", reason))
 	
 	return nil
 }
@@ -756,7 +757,7 @@ func (s *AffiliateService) SuspendAffiliate(ctx context.Context, affiliateID str
 	//     comm.Status = "frozen"
 	//     s.commissionRepo.Update(ctx, comm)
 	// }
-	log.Printf("[INFO] Pending commissions frozen for affiliate %s\n", affiliate.ID.String())
+	logger.Info("[INFO] Pending commissions frozen", zap.String("affiliate_id", affiliate.ID.String()))
 	
 	// Log suspension action for audit trail
 	now := time.Now()
@@ -768,7 +769,7 @@ func (s *AffiliateService) SuspendAffiliate(ctx context.Context, affiliateID str
 			msisdn = user.MSISDN
 		}
 	}
-	log.Printf("[AUDIT] Affiliate %s (%s) suspended at %s. Reason: %s\n", affiliate.ID.String(), msisdn, now.Format(time.RFC3339), reason)
+	logger.Info("[AUDIT] Affiliate %s (%s) suspended at %s. Reason: %s", zap.Any("value", affiliate.ID.String()), zap.Any("value", msisdn), zap.Any("value", now.Format(time.RFC3339)), zap.Any("value", reason))
 	
 	return nil
 }
@@ -888,4 +889,17 @@ func (s *AffiliateService) ProcessCommissionTx(ctx context.Context, tx *gorm.DB,
 		return fmt.Errorf("commission: failed to update affiliate total: %w", err)
 	}
 	return nil
+}
+
+// RecordClick records an affiliate link click for analytics.
+// It updates the affiliate's click_count if the referral_code is valid.
+func (s *AffiliateService) RecordClick(ctx context.Context, referralCode, msisdn, source string) error {
+	if referralCode == "" {
+		return nil // nothing to record
+	}
+	return s.db.WithContext(ctx).
+		Model(&entities.Affiliates{}).
+		Where("referral_code = ?", referralCode).
+		UpdateColumn("click_count", gorm.Expr("click_count + 1")).
+		Error
 }

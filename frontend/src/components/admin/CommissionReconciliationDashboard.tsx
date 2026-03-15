@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiClient } from '@/lib/api-client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,7 +27,7 @@ import {
   Info
 } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 
 interface CommissionSummary {
   total_transactions: number;
@@ -101,23 +102,14 @@ export const CommissionReconciliationDashboard: React.FC = () => {
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE}/admin/commissions/reconciliation`,  {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          start_date: startDate,
-          end_date: endDate,
-          network: selectedNetwork || undefined,
-          provider: selectedProvider || undefined,
-        }),
+      const response = await apiClient.post('/admin/commissions/reconciliation', {
+        start_date: startDate,
+        end_date: endDate,
+        network: selectedNetwork || undefined,
+        provider: selectedProvider || undefined,
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to load commission data');
-      }
-
-      const result = await response.json();
+      const result = response.data;
       if (result.success) {
         setCommissionData(result.data);
       } else {
@@ -132,23 +124,14 @@ export const CommissionReconciliationDashboard: React.FC = () => {
 
   const exportReport = async () => {
     try {
-      const response = await fetch(`${API_BASE}/admin/commissions/export`,  {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          start_date: startDate,
-          end_date: endDate,
-          network: selectedNetwork || undefined,
-          provider: selectedProvider || undefined,
-        }),
-      });
+      const response = await apiClient.post('/admin/commissions/export', {
+        start_date: startDate,
+        end_date: endDate,
+        network: selectedNetwork || undefined,
+        provider: selectedProvider || undefined,
+      }, { responseType: 'blob' });
 
-      if (!response.ok) {
-        throw new Error('Failed to export report');
-      }
-
-      const blob = await response.blob();
+      const blob = response.data as Blob;
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

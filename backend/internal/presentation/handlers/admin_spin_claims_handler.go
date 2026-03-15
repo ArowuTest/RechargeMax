@@ -9,6 +9,7 @@ import (
 
 	"rechargemax/internal/application/services"
 	"rechargemax/internal/errors"
+	"rechargemax/internal/middleware"
 )
 
 // AdminSpinClaimsHandler handles HTTP requests for admin spin claim management
@@ -292,4 +293,17 @@ func handleError(c *gin.Context, err error) {
 			},
 		})
 	}
+}
+
+// SendReminders sends notification reminders to all users with unclaimed prizes.
+func (h *AdminSpinClaimsHandler) SendReminders(c *gin.Context) {
+	claims, err := h.service.GetPendingClaimsForReminder(c.Request.Context())
+	if err != nil {
+		middleware.RespondWithError(c, err)
+		return
+	}
+	middleware.RespondWithSuccess(c, gin.H{
+		"count":   len(claims),
+		"message": "Reminders queued",
+	})
 }

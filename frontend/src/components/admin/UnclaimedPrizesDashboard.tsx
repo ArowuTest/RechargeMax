@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiClient } from '@/lib/api-client';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +14,7 @@ import {
   Bell
 } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 
 interface UnclaimedPrize {
   id: string;
@@ -47,11 +48,8 @@ const UnclaimedPrizesDashboard: React.FC = () => {
   const fetchUnclaimedPrizes = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/admin/winners/pending-claims`,  { credentials: 'include' });
-      
-      if (!response.ok) throw new Error('Failed to fetch unclaimed prizes');
-      
-      const data = await response.json();
+      const response = await apiClient.get('/admin/winners/pending-claims');
+      const data = response.data;
       setPrizes(data.prizes || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load unclaimed prizes');
@@ -66,14 +64,8 @@ const UnclaimedPrizesDashboard: React.FC = () => {
     setError(null);
     
     try {
-      const response = await fetch(`${API_BASE}/admin/prize-fulfillment/send-reminders`,  {
-        method: 'POST',
-        credentials: 'include',
-      });
-      
-      if (!response.ok) throw new Error('Failed to send reminders');
-      
-      const data = await response.json();
+      const response = await apiClient.post('/admin/prize-fulfillment/send-reminders');
+      const data = response.data;
       setSuccess(`Sent ${data.count} reminder notifications`);
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {

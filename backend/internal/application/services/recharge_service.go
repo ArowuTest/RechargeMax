@@ -2,12 +2,14 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 
+	"rechargemax/internal/logger"
 	"rechargemax/internal/pkg/safe"
 	"strings"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -107,7 +109,7 @@ func (s *RechargeService) CreateRecharge(ctx context.Context, req CreateRecharge
 	// BUG-003: fraud detection gate (velocity + amount ceiling + blacklist)
 	if s.fraudService != nil {
 		if isFraud, reason, err := s.fraudService.CheckRecharge(ctx, normalizedMSISDN, req.Amount); err != nil {
-			log.Printf("[fraud] check error (non-blocking): %v", err)
+			logger.Warn("fraud check error (non-blocking)", zap.Error(err))
 		} else if isFraud {
 			return nil, fmt.Errorf("transaction declined: %s", reason)
 		}
@@ -266,7 +268,7 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 		err := tx.Where("msisdn = ?", recharge.MSISDN).First(&user).Error
 		if err != nil {
 			// User doesn't exist - auto-create for guest transaction
-			log.Printf("Auto-creating user account for guest transaction: %s\n", recharge.MSISDN)
+			logger.Info("auto-creating user account for guest transaction", zap.String("msisdn", recharge.MSISDN))
 			
 			// Generate unique codes
 			userCode := fmt.Sprintf("USR%s", uuid.New().String()[:8])
@@ -310,7 +312,7 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 			if err := s.affiliateService.ProcessCommissionTx(ctx, tx, recharge.MSISDN, recharge.Amount, recharge.ID); err != nil {
 				// Log but don't fail — a commission calculation error should not
 				// block the user's recharge from completing.
-				log.Printf("affiliate commission error (non-fatal): %v", err)
+				logger.Warn("affiliate commission error (non-fatal)", zap.Error(err))
 			}
 		}
 
@@ -318,7 +320,7 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 		if isWheelEligible && s.spinService != nil {
 			if err := s.spinService.CreateSpinOpportunity(ctx, user.ID, recharge.ID); err != nil {
 				// Log error but don't fail the recharge
-				log.Printf("Failed to create spin opportunity: %v\n", err)
+				logger.Error("failed to create spin opportunity", zap.Error(err))
 				// Don't return error - spin opportunity failure shouldn't rollback recharge
 			}
 		}
@@ -344,10 +346,9 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 				if dbErr2 := s.db.Model(&entities.Users{}).
 					Where("id = ?", updatedUser.ID).
 					Update("loyalty_tier", newTier).Error; dbErr2 != nil {
-					log.Printf("[Recharge] Loyalty tier update failed for %s: %v\n", recharge.MSISDN, dbErr2)
+					logger.Error("loyalty tier update failed", zap.String("msisdn", recharge.MSISDN), zap.Error(dbErr2))
 				} else {
-					log.Printf("[Recharge] Loyalty tier updated %s: %s -> %s\n",
-						recharge.MSISDN, updatedUser.LoyaltyTier, newTier)
+					logger.Info("loyalty tier updated", zap.String("msisdn", recharge.MSISDN), zap.String("old_tier", updatedUser.LoyaltyTier), zap.String("new_tier", newTier))
 				}
 			}
 		}
@@ -829,8 +830,7 @@ func (s *RechargeService) attemptVTUWithRetry(ctx context.Context, recharge *ent
 				waitDuration = 2 * time.Minute
 			}
 			
-			log.Printf("🔄 Retry attempt %d/%d for transaction %s (waiting %v)\\n", 
-				attempt, maxRetries, recharge.ID, waitDuration)
+			logger.Info("retry attempt", zap.Int("attempt", attempt), zap.Int("max_retries", maxRetries), zap.String("transaction_id", recharge.ID.String()), zap.Duration("wait", waitDuration))
 			time.Sleep(waitDuration)
 		}
 		
@@ -864,7 +864,7 @@ func (s *RechargeService) attemptVTUWithRetry(ctx context.Context, recharge *ent
 		// Check if successful
 		if err == nil && vtuResponse != nil && vtuResponse.Success {
 			if attempt > 0 {
-				log.Printf("✅ Retry successful on attempt %d for transaction %s\\n", attempt, recharge.ID)
+				logger.Info("retry successful", zap.Int("attempt", attempt), zap.String("transaction_id", recharge.ID.String()))
 			}
 			return vtuResponse, nil
 		}
@@ -876,11 +876,11 @@ func (s *RechargeService) attemptVTUWithRetry(ctx context.Context, recharge *ent
 			lastErr = fmt.Errorf("VTU failed: %s", vtuResponse.Message)
 		}
 		
-		log.Printf("❌ Attempt %d failed for transaction %s: %v\\n", attempt, recharge.ID, lastErr)
+		logger.Warn("attempt failed", zap.Int("attempt", attempt), zap.String("transaction_id", recharge.ID.String()), zap.Error(lastErr))
 	}
 	
 	// All retries exhausted
-	log.Printf("⚠️  All %d retry attempts exhausted for transaction %s\\n", maxRetries+1, recharge.ID)
+	logger.Warn("all retry attempts exhausted", zap.Int("total_attempts", maxRetries+1), zap.String("transaction_id", recharge.ID.String()))
 	return vtuResponse, lastErr
 }
 
@@ -896,7 +896,7 @@ func (s *RechargeService) handleFailedRechargeWithRefund(ctx context.Context, re
 	
 	// ✅ Initiate automatic refund after retries exhausted
 	if s.paymentService != nil && recharge.PaymentReference != "" {
-		log.Printf("💰 Initiating refund for transaction %s after failed retries\\n", recharge.ID)
+		logger.Info("initiating refund after failed retries", zap.String("transaction_id", recharge.ID.String()))
 		
 		refundErr := s.paymentService.RefundPayment(
 			ctx,
@@ -908,10 +908,8 @@ func (s *RechargeService) handleFailedRechargeWithRefund(ctx context.Context, re
 		
 		if refundErr != nil {
 			// Log refund failure but don't fail the transaction update
-			log.Printf("❌ CRITICAL: Failed to refund transaction %s (₦%d): %v\\n", 
-				recharge.ID, recharge.Amount/100, refundErr)
-			log.Printf("⚠️  MANUAL ACTION REQUIRED: Admin must manually refund payment reference: %s\\n", 
-				recharge.PaymentReference)
+			logger.Error("CRITICAL: failed to refund transaction", zap.String("transaction_id", recharge.ID.String()), zap.Int64("amount_naira", recharge.Amount/100), zap.Error(refundErr))
+			logger.Error("MANUAL ACTION REQUIRED: admin must manually refund payment", zap.String("payment_reference", recharge.PaymentReference))
 			// Write audit log for admin review queue
 			s.db.WithContext(ctx).Exec(`
 				INSERT INTO audit_logs (id, entity_type, entity_id, action, description, created_at)
@@ -921,7 +919,7 @@ func (s *RechargeService) handleFailedRechargeWithRefund(ctx context.Context, re
 			)
 		} else {
 			// Refund successful - update transaction
-			log.Printf("✅ Refund initiated successfully for transaction %s\\n", recharge.ID)
+			logger.Info("refund initiated successfully", zap.String("transaction_id", recharge.ID.String()))
 			recharge.Status = "REFUNDED"
 			s.rechargeRepo.Update(ctx, recharge)
 			
@@ -944,7 +942,7 @@ func (s *RechargeService) handlePendingRecharge(ctx context.Context, recharge *e
 	recharge.ProviderReference = vtuResponse.ProviderReference
 	s.rechargeRepo.Update(ctx, recharge)
 	
-	log.Printf("⏳ Transaction %s is PENDING with VTPass - will requery for status\\n", recharge.ID)
+	logger.Info("transaction is PENDING with VTPass, will requery", zap.String("transaction_id", recharge.ID.String()))
 	
 	// Notify customer that recharge is being processed
 	if s.notificationService != nil {
@@ -962,7 +960,7 @@ func (s *RechargeService) handlePendingRecharge(ctx context.Context, recharge *e
 		defer timer.Stop()
 		<-timer.C
 		if reqErr := s.requeryVTPassTransaction(bgCtx, recharge); reqErr != nil {
-			log.Printf("[recharge] requery %s: %v", recharge.ID, reqErr)
+			logger.Error("recharge requery failed", zap.String("transaction_id", recharge.ID.String()), zap.Error(reqErr))
 		}
 	}()
 	return nil
@@ -1011,7 +1009,7 @@ func (s *RechargeService) createRechargeDrawEntries(ctx context.Context, tx *gor
 	}
 	if err := tx.WithContext(ctx).Create(&entry).Error; err != nil {
 		// Log but don't fail the transaction - draw entries are non-critical
-		log.Printf("Failed to create draw entries for %s: %v\n", msisdn, err)
+		logger.Error("failed to create draw entries", zap.String("msisdn", msisdn), zap.Error(err))
 		return
 	}
 

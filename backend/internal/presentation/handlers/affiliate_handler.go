@@ -391,3 +391,26 @@ func (h *AffiliateHandler) GetEarnings(c *gin.Context) {
 
 	middleware.RespondWithSuccess(c, earnings)
 }
+
+// TrackClick records an affiliate link click for attribution.
+// The click source and referral code are optional — pulled from query/body.
+// Authenticated users get their MSISDN recorded; unauthenticated calls are allowed.
+func (h *AffiliateHandler) TrackClick(c *gin.Context) {
+	var req struct {
+		ReferralCode string `json:"referral_code"`
+		Source       string `json:"source"`
+	}
+	_ = c.ShouldBindJSON(&req) // body is optional
+
+	msisdn := c.GetString("msisdn")
+
+	if err := h.affiliateService.RecordClick(c.Request.Context(), req.ReferralCode, msisdn, req.Source); err != nil {
+		// Non-critical: log but don't return an error to the caller
+		errors.Info("affiliate click track failed", map[string]interface{}{
+			"error":         err.Error(),
+			"referral_code": req.ReferralCode,
+		})
+	}
+
+	middleware.RespondWithSuccess(c, map[string]interface{}{"tracked": true})
+}

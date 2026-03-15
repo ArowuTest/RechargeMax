@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiClient } from '@/lib/api-client';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +13,7 @@ import {
   Filter
 } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 
 interface FailedProvision {
   id: string;
@@ -46,11 +47,8 @@ const FailedProvisionsDashboard: React.FC = () => {
   const fetchFailedProvisions = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/admin/prize-fulfillment/failed-provisions`,  { credentials: 'include' });
-      
-      if (!response.ok) throw new Error('Failed to fetch failed provisions');
-      
-      const data = await response.json();
+      const response = await apiClient.get('/admin/prize-fulfillment/failed-provisions');
+      const data = response.data;
       setProvisions(data.provisions || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load failed provisions');
@@ -65,13 +63,8 @@ const FailedProvisionsDashboard: React.FC = () => {
     setError(null);
     
     try {
-      const response = await fetch(`${API_BASE}/admin/prize-fulfillment/retry/${provisionId}`, {
-        method: 'POST',
-        credentials: 'include'
-      });
-      
-      if (!response.ok) throw new Error('Failed to retry provision');
-      
+      const response = await apiClient.post(`/admin/prize-fulfillment/retry/${provisionId}`);
+      void response;
       setSuccess('Retry initiated successfully');
       setTimeout(() => setSuccess(null), 3000);
       
@@ -90,14 +83,8 @@ const FailedProvisionsDashboard: React.FC = () => {
     setError(null);
     
     try {
-      const response = await fetch(`${API_BASE}/admin/prize-fulfillment/retry-all`, {
-        method: 'POST',
-        credentials: 'include'
-      });
-      
-      if (!response.ok) throw new Error('Failed to retry all provisions');
-      
-      const data = await response.json();
+      const retryAllRes = await apiClient.post('/admin/prize-fulfillment/retry-all');
+      const data = retryAllRes.data;
       setSuccess(`Initiated retry for ${data.count} provisions`);
       setTimeout(() => setSuccess(null), 3000);
       

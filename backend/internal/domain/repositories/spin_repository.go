@@ -20,4 +20,5 @@ type SpinRepository interface {
 	// Business operations
 	FindByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*entities.SpinResults, error)
 	CountByUserID(ctx context.Context, userID uuid.UUID) (int64, error)
+	CountPendingByUserID(ctx context.Context, userID uuid.UUID) (int64, error)
 }

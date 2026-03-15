@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { apiClient } from '@/lib/api-client';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -115,10 +115,7 @@ export const EnterpriseHomePage: React.FC = () => {
       window.history.replaceState({}, document.title, window.location.pathname);
       
       // Trigger backend callback to process VTU
-      fetch(`${API_BASE}/payment/callback?reference=${reference}&gateway=paystack`, {
-        credentials: 'include'
-      })
-        .then(res => res.json())
+      apiClient.get(`/payment/callback?reference=${reference}&gateway=paystack`)
         .catch(err => console.error('Backend callback failed:', err));
       
       // Poll transaction status with retry mechanism
@@ -130,8 +127,8 @@ export const EnterpriseHomePage: React.FC = () => {
         }
         
         setTimeout(() => {
-          fetch(`${API_BASE}/recharge/reference/${reference}`, { credentials: 'include' })
-            .then(res => res.json())
+          apiClient.get(`/recharge/reference/${reference}`)
+            .then(res => res.data)
             .then(response => {
               // Extract transaction data from nested response
               const txn = response.data || response;
@@ -203,9 +200,7 @@ export const EnterpriseHomePage: React.FC = () => {
       window.history.replaceState({}, document.title, window.location.pathname);
       
       // Trigger backend callback to process subscription
-      fetch(`${API_BASE}/payment/callback?reference=${reference}&gateway=paystack`, { credentials: 'include' })
-        .then(res => res.json())
-        
+      apiClient.get(`/payment/callback?reference=${reference}&gateway=paystack`)
         .catch(err => console.error('Backend callback failed:', err));
       
       const amount = parseFloat(allParams.get('amount') || '0');
@@ -302,11 +297,8 @@ export const EnterpriseHomePage: React.FC = () => {
         
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
           try {
-            const response = await fetch(`${API_BASE}/recharge/reference/${ref}`, { credentials: 'include' });
-            if (!response.ok) {
-              throw new Error('Failed to fetch transaction details');
-            }
-            const result = await response.json();
+            const response = await apiClient.get(`/recharge/reference/${ref}`);
+            const result = response.data;
             const txn = result.data;
             
             // Check if transaction is completed

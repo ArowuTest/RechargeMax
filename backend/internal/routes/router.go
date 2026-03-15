@@ -85,6 +85,7 @@ func registerPublic(v1 *gin.RouterGroup, hdlrs *handlers.Registry, db *gorm.DB) 
 	{
 		auth.POST("/send-otp",   middleware.OTPRateLimit(otpLimiter), hdlrs.Auth.SendOTP)
 		auth.POST("/verify-otp", middleware.OTPRateLimit(otpLimiter), hdlrs.Auth.VerifyOTP)
+		auth.POST("/logout",     hdlrs.Auth.Logout) // user logout — clears httpOnly cookie
 	}
 
 	// Admin auth (public — login doesn't require a token)
@@ -142,6 +143,7 @@ func registerPublic(v1 *gin.RouterGroup, hdlrs *handlers.Registry, db *gorm.DB) 
 		draws.GET("/active",      hdlrs.Draw.GetActiveDraws)
 		draws.GET("/:id",         hdlrs.Draw.GetDrawByID)
 		draws.GET("/:id/winners", hdlrs.Draw.GetDrawWinners)
+		draws.GET("/:id/results", hdlrs.Draw.GetDrawWinners) // alias — frontend calls /results
 		draws.GET("/my-entries",  hdlrs.Draw.GetMyEntries)
 	}
 
@@ -175,6 +177,7 @@ func registerProtected(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *serv
 	{
 		user.GET("/dashboard",    hdlrs.User.GetDashboard)
 		user.GET("/profile",      hdlrs.User.GetProfile)
+		user.POST("/profile",     hdlrs.User.UpdateProfile) // profile update
 		user.GET("/wallet",       hdlrs.User.GetWallet)
 		user.GET("/transactions", hdlrs.User.GetTransactions)
 		user.GET("/prizes",       hdlrs.User.GetPrizes)
@@ -196,6 +199,14 @@ func registerProtected(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *serv
 		subscription.GET("/history", hdlrs.Subscription.GetHistory)
 	}
 
+	// /subscriptions/daily/* aliases — frontend api.ts calls these paths
+	subscriptionsDaily := protected.Group("/subscriptions/daily")
+	{
+		subscriptionsDaily.POST("",                          hdlrs.Subscription.CreateSubscription)
+		subscriptionsDaily.GET("/status",                    hdlrs.Subscription.GetSubscription)
+		subscriptionsDaily.POST("/:subscriptionId/cancel",   hdlrs.Subscription.CancelSubscription)
+	}
+
 	// Affiliate programme
 	affiliate := protected.Group("/affiliate")
 	{
@@ -209,6 +220,7 @@ func registerProtected(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *serv
 		affiliate.GET("/commissions",   hdlrs.Affiliate.GetCommissions)
 		affiliate.GET("/earnings",      hdlrs.Affiliate.GetEarnings)
 		affiliate.POST("/payout",       hdlrs.Affiliate.RequestPayout)
+		affiliate.POST("/track-click",  hdlrs.Affiliate.TrackClick) // click attribution
 	}
 
 	// Prize claims
@@ -299,6 +311,7 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	admin.GET("/prize-fulfillment/failed-provisions", hdlrs.AdminSpinClaims.GetPendingClaims)
 	admin.POST("/prize-fulfillment/retry/:id",        hdlrs.AdminSpinClaims.ApproveClaim)
 	admin.POST("/prize-fulfillment/retry-all",        hdlrs.AdminSpinClaims.GetPendingClaims)
+	admin.POST("/prize-fulfillment/send-reminders",   hdlrs.AdminSpinClaims.SendReminders)
 
 	// ── Spin wheel ───────────────────────────────────────────────────────────
 	admin.GET("/spin/config",        hdlrs.AdminComprehensive.GetSpinConfig)

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiClient } from '@/lib/api-client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,7 +27,7 @@ import {
   Wifi
 } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 
 interface ValidationStats {
   summary: {
@@ -85,21 +86,12 @@ const ValidationStatsDashboard: React.FC = () => {
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE}/admin/validation/stats`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          start_date: startDate,
-          end_date: endDate,
-        }),
+      const response = await apiClient.post('/admin/validation/stats', {
+        start_date: startDate,
+        end_date: endDate,
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to load validation statistics');
-      }
-
-      const result = await response.json();
+      const result = response.data;
       if (result.success) {
         setStats(result.data);
       } else {

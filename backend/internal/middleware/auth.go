@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"go.uber.org/zap"
+	"rechargemax/internal/logger"
 	"context"
 	crand "crypto/rand"
 	"fmt"
@@ -180,7 +182,7 @@ func AdminAuthMiddleware(authService interface{}, blacklister ...TokenBlackliste
 		c.Set("authenticated", true)
 		log.Println("[AdminAuth] Middleware passed, admin_id:", adminID)
 		c.Next()
-		log.Println("[AdminAuth] Handler completed")
+		logger.Info("[AdminAuth] Handler completed")
 	}
 }
 
@@ -219,9 +221,9 @@ func ClearAuthCookie(c *gin.Context, tokenType string) {
 // LoggingMiddleware logs all requests
 func LoggingMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		fmt.Printf("[REQUEST] %s %s\n", c.Request.Method, c.Request.URL.Path)
+	logger.Info("[REQUEST]", zap.String("method", c.Request.Method), zap.String("path", c.Request.URL.Path))
 		c.Next()
-		fmt.Printf("[RESPONSE] %s %s - Status: %d\n", c.Request.Method, c.Request.URL.Path, c.Writer.Status())
+		logger.Info("[RESPONSE]", zap.String("method", c.Request.Method), zap.String("path", c.Request.URL.Path), zap.Int("status", c.Writer.Status()))
 	}
 }
 

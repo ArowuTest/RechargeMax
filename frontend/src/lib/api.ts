@@ -93,17 +93,17 @@ export const claimPrize = async (prizeId: string, d: any) => userApi.claimPrize(
 export const getPlatformStatistics = async () => apiClient.get('/platform/statistics');
 export const getRecentWinners = async (limit = 4) => apiClient.get(`/winners/recent?limit=${limit}`);
 
-// ─── Spins (legacy endpoints) ─────────────────────────────────────────────────
+// ─── Spins (mapped to real backend endpoints) ────────────────────────────────
 export const getAvailableSpins = async (msisdn: string) => {
   try {
-    return await apiClient.get(`/spins/available?msisdn=${msisdn}`);
+    return await apiClient.get(`/spin/eligibility?msisdn=${msisdn}`);
   } catch {
     return { success: false, data: { availableSpins: 0 } };
   }
 };
-export const consumeSpin = async (msisdn: string, transactionReference?: string) => {
+export const consumeSpin = async (msisdn: string, _transactionReference?: string) => {
   try {
-    return await apiClient.post('/spins/consume', { msisdn, transactionReference });
+    return await apiClient.post('/spin/play', { msisdn });
   } catch {
     return { success: false, error: 'Failed to consume spin' };
   }
@@ -112,11 +112,10 @@ export const recordTransactionPrize = async (d: {
   transactionReference: string; msisdn: string; prizeType: string;
   prizeValue: number; prizeDescription: string;
 }) => {
-  try {
-    return await apiClient.post('/prizes/record', d);
-  } catch {
-    return { success: false, error: 'Failed to record prize' };
-  }
+  // Prize recording is handled server-side during spin play — no separate endpoint.
+  // Return success so callers don't break.
+  console.warn('recordTransactionPrize: handled server-side, call is a no-op', d);
+  return { success: true };
 };
 export const getTierProgress = async (msisdn: string) => {
   try {

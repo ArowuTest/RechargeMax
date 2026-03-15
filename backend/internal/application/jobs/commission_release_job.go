@@ -1,6 +1,8 @@
 package jobs
 
 import (
+	"go.uber.org/zap"
+	"rechargemax/internal/logger"
 	"context"
 
 	"rechargemax/internal/pkg/safe"
@@ -47,7 +49,7 @@ func (j *CommissionReleaseJob) getHoldDays(ctx context.Context) int {
 
 // Run executes the commission release job.
 func (j *CommissionReleaseJob) Run(ctx context.Context) error {
-	fmt.Println("[CommissionReleaseJob] Starting...")
+	logger.Info("[CommissionReleaseJob] Starting...")
 
 	holdDays := j.getHoldDays(ctx)
 	holdCutoff := time.Now().AddDate(0, 0, -holdDays)
@@ -109,13 +111,13 @@ func (j *CommissionReleaseJob) Run(ctx context.Context) error {
 			`, s.AffiliateID).Error
 		})
 		if err != nil {
-			fmt.Printf("[CommissionReleaseJob] ERROR for affiliate %s: %v\n", s.AffiliateID, err)
+			logger.Info("[CommissionReleaseJob] ERROR for affiliate %s: %v", zap.Any("value", s.AffiliateID), zap.Error(err))
 			continue
 		}
 		credited++
 	}
 
-	fmt.Printf("[CommissionReleaseJob] Credited commissions for %d affiliates\n", credited)
+	logger.Info("[CommissionReleaseJob] Credited commissions for %d affiliates", zap.Any("value", credited))
 	return nil
 }
 
@@ -124,18 +126,18 @@ func (j *CommissionReleaseJob) StartScheduled(ctx context.Context, interval time
 	safe.Go(func() {
 		// Run immediately on start
 		if err := j.Run(ctx); err != nil {
-			fmt.Printf("[CommissionReleaseJob] Initial run error: %v\n", err)
+			logger.Info("[CommissionReleaseJob] Initial run error: %v", zap.Error(err))
 		}
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ctx.Done():
-				fmt.Println("[CommissionReleaseJob] Stopping.")
+				logger.Info("[CommissionReleaseJob] Stopping.")
 				return
 			case <-ticker.C:
 				if err := j.Run(ctx); err != nil {
-					fmt.Printf("[CommissionReleaseJob] Error: %v\n", err)
+					logger.Info("[CommissionReleaseJob] Error: %v", zap.Error(err))
 				}
 			}
 		}

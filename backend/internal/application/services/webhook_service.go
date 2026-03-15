@@ -1,6 +1,8 @@
 package services
 
 import (
+	"go.uber.org/zap"
+	"rechargemax/internal/logger"
 	"context"
 	"crypto/hmac"
 	"crypto/sha512"
@@ -81,14 +83,14 @@ func (s *WebhookService) VerifyPaystackSignature(payload []byte, signature strin
 func (s *WebhookService) ProcessPaystackWebhook(ctx context.Context, payload []byte, signature string) error {
 	// 1. Verify signature
 	if !s.VerifyPaystackSignature(payload, signature) {
-	log.Printf("[Webhook] ERROR: Invalid webhook signature: %s", signature)
+	logger.Error("[Webhook] ERROR: Invalid webhook signature", zap.Any("value", signature))
 		return errors.Unauthorized("Invalid webhook signature")
 	}
 
 	// 2. Parse payload
 	var webhookPayload PaystackWebhookPayload
 	if err := json.Unmarshal(payload, &webhookPayload); err != nil {
-		log.Printf("[Webhook] ERROR: Failed to parse webhook payload: %v", err)
+		logger.Error("[Webhook] ERROR: Failed to parse webhook payload", zap.Error(err))
 		return errors.BadRequest("Invalid webhook payload")
 	}
 
@@ -101,12 +103,12 @@ func (s *WebhookService) ProcessPaystackWebhook(ctx context.Context, payload []b
 	// 4. Check idempotency - has this event been processed before?
 	processed, err := s.webhookRepo.IsEventProcessed(ctx, eventID)
 	if err != nil {
-	log.Printf("[Webhook] ERROR: Failed to check event idempotency for %s: %v", eventID, err)
+	logger.Error("[Webhook] ERROR: Failed to check event idempotency for %s", zap.Any("value", eventID), zap.Error(err))
 		return errors.Internal(fmt.Sprintf("Failed to check event status: %v", err))
 	}
 
 	if processed {
-	log.Printf("[Webhook] Event already processed (idempotent): %s", eventID)
+	logger.Info("[Webhook] Event already processed (idempotent)", zap.Any("value", eventID))
 		return nil // Not an error, just already processed
 	}
 
@@ -122,7 +124,7 @@ func (s *WebhookService) ProcessPaystackWebhook(ctx context.Context, payload []b
 	}
 
 	if err := s.webhookRepo.CreateEvent(ctx, webhookEvent); err != nil {
-	log.Printf("[Webhook] ERROR: Failed to create webhook event %s: %v", eventID, err)
+	logger.Error("[Webhook] ERROR: Failed to create webhook event %s", zap.Any("value", eventID), zap.Error(err))
 		return errors.Internal(fmt.Sprintf("Failed to create webhook event: %v", err))
 	}
 
@@ -134,26 +136,26 @@ func (s *WebhookService) ProcessPaystackWebhook(ctx context.Context, payload []b
 	case "charge.failed":
 		processErr = s.processChargeFailed(ctx, &webhookPayload)
 	default:
-	log.Printf("[Webhook] Unhandled event type: %s", webhookPayload.Event)
+	logger.Info("[Webhook] Unhandled event type", zap.Any("value", webhookPayload.Event))
 		// Mark as processed even if we don't handle it
 		processErr = nil
 	}
 
 	// 7. Update webhook event status
 	if processErr != nil {
-	log.Printf("[Webhook] ERROR: Failed to process event %s (%s): %v", eventID, webhookPayload.Event, processErr)
+	logger.Error("[Webhook] ERROR: Failed to process event %s (%s)", zap.Any("value", eventID), zap.Any("value", webhookPayload.Event), zap.Error(processErr))
 		if err := s.webhookRepo.MarkEventFailed(ctx, eventID, processErr.Error()); err != nil {
-				log.Printf("[Webhook] ERROR: Failed to mark event as failed: %v", err)
+				logger.Error("[Webhook] ERROR: Failed to mark event as failed", zap.Error(err))
 		}
 		return processErr
 	}
 
 	if err := s.webhookRepo.MarkEventProcessed(ctx, eventID); err != nil {
-	log.Printf("[Webhook] ERROR: Failed to mark event %s as processed: %v", eventID, err)
+	logger.Error("[Webhook] ERROR: Failed to mark event %s as processed", zap.Any("value", eventID), zap.Error(err))
 		return errors.Internal(fmt.Sprintf("Failed to update event status: %v", err))
 	}
 
-	log.Printf("[Webhook] Processed successfully: EventID=%s, Reference=%s", eventID, webhookPayload.Data.Reference)
+	logger.Info("[Webhook] Processed successfully: EventID=%s, Reference=%s", zap.Any("value", eventID), zap.Any("value", webhookPayload.Data.Reference))
 
 	return nil
 }
@@ -188,7 +190,7 @@ func (s *WebhookService) processChargeSuccess(ctx context.Context, payload *Pays
 				return errors.Internal(fmt.Sprintf("Failed to process subscription: %v", err))
 			}
 		default:
-	log.Printf("[Webhook] WARN: Unknown transaction type - Reference=%s, Prefix=%s", reference, prefix)
+	logger.Warn("[Webhook] WARN: Unknown transaction type - Reference=%s, Prefix=%s", zap.Any("value", reference), zap.Any("value", prefix))
 		}
 	}
 
@@ -199,7 +201,7 @@ func (s *WebhookService) processChargeSuccess(ctx context.Context, payload *Pays
 func (s *WebhookService) processChargeFailed(ctx context.Context, payload *PaystackWebhookPayload) error {
 	reference := payload.Data.Reference
 
-	log.Printf("[Webhook] Processing failed charge: Reference=%s, Message=%s", reference, payload.Data.Message)
+	logger.Error("[Webhook] Processing failed charge: Reference=%s, Message=%s", zap.Any("value", reference), zap.Any("value", payload.Data.Message))
 
 	// Mark the transaction as FAILED in the database
 	if s.rechargeService != nil && reference != "" {
@@ -208,7 +210,7 @@ func (s *WebhookService) processChargeFailed(ctx context.Context, payload *Payst
 			recharge.Status = "FAILED"
 			recharge.FailureReason = fmt.Sprintf("Paystack charge.failed: %s", payload.Data.Message)
 			s.rechargeService.UpdateRecharge(ctx, recharge)
-			log.Printf("[Webhook] Marked recharge %s as FAILED (ref=%s)", recharge.ID, reference)
+			logger.Error("[Webhook] Marked recharge %s as FAILED (ref=%s)", zap.Any("value", recharge.ID), zap.Any("value", reference))
 		}
 	}
 

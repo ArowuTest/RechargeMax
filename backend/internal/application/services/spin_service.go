@@ -1,6 +1,8 @@
 package services
 
 import (
+	"go.uber.org/zap"
+	"rechargemax/internal/logger"
 	"context"
 	"encoding/json"
 	"log"
@@ -85,18 +87,10 @@ Message:  "User not found",
 
 	// Check if user has pending spins
 	// Get all spins for this user and filter by pending status
-	allSpins, err := s.spinRepo.FindByUserID(ctx, user.ID, 100, 0) // Get up to 100 recent spins
+	// Single COUNT query — avoids loading up to 100 rows and filtering in Go (BUG-001).
+	pendingSpins, err := s.spinRepo.CountPendingByUserID(ctx, user.ID)
 	if err != nil {
-		// If error, assume no pending spins
-		allSpins = []*entities.SpinResults{}
-	}
-	
-	// Count pending/unclaimed spins
-	var pendingSpins int64 = 0
-	for _, spin := range allSpins {
-		if spin.ClaimStatus == "PENDING" {
-			pendingSpins++
-		}
+		pendingSpins = 0
 	}
 
 if pendingSpins > 0 {
@@ -109,6 +103,12 @@ Message:        fmt.Sprintf("You have %d spin(s) available!", pendingSpins),
 
 	// Check if user has made a qualifying transaction (₦1000+) today
 	// Query transactions table directly by MSISDN
+	if s.db == nil {
+		return &SpinEligibilityResponse{
+			Eligible: false,
+			Message:  "No qualifying recharges found. Recharge ₦1000+ to earn a spin!",
+		}, nil
+	}
 	today := time.Now().Truncate(24 * time.Hour)
 	var transaction entities.Transactions
 	txErr := s.db.Where("msisdn = ? AND amount >= ? AND status = ? AND created_at >= ?",
@@ -273,10 +273,10 @@ if err != nil || len(prizes) == 0 {
 					} else {
 						finalStatus = "EXPIRED"
 					}
-					log.Printf("[spin] auto-provision failed for spin %s: %v", spinID, provErr)
+					logger.Error("[spin] auto-provision failed for spin %s", zap.Any("value", spinID), zap.Error(provErr))
 				} else {
 					s.logFulfillmentAttempt(bgCtx, &spinCopy, "SUCCESS", "")
-					log.Printf("[spin] auto-provision succeeded for spin %s", spinID)
+					logger.Info("[spin] auto-provision succeeded for spin %s", zap.Any("value", spinID))
 				}
 
 				if s.db != nil {
@@ -368,7 +368,7 @@ func (s *SpinService) provisionPrizeWithRetry(ctx context.Context, spin *entitie
 		now := time.Now()
 		spin.LastFulfillmentAttempt = &now
 		
-		log.Printf("🔄 Provisioning attempt %d/%d for spin %s\n", attempt, maxAttempts, spin.ID)
+		logger.Info("🔄 Provisioning attempt %d/%d for spin %s", zap.Any("value", attempt), zap.Any("value", maxAttempts), zap.Any("value", spin.ID))
 		
 		err := s.provisionPrize(ctx, spin)
 		
@@ -376,7 +376,7 @@ func (s *SpinService) provisionPrizeWithRetry(ctx context.Context, spin *entitie
 			// Success!
 			completedAt := time.Now()
 			spin.ProvisionCompletedAt = &completedAt
-			log.Printf("✅ Prize provisioned successfully on attempt %d\n", attempt)
+			logger.Info("✅ Prize provisioned successfully on attempt %d", zap.Any("value", attempt))
 			return nil
 		}
 		
@@ -386,13 +386,13 @@ func (s *SpinService) provisionPrizeWithRetry(ctx context.Context, spin *entitie
 		// If this isn't the last attempt, wait before retrying
 		if attempt < maxAttempts {
 			retryDelay := time.Duration(config.RetryDelaySeconds) * time.Second
-			log.Printf("⚠️  Attempt %d failed: %v. Retrying in %v...\n", attempt, err, retryDelay)
+			logger.Error("⚠️  Attempt %d failed: %v. Retrying in %v...", zap.Any("value", attempt), zap.Error(err), zap.Any("value", retryDelay))
 			time.Sleep(retryDelay)
 		}
 	}
 	
 	// All attempts failed
-	log.Printf("❌ All %d provision attempts failed for spin %s\n", maxAttempts, spin.ID)
+	logger.Error("❌ All %d provision attempts failed for spin %s", zap.Any("value", maxAttempts), zap.Any("value", spin.ID))
 	return fmt.Errorf("all %d provision attempts failed: %w", maxAttempts, lastErr)
 }
 
@@ -427,7 +427,7 @@ func (s *SpinService) provisionAirtime(ctx context.Context, spin *entities.Wheel
 		return fmt.Errorf("telecom service not initialized")
 	}
 	
-	log.Printf("📞 Provisioning ₦%d airtime to %s on %s network\n", spin.PrizeValue/100, spin.MSISDN, network)
+	logger.Info("📞 Provisioning ₦%d airtime to %s on %s network", zap.Any("value", spin.PrizeValue/100), zap.Any("value", spin.MSISDN), zap.Any("value", network))
 	
 	// Call VTPass to purchase airtime (amount in kobo)
 	response, err := s.telecomService.PurchaseAirtime(ctx, network, spin.MSISDN, int(spin.PrizeValue))
@@ -457,7 +457,7 @@ func (s *SpinService) provisionData(ctx context.Context, spin *entities.WheelSpi
 		return fmt.Errorf("no data variation code found for value %d on %s", spin.PrizeValue, network)
 	}
 	
-	log.Printf("📱 Provisioning data (%s) to %s on %s network\n", variationCode, spin.MSISDN, network)
+	logger.Info("📱 Provisioning data (%s) to %s on %s network", zap.Any("value", variationCode), zap.Any("value", spin.MSISDN), zap.Any("value", network))
 	
 	// Call VTPass to purchase data (amount in kobo)
 	response, err := s.telecomService.PurchaseData(ctx, network, spin.MSISDN, variationCode, int(spin.PrizeValue))
@@ -549,7 +549,7 @@ func (s *SpinService) logFulfillmentAttempt(ctx context.Context, spin *entities.
 			VALUES (?, ?, ?, ?, ?, ?)
 		`, spin.ID, spin.FulfillmentAttempts, spin.FulfillmentMode, status, errorMsg, spin.MSISDN).Error
 		if err != nil {
-			log.Printf("[spin] logFulfillmentAttempt: %v", err)
+			logger.Info("[spin] logFulfillmentAttempt", zap.Error(err))
 		}
 	}()
 }
@@ -724,7 +724,7 @@ func (s *SpinService) UpdateConfig(ctx context.Context, config map[string]interf
 		`, string(configJSON)).Error; err != nil {
 			return fmt.Errorf("failed to save spin config: %w", err)
 		}
-		log.Printf("[spin] wheel config updated and persisted to platform_settings")
+		logger.Info("[spin] wheel config updated and persisted to platform_settings")
 	}
 
 	return nil

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 import { getUserDashboard, claimPrize } from '@/lib/api';
+import { apiClient } from '@/lib/api-client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -169,11 +170,9 @@ export const UserDashboard: React.FC = () => {
 
     try {
       setCheckingSpins(true);
-      const response = await fetch(`${API_BASE}/spin/eligibility`, {
-        credentials: 'include'
-      });
+      const response = await apiClient.get('/spin/eligibility');
 
-      const data = await response.json();
+      const data = response.data;
 
       if (data.success && data.data.eligible && data.data.available_spins > 0) {
         setAvailableSpins(data.data.available_spins);
@@ -268,14 +267,9 @@ export const UserDashboard: React.FC = () => {
 
     try {
       setUpdatingEmail(true);
-      const response = await fetch(`${API_BASE}/user/profile`, {
-        method: 'PUT',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: newEmail })
-      });
+      const response = await apiClient.put('/user/profile', { email: newEmail });
 
-      const data = await response.json();
+      const data = response.data;
 
       if (data.success) {
         toast({

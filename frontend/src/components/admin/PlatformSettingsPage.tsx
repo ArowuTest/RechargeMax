@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { apiClient } from '@/lib/api-client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,7 +14,7 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/useToast';
 import { Settings, RefreshCw, Save, ChevronDown, ChevronRight } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 
 interface Setting {
   key: string;
@@ -157,8 +158,8 @@ export const PlatformSettingsPage: React.FC = () => {
   const fetchSettings = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/admin/settings`, { credentials: 'include' });
-      const data = await res.json();
+      const res = await apiClient.get('/admin/settings');
+      const data = res.data;
       // data.data may be a flat array or nested map — normalise to key->Setting
       const map: Record<string, Setting> = {};
       if (Array.isArray(data.data)) {
@@ -207,13 +208,8 @@ export const PlatformSettingsPage: React.FC = () => {
     const val = value ?? editedValues[key] ?? settings[key]?.value ?? '';  // already typed as string
     setSaving(key);
     try {
-      const res = await fetch(`${API_BASE}/admin/settings`, {
-        method: 'PUT',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [key]: val }),
-      });
-      const data = await res.json();
+      const res = await apiClient.put('/admin/settings', { [key]: val });
+      const data = res.data;
       if (data.success) {
         setSettings(prev => ({
           ...prev,

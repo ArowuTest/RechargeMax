@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { apiClient } from '@/lib/api-client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/useToast';
 import { Users, Search, RefreshCw, ShieldBan, ShieldCheck, Edit3, Eye } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 
 interface User {
   id: string;
@@ -93,8 +94,8 @@ export const UserManagementTab: React.FC = () => {
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/admin/users/all`, { credentials: 'include' });
-      const data = await res.json();
+      const res = await apiClient.get('/admin/users/all');
+      const data = res.data;
       const list: User[] = Array.isArray(data.data)
         ? data.data
         : Array.isArray(data.data?.users)
@@ -134,23 +135,13 @@ export const UserManagementTab: React.FC = () => {
     setEditSaving(true);
     try {
       // Update status
-      const statusRes = await fetch(`${API_BASE}/admin/users/${editUser.id}/status`, {
-        method: 'PUT',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: editStatus }),
-      });
-      const statusData = await statusRes.json();
+      const statusRes = await apiClient.put(`/admin/users/${editUser.id}/status`, { status: editStatus });
+      const statusData = statusRes.data;
       if (!statusData.success) throw new Error(statusData.message || 'Status update failed');
 
       // Update loyalty tier via status endpoint (backend accepts loyalty_tier in body)
       if (editTier !== editUser.loyalty_tier) {
-        await fetch(`${API_BASE}/admin/users/${editUser.id}/status`, {
-          method: 'PUT',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ loyalty_tier: editTier }),
-        });
+        await apiClient.put(`/admin/users/${editUser.id}/status`, { loyalty_tier: editTier });
       }
 
       toast({ title: 'Updated', description: `${userDisplayName(editUser)} updated successfully` });
@@ -166,13 +157,8 @@ export const UserManagementTab: React.FC = () => {
   const quickStatus = async (u: User, newStatus: string) => {
     setActionLoading(u.id);
     try {
-      const res = await fetch(`${API_BASE}/admin/users/${u.id}/status`, {
-        method: 'PUT',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      const data = await res.json();
+      const res = await apiClient.put(`/admin/users/${u.id}/status`, { status: newStatus });
+      const data = res.data;
       if (!data.success) throw new Error(data.message);
       toast({ title: 'Done', description: `User ${newStatus}` });
       fetchUsers();

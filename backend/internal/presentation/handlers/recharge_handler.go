@@ -1,8 +1,9 @@
 package handlers
 
 import (
+	"go.uber.org/zap"
+	"rechargemax/internal/logger"
 	"encoding/json"
-	"fmt"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -90,15 +91,15 @@ func (h *RechargeHandler) InitiateRecharge(c *gin.Context) {
 func (h *RechargeHandler) InitiateAirtimeRecharge(c *gin.Context) {
 	// Get msisdn from auth context (if authenticated) or use phone number from request
 	msisdn := c.GetString("msisdn")
-	fmt.Printf("[DEBUG] InitiateAirtimeRecharge called, msisdn from context: %s\n", msisdn)
+	logger.Info("[DEBUG] InitiateAirtimeRecharge called, msisdn from context: %s", zap.Any("value", msisdn))
 
 	var req validation.AirtimeRechargeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		fmt.Printf("[ERROR] Failed to bind JSON: %v\n", err)
+		logger.Info("[ERROR] Failed to bind JSON: %v", zap.Error(err))
 		middleware.RespondWithError(c, errors.BadRequest("Invalid request format"))
 		return
 	}
-	fmt.Printf("[DEBUG] Request parsed: phone=%s, network=%s, amount=%.2f\n", req.PhoneNumber, req.Network, req.Amount)
+	logger.Info("[DEBUG] Request parsed: phone=%s, network=%s, amount=%.2f", zap.Any("value", req.PhoneNumber), zap.Any("value", req.Network), zap.Any("value", req.Amount))
 
 	// Validate request
 	if err := req.Validate(); err != nil {
@@ -121,14 +122,14 @@ func (h *RechargeHandler) InitiateAirtimeRecharge(c *gin.Context) {
 		PaymentMethod: "CARD", // Paystack gateway, CARD payment method
 	}
 
-	fmt.Printf("[DEBUG] Calling CreateRecharge service...\n")
+	logger.Info("[DEBUG] Calling CreateRecharge service...")
 	result, err := h.rechargeService.CreateRecharge(c.Request.Context(), rechargeReq)
 	if err != nil {
-		fmt.Printf("[ERROR] CreateRecharge failed: %v\n", err)
+		logger.Info("[ERROR] CreateRecharge failed: %v", zap.Error(err))
 		middleware.RespondWithError(c, err)
 		return
 	}
-	fmt.Printf("[DEBUG] CreateRecharge succeeded, result: %+v\n", result)
+	logger.Info("[DEBUG] CreateRecharge succeeded, result: %+v", zap.Any("value", result))
 
 	// Log transaction
 	errors.LogTransaction("AIRTIME_RECHARGE", result.ID.String(), msisdn, float64(amountKobo)/100, "INITIATED")
@@ -360,23 +361,23 @@ func (h *RechargeHandler) HandleTelecomWebhook(c *gin.Context) {
 // @Router /api/v1/recharge/reference/{reference} [get]
 func (h *RechargeHandler) GetRechargeByReference(c *gin.Context) {
 	reference := c.Param("reference")
-	fmt.Printf("[DEBUG] GetRechargeByReference called with reference: %s\n", reference)
+	logger.Info("[DEBUG] GetRechargeByReference called with reference: %s", zap.Any("value", reference))
 
 	if reference == "" {
-		fmt.Printf("[ERROR] Reference is empty\n")
+		logger.Info("[ERROR] Reference is empty")
 		middleware.RespondWithError(c, errors.BadRequest("Payment reference is required"))
 		return
 	}
 
 	// Get recharge details by reference
-	fmt.Printf("[DEBUG] Calling rechargeService.GetRechargeByReference...\n")
+	logger.Info("[DEBUG] Calling rechargeService.GetRechargeByReference...")
 	recharge, err := h.rechargeService.GetRechargeByReference(c.Request.Context(), reference)
 	if err != nil {
-		fmt.Printf("[ERROR] GetRechargeByReference failed: %v\n", err)
+		logger.Info("[ERROR] GetRechargeByReference failed: %v", zap.Error(err))
 		middleware.RespondWithError(c, errors.NotFound("Recharge not found"))
 		return
 	}
-	fmt.Printf("[DEBUG] Recharge found: %+v\n", recharge)
+	logger.Info("[DEBUG] Recharge found: %+v", zap.Any("value", recharge))
 
 	middleware.RespondWithSuccess(c, recharge)
 }

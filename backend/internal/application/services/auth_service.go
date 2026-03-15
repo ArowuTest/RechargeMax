@@ -1,10 +1,11 @@
 package services
 
 import (
+	"go.uber.org/zap"
+	"rechargemax/internal/logger"
 	"context"
 	"crypto/rand"
 	"fmt"
-	"log"
 
 	"golang.org/x/crypto/bcrypt"
 	"math/big"
@@ -119,7 +120,7 @@ func (s *AuthService) SendOTP(ctx context.Context, msisdn string, purpose string
 	// Send SMS (use normalised MSISDN for delivery)
 	if err := s.sendSMS(ctx, normalizedMSISDN, otpCode); err != nil {
 		// Log error but don't fail the request
-		log.Printf("Failed to send SMS to %s: %v\n", normalizedMSISDN, err)
+		logger.Error("Failed to send SMS to %s: %v", zap.Any("value", normalizedMSISDN), zap.Error(err))
 	}
 
 	return nil
@@ -175,11 +176,11 @@ func (s *AuthService) VerifyOTP(ctx context.Context, msisdn, code, purpose strin
 	user.LastLoginAt = &now
 	if err := s.userRepo.Update(ctx, user); err != nil {
 		// Log error but don't fail authentication
-		log.Printf("Failed to update last login time: %v\n", err)
+		logger.Error("Failed to update last login time: %v", zap.Error(err))
 	}
 
 	// Generate JWT token (using normalized MSISDN)
-	log.Printf("[DEBUG] Generating JWT for normalized MSISDN: %s (original: %s)\n", normalizedMSISDN, msisdn)
+	logger.Info("[DEBUG] Generating JWT for normalized MSISDN: %s (original: %s)", zap.Any("value", normalizedMSISDN), zap.Any("value", msisdn))
 	token, err := s.GenerateToken(ctx, normalizedMSISDN)
 	if err != nil {
 		return "", nil, false, fmt.Errorf("failed to generate token: %w", err)
@@ -269,10 +270,11 @@ func (s *AuthService) sendSMS(ctx context.Context, msisdn, code string) error {
 
 	if s.environment != "production" {
 		// Development / staging: log without the code to avoid accidental exposure
-		// (use a separate OTP-viewing endpoint or check DB directly)
-		log.Printf("[SMS-DEV] OTP dispatched to MSISDN ending ...%s", msisdn[max(0, len(msisdn)-4):])
-		// Uncomment the line below ONLY for local debugging:
-		// log.Printf("[SMS-DEV] code=%s", code)
+		msisdnSuffix := msisdn
+		if len(msisdn) > 4 {
+			msisdnSuffix = msisdn[len(msisdn)-4:]
+		}
+		logger.Info("[SMS-DEV] OTP dispatched", zap.String("msisdn_suffix", "..."+msisdnSuffix))
 		return nil
 	}
 
@@ -282,7 +284,11 @@ func (s *AuthService) sendSMS(ctx context.Context, msisdn, code string) error {
 	}
 
 	// Fallback: NotificationService not wired — log a warning (no OTP code in log)
-	log.Printf("[SMS-WARN] NotificationService unavailable for MSISDN ...%s; OTP not delivered", msisdn[max(0, len(msisdn)-4):])
+	msisdnSuffix2 := msisdn
+	if len(msisdn) > 4 {
+		msisdnSuffix2 = msisdn[len(msisdn)-4:]
+	}
+	logger.Warn("[SMS-WARN] NotificationService unavailable", zap.String("msisdn_suffix", "..."+msisdnSuffix2))
 	return fmt.Errorf("SMS delivery unavailable: NotificationService not configured")
 }
 

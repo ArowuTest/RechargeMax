@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { apiClient } from '@/lib/api-client';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -46,13 +47,8 @@ const MyPrizesPanel: React.FC = () => {
   const fetchMyPrizes = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/user/prizes`, {
-        credentials: 'include'
-      });
-      
-      if (!response.ok) throw new Error('Failed to fetch prizes');
-      
-      const data = await response.json();
+      const response = await apiClient.get('/user/prizes');
+      const data = response.data;
       setPrizes(data.prizes || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load prizes');
@@ -75,18 +71,7 @@ const MyPrizesPanel: React.FC = () => {
     setShowClaimModal(false);
     
     try {
-      const response = await fetch(`${API_BASE}/winner/${selectedPrize.id}/claim`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to claim prize');
-      }
+      await apiClient.post(`/winner/${selectedPrize.id}/claim`);
       
       setSuccess('Prize claimed successfully! Your reward will be delivered shortly.');
       setTimeout(() => setSuccess(null), 5000);

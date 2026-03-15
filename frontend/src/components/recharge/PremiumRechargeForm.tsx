@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { rechargeApi } from '@/lib/api-client';
+import { rechargeApi, apiClient } from '@/lib/api-client';
 import { SpinWheel } from '@/components/games/SpinWheel';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/useToast';
@@ -148,31 +148,12 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
     const checkCachedNetwork = async () => {
       if (formData.phoneNumber.length === 11 && /^0[789][01]\d{8}$/.test(formData.phoneNumber)) {
         try {
-          const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1';
-          const response = await fetch(`${apiBaseUrl}/networks/cached`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone_number: formData.phoneNumber })
-          });
-          
-          if (response.ok) {
-            const result = await response.json();
-            if (result.success && result.data.cached) {
-              setNetworkSuggestion(result.data);
-              
-              // Auto-select network if cached
-              if (!formData.networkProvider) {
-                setFormData(prev => ({
-                  ...prev,
-                  networkProvider: result.data.network
-                }));
-                
-                toast({
-                  title: "Network Detected",
-                  description: result.data.message,
-                  duration: 3000
-                });
-              }
+          const result = await apiClient.post('/networks/cached', { phone_number: formData.phoneNumber });
+          if (result.data?.success && result.data.data?.cached) {
+            setNetworkSuggestion(result.data.data);
+            if (!formData.networkProvider) {
+              setFormData(prev => ({ ...prev, networkProvider: result.data.data.network }));
+              toast({ title: "Network Detected", description: result.data.data.message, duration: 3000 });
             }
           }
         } catch (error) {
@@ -190,19 +171,12 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
       if (formData.phoneNumber.length === 11 && formData.networkProvider) {
         setIsValidating(true);
         try {
-          const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1';
-          const response = await fetch(`${apiBaseUrl}/networks/validate-selection`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              phone_number: formData.phoneNumber,
-              selected_network: formData.networkProvider
-            })
+          const result = await apiClient.post('/networks/validate-selection', {
+            phone_number: formData.phoneNumber,
+            selected_network: formData.networkProvider,
           });
           
-          const result = await response.json();
-          
-          if (response.ok && result.success) {
+          if (result.data?.success) {
             // Validation passed
             setNetworkValidation(result.data);
             setShowNetworkWarning(false);
@@ -216,7 +190,7 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
             setShowNetworkWarning(true);
             setValidationErrors(prev => ({
               ...prev,
-              networkProvider: result.error?.message || 'Network mismatch detected'
+              networkProvider: result.data?.error?.message || 'Network mismatch detected'
             }));
           }
         } catch (error) {
@@ -242,14 +216,11 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
     
     setIsLoadingDataPlans(true);
     try {
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1';
-      const response = await fetch(`${apiBaseUrl}/networks/${formData.networkProvider}/bundles`, { credentials: 'include' });
-      const result = await response.json();
-      
-      if (result.success && result.data) {
-        setDataBundles(result.data);
+      const result = await apiClient.get(`/networks/${formData.networkProvider}/bundles`);
+      if (result.data?.success && result.data.data) {
+        setDataBundles(result.data.data);
       } else {
-        console.error('Failed to load data plans:', result.error);
+        console.error('Failed to load data plans:', result.data?.error);
         toast({
           title: "Error Loading Data Plans",
           description: "Could not load data plans. Please try again.",

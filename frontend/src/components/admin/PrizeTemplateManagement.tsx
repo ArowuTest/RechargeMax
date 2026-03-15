@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiClient } from '@/lib/api-client';
 import { Plus, Edit2, Trash2, Save, X, ChevronUp, ChevronDown } from 'lucide-react';
 
 interface DrawType {
@@ -27,7 +28,7 @@ interface PrizeTemplate {
   categories?: PrizeCategory[];
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 
 const PrizeTemplateManagement: React.FC = () => {
   const [drawTypes, setDrawTypes] = useState<DrawType[]>([]);
@@ -65,8 +66,8 @@ const PrizeTemplateManagement: React.FC = () => {
 
   const fetchDrawTypes = async () => {
     try {
-      const response = await fetch(`${API_BASE}/admin/draw-types`, { credentials: 'include' });
-      const data = await response.json();
+      const response = await apiClient.get('/admin/draw-types');
+      const data = response.data;
       if (data.success) {
         setDrawTypes(data.data || []);
       }
@@ -78,8 +79,8 @@ const PrizeTemplateManagement: React.FC = () => {
   const fetchTemplates = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/admin/prize-templates`, { credentials: 'include' });
-      const data = await response.json();
+      const response = await apiClient.get('/admin/prize-templates');
+      const data = response.data;
       if (data.success) {
         setTemplates(data.data || []);
       }
@@ -92,8 +93,8 @@ const PrizeTemplateManagement: React.FC = () => {
 
   const fetchTemplateDetails = async (templateId: number) => {
     try {
-      const response = await fetch(`${API_BASE}/admin/prize-templates/${templateId}`, { credentials: 'include' });
-      const data = await response.json();
+      const response = await apiClient.get(`/admin/prize-templates/${templateId}`);
+      const data = response.data;
       if (data.success) {
         setSelectedTemplate(data.data);
         setFormData(data.data);
@@ -112,14 +113,9 @@ const PrizeTemplateManagement: React.FC = () => {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch(`${API_BASE}/admin/prize-templates`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      });
+      const response = await apiClient.post('/admin/prize-templates', formData);
 
-      const data = await response.json();
+      const data = response.data;
       if (data.success) {
         setSuccess('Template created successfully!');
         setIsCreating(false);
@@ -142,14 +138,9 @@ const PrizeTemplateManagement: React.FC = () => {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch(`${API_BASE}/admin/prize-templates/${selectedTemplate.id}`, {
-        method: 'PUT',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      });
+      const response = await apiClient.put(`/admin/prize-templates/${selectedTemplate.id}`, formData);
 
-      const data = await response.json();
+      const data = response.data;
       if (data.success) {
         setSuccess('Template updated successfully!');
         setIsEditing(false);
@@ -175,12 +166,9 @@ const PrizeTemplateManagement: React.FC = () => {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch(`${API_BASE}/admin/prize-templates/${templateId}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
+      const response = await apiClient.delete(`/admin/prize-templates/${templateId}`);
 
-      const data = await response.json();
+      const data = response.data;
       if (data.success) {
         setSuccess('Template deleted successfully!');
         fetchTemplates();

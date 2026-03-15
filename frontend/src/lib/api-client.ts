@@ -1029,7 +1029,7 @@ export const dailySubscriptionApi: any = {
 
   // Get subscription statistics
   getStats: async () => {
-    const response = await apiClient.get<ApiResponse>('/admin/daily-subscriptions/stats');
+    const response = await apiClient.get<ApiResponse>('/admin/daily-subscriptions/analytics');
     return response.data;
   },
 
@@ -1045,13 +1045,15 @@ export const dailySubscriptionApi: any = {
 
   // Export subscriptions
   exportSubscriptions: async (filters?: any) => {
-    const response = await apiClient.get<ApiResponse>('/admin/daily-subscriptions/export', { params: filters });
+    // No dedicated export endpoint — fetch full list for client-side CSV generation
+    const response = await apiClient.get<ApiResponse>('/admin/daily-subscriptions', { params: filters });
     return response.data;
   },
 
   // Export billings
   exportBillings: async (filters?: any) => {
-    const response = await apiClient.get<ApiResponse>('/admin/subscription-billings/export', { params: filters });
+    // No dedicated export endpoint — fetch full list for client-side CSV generation
+    const response = await apiClient.get<ApiResponse>('/admin/subscription-billings', { params: filters });
     return response.data;
   },
 };
@@ -1109,7 +1111,7 @@ export interface USSDWebhookLog {
 export const ussdRechargeApi = {
   // Get all USSD recharges
   getAll: async (page = 1, perPage = 50, network?: string, status?: string) => {
-    let url = `/admin/ussd-recharges?page=${page}&per_page=${perPage}`;
+    let url = `/admin/ussd/recharges?page=${page}&per_page=${perPage}`;
     if (network) url += `&network=${network}`;
     if (status) url += `&status=${status}`;
     const response = await apiClient.get<ApiResponse<PaginatedResponse<USSDRecharge>>>(url);
@@ -1118,25 +1120,25 @@ export const ussdRechargeApi = {
 
   // Get USSD recharge by ID
   getById: async (rechargeId: string) => {
-    const response = await apiClient.get<ApiResponse<USSDRecharge>>(`/admin/ussd-recharges/${rechargeId}`);
+    const response = await apiClient.get<ApiResponse<USSDRecharge>>(`/admin/ussd/recharges/${rechargeId}`);
     return response.data;
   },
 
   // Get webhook logs
   getWebhookLogs: async (page = 1, perPage = 50) => {
-    const response = await apiClient.get<ApiResponse<PaginatedResponse<USSDWebhookLog>>>(`/admin/ussd-webhooks?page=${page}&per_page=${perPage}`);
+    const response = await apiClient.get<ApiResponse<PaginatedResponse<USSDWebhookLog>>>(`/admin/ussd/webhook-logs?page=${page}&per_page=${perPage}`);
     return response.data;
   },
 
   // Retry webhook
   retryWebhook: async (webhookId: string) => {
-    const response = await apiClient.post<ApiResponse>(`/admin/ussd-webhooks/${webhookId}/retry`);
+    const response = await apiClient.post<ApiResponse>(`/admin/ussd/retry-failed`);
     return response.data;
   },
 
   // Get USSD statistics
   getStats: async () => {
-    const response = await apiClient.get<ApiResponse>('/admin/ussd-recharges/stats');
+    const response = await apiClient.get<ApiResponse>('/admin/ussd/statistics');
     return response.data;
   },
 
@@ -1153,13 +1155,13 @@ export const ussdRechargeApi = {
 
   // Retry failed recharge
   retryRecharge: async (rechargeId: string) => {
-    const response = await apiClient.post<ApiResponse>(`/admin/ussd-recharges/${rechargeId}/retry`);
+    const response = await apiClient.post<ApiResponse>(`/admin/ussd/retry-failed`);
     return response.data;
   },
 
   // Export recharges to CSV
   exportRecharges: async (filters?: { network?: string; status?: string; date_from?: string; date_to?: string }) => {
-    const response = await apiClient.get<ApiResponse>('/admin/ussd-recharges/export', { params: filters });
+    const response = await apiClient.get<ApiResponse>('/admin/ussd/recharges', { params: filters });
     return response.data;
   },
 };
@@ -1195,7 +1197,8 @@ export interface WinnerImportRequest {
 export const drawCSVApi = {
   // Export draw entries to CSV
   exportCSV: async (data: DrawExportRequest) => {
-    const response = await apiClient.post<ApiResponse<{ file_url: string; total_msisdns: number }>>('/admin/draws/export-csv', data);
+    // Backend route: GET /admin/draws/:id/csv/export
+    const response = await apiClient.get<ApiResponse<{ file_url: string; total_msisdns: number }>>(`/admin/draws/${data.draw_id}/csv/export`, { params: data });
     return response.data;
   },
 
@@ -1205,7 +1208,7 @@ export const drawCSVApi = {
     formData.append('draw_id', drawId);
     formData.append('file', file);
 
-    const response = await apiClient.post<ApiResponse<{ total_winners: number; total_runners_up: number }>>('/admin/draws/import-winners', formData, {
+    const response = await apiClient.post<ApiResponse<{ total_winners: number; total_runners_up: number }>>(`/admin/draws/${drawId}/csv/import-winners`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -1332,7 +1335,7 @@ export const winnerClaimApi: any = {
 
   // Get claim statistics
   getStats: async () => {
-    const response = await apiClient.get<ApiResponse>('/admin/winners/stats');
+    const response = await apiClient.get<ApiResponse>('/admin/winners/claim-statistics');
     return response.data;
   },
 
@@ -1393,7 +1396,7 @@ export const userPointsApi = {
 
   // Adjust user points
   adjustPoints: async (data: PointsAdjustment) => {
-    const response = await apiClient.post<ApiResponse>('/admin/users/adjust-points', data);
+    const response = await apiClient.post<ApiResponse>('/admin/points/adjust', data);
     return response.data;
   },
 

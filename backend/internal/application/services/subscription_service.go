@@ -1,9 +1,10 @@
 package services
 
 import (
+	"go.uber.org/zap"
+	"rechargemax/internal/logger"
 	"context"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -63,7 +64,7 @@ func NewSubscriptionService(
 
 // CreateSubscription creates a new subscription
 func (s *SubscriptionService) CreateSubscription(ctx context.Context, req CreateSubscriptionRequest) (*SubscriptionResponse, error) {
-	log.Printf("[DEBUG] CreateSubscription called for MSISDN: %s, PaymentMethod: %s\n", req.MSISDN, req.PaymentMethod)
+	logger.Info("[DEBUG] CreateSubscription called for MSISDN: %s, PaymentMethod: %s", zap.Any("value", req.MSISDN), zap.Any("value", req.PaymentMethod))
 	// Detect network (optional)
 	networkHint := ""
 	if req.Network != "" {
@@ -71,20 +72,20 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 	}
 	_, err := s.hlrService.DetectNetwork(ctx, req.MSISDN, &networkHint)
 	if err != nil {
-		log.Printf("[DEBUG] DetectNetwork error (non-fatal): %v\n", err)
+		logger.Error("[DEBUG] DetectNetwork error (non-fatal): %v", zap.Error(err))
 	}
 
 	// Check for existing active subscription
 	// Query all subscriptions for this MSISDN
-	log.Printf("[DEBUG] Looking up user by MSISDN: %s\n", req.MSISDN)
+	logger.Info("[DEBUG] Looking up user by MSISDN: %s", zap.Any("value", req.MSISDN))
 	user, err := s.userRepo.FindByMSISDN(ctx, req.MSISDN)
 	if err != nil {
-		log.Printf("[DEBUG] FindByMSISDN error: %v\n", err)
+		logger.Error("[DEBUG] FindByMSISDN error: %v", zap.Error(err))
 	} else if user != nil {
-		log.Printf("[DEBUG] Found user: %s\n", user.ID)
+		logger.Info("[DEBUG] Found user: %s", zap.Any("value", user.ID))
 		existingSubs, err := s.subscriptionRepo.FindByUserID(ctx, user.ID)
 		if err != nil {
-			log.Printf("[DEBUG] FindByUserID error: %v\n", err)
+			logger.Error("[DEBUG] FindByUserID error: %v", zap.Error(err))
 		} else {
 			// Check if any subscription is active
 				for _, sub := range existingSubs {
@@ -111,7 +112,7 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 	}
 
 	if err := s.subscriptionRepo.Create(ctx, subscription); err != nil {
-		log.Printf("[DEBUG] Subscription create error: %v\n", err)
+		logger.Error("[DEBUG] Subscription create error: %v", zap.Error(err))
 		// Check for unique constraint violation (duplicate subscription for today)
 		if strings.Contains(err.Error(), "23505") || strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
 			return nil, errors.Conflict("You already have a subscription for today")

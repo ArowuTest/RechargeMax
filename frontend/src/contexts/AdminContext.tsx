@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { apiClient } from '@/lib/api-client';
 
 interface AdminUser {
   id: string;
@@ -26,7 +27,6 @@ interface AdminContextType {
 
 const AdminContext = createContext<AdminContextType | undefined>(undefined);
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
 export const AdminProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
@@ -44,11 +44,9 @@ export const AdminProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         }
 
         // Validate session against backend (cookie sent automatically)
-        const res = await fetch(`${API_BASE_URL}/admin/dashboard`, {
-          credentials: 'include', // send httpOnly cookie
-        });
+        const res = await apiClient.get('/admin/dashboard');
 
-        if (res.ok) {
+        if (res.data?.success !== false) {
           setAdminUser(JSON.parse(storedAdmin));
         } else {
           // Cookie expired or invalid — clear stale profile cache
@@ -70,17 +68,12 @@ export const AdminProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     try {
       setIsLoading(true);
 
-      const response = await fetch(`${API_BASE_URL}/admin/auth/login`, {
-        method: 'POST',
-        credentials: 'include', // receive + store httpOnly cookie
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: credentials.email || credentials.username,
-          password: credentials.password,
-        }),
+      const response = await apiClient.post('/admin/auth/login', {
+        email: credentials.email || credentials.username,
+        password: credentials.password,
       });
 
-      const data = await response.json();
+      const data = response.data;
 
       if (data.success && data.admin) {
         // Token is in the httpOnly cookie — only cache non-sensitive profile data
@@ -110,10 +103,7 @@ export const AdminProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const adminLogout = async () => {
     try {
       // Ask the backend to clear the httpOnly cookie
-      await fetch(`${API_BASE_URL}/admin/auth/logout`, {
-        method: 'POST',
-        credentials: 'include',
-      });
+      await apiClient.post('/admin/auth/logout');
     } catch {
       // Proceed with local cleanup even if request fails
     }

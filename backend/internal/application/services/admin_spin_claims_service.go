@@ -624,3 +624,12 @@ func (s *AdminSpinClaimService) ExportClaims(ctx context.Context, filters ClaimF
 	writer.Flush()
 	return []byte(buf.String()), nil
 }
+
+// GetPendingClaimsForReminder returns all unclaimed prizes so the handler can report a count.
+func (s *AdminSpinClaimService) GetPendingClaimsForReminder(ctx context.Context) ([]entities.SpinResults, error) {
+	var results []entities.SpinResults
+	err := s.db.WithContext(ctx).
+		Where("claim_status = ?", "PENDING").
+		Find(&results).Error
+	return results, err
+}

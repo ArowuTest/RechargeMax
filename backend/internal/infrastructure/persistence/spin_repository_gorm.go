@@ -83,3 +83,13 @@ func (r *spinRepositoryGORM) CountByUserID(ctx context.Context, userID uuid.UUID
 		Count(&count).Error
 	return count, err
 }
+
+// CountPendingByUserID counts spins with claim_status = 'PENDING' using a single COUNT query.
+func (r *spinRepositoryGORM) CountPendingByUserID(ctx context.Context, userID uuid.UUID) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&entities.SpinResults{}).
+		Where("user_id = ? AND claim_status = ?", userID, "PENDING").
+		Count(&count).Error
+	return count, err
+}

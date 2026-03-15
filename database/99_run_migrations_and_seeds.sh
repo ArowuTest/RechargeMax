@@ -37,6 +37,7 @@ for f in \
   "$INIT_DIR/seeds/005_notification_templates.sql" \
   "$INIT_DIR/seeds/006_platform_settings.sql" \
   "$INIT_DIR/seeds/007_draw_prize_config.sql"
+  "$INIT_DIR/seeds/008_network_configs.sql"
 do
   [ -f "$f" ] && run_sql "$f" || true
 done

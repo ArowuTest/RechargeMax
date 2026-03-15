@@ -348,6 +348,7 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	admin.GET("/recharge/data-plans",      hdlrs.AdminComprehensive.GetDataPlans)
 
 	// ── Network & data plan CRUD ─────────────────────────────────────────────
+	admin.GET("/networks",        hdlrs.AdminComprehensive.GetNetworkConfigurations) // list
 	admin.POST("/networks",       hdlrs.AdminComprehensive.CreateNetwork)
 	admin.PUT("/networks/:id",    hdlrs.AdminComprehensive.UpdateNetwork)
 	admin.DELETE("/networks/:id", hdlrs.AdminComprehensive.DeleteNetwork)

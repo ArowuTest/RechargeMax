@@ -76,12 +76,25 @@ func (s *NetworkConfigService) GetAllNetworks(ctx context.Context) ([]NetworkRes
 		return s.getHardcodedNetworks(), nil
 	}
 
-	// Convert to response format
+	// Convert to response format — only include networks the admin has enabled
 	var responses []NetworkResponse
 	for _, network := range networks {
 		isActive := true
 		if network.IsActive != nil {
 			isActive = *network.IsActive
+		}
+		// Skip networks hidden by admin
+		if !isActive {
+			continue
+		}
+
+		supportAirtime := true
+		if network.AirtimeEnabled != nil {
+			supportAirtime = *network.AirtimeEnabled
+		}
+		supportData := true
+		if network.DataEnabled != nil {
+			supportData = *network.DataEnabled
 		}
 
 		responses = append(responses, NetworkResponse{
@@ -90,9 +103,14 @@ func (s *NetworkConfigService) GetAllNetworks(ctx context.Context) ([]NetworkRes
 			Code:           network.NetworkCode,
 			Logo:           network.LogoUrl,
 			IsActive:       isActive,
-			SupportData:    true, // Assume all networks support data
-			SupportAirtime: true, // Assume all networks support airtime
+			SupportData:    supportData,
+			SupportAirtime: supportAirtime,
 		})
+	}
+
+	// If no rows in DB at all, fall back to hardcoded (fresh install)
+	if len(responses) == 0 && len(networks) == 0 {
+		return s.getHardcodedNetworks(), nil
 	}
 
 	return responses, nil

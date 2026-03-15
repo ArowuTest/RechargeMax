@@ -41,6 +41,7 @@ const UnclaimedPrizesDashboard      = lazy(() => import("./components/admin/Uncl
 const ValidationStatsDashboard      = lazy(() => import("./components/admin/ValidationStatsDashboard"));
 const SpinTiersManagement           = lazy(() => import("./components/admin/SpinTiersManagement"));
 const PrizeFulfillmentConfig        = lazy(() => import("./components/admin/PrizeFulfillmentConfig"));
+const NetworkManagementPage          = lazy(() => import("./components/admin/NetworkManagementPage"));
 
 const queryClient = new QueryClient();
 
@@ -87,6 +88,7 @@ function App() {
                   <Route path="/admin/spin-tiers" element={<ProtectedRoute><SpinTiersManagement /></ProtectedRoute>} />
                   <Route path="/admin/prize-fulfillment" element={<ProtectedRoute><PrizeFulfillmentConfig /></ProtectedRoute>} />
                   <Route path="/admin/validation-stats" element={<ProtectedRoute><ValidationStatsDashboard /></ProtectedRoute>} />
+                  <Route path="/admin/network-management" element={<ProtectedRoute><NetworkManagementPage /></ProtectedRoute>} />
 
                   <Route path="*" element={<NotFound />} />
                 </Routes>

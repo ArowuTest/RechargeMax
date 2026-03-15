@@ -19,6 +19,7 @@ import {
   Layers,
   BarChart3,
   Shield,
+  Wifi,
   LogOut,
   AlertTriangle,
   CheckCircle,
@@ -207,6 +208,14 @@ export const AdminDashboardPage: React.FC = () => {
       icon: <Shield className="w-6 h-6" />,
       path: '/admin/validation-stats',
       color: 'bg-slate-500',
+    },
+    {
+      id: 'network-management',
+      title: 'Network Management',
+      description: 'Enable/disable networks & product types',
+      icon: <Wifi className="w-6 h-6" />,
+      path: '/admin/network-management',
+      color: 'bg-cyan-600',
     },
   ];
 

@@ -71,12 +71,17 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
       // Show result after animation
       setTimeout(() => {
         setIsSpinning(false);
-        setSelectedPrize(winningPrize);
+        setSelectedPrize({ ...winningPrize, claimStatus: spinResult.claim_status });
         setHasSpun(true);
         
         // Show enhanced toast notification
-        const claimInstructions = winningPrize.type === 'AIRTIME' || winningPrize.type === 'DATA' 
-          ? 'Login with your phone number to claim. Prize will be automatically credited within 5-10 minutes.'
+        // PERF-002: Backend returns PROVISIONING for async airtime/data prizes.
+        // Show "being processed" copy instead of "immediately credited" to set correct expectations.
+        const isProvisioning = spinResult.claim_status === 'PROVISIONING';
+        const claimInstructions = winningPrize.type === 'AIRTIME' || winningPrize.type === 'DATA'
+          ? isProvisioning
+            ? 'Your prize is being processed — it will be credited to your phone within 5-10 minutes. Check Dashboard for status updates.'
+            : 'Login with your phone number to claim. Prize will be automatically credited within 5-10 minutes.'
           : winningPrize.type === 'CASH'
           ? 'Login with your phone number, then go to Dashboard → Prize Claims to complete bank details form.'
           : 'Login to see your updated account.';
@@ -221,19 +226,39 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
                 {selectedPrize.type === 'AIRTIME' && (
                   <div className="text-sm text-blue-700 space-y-1">
                     <p>📱 <strong>Airtime Prize:</strong> {selectedPrize.name}</p>
-                    <p>1. <strong>Login</strong> with your phone number (MSISDN)</p>
-                    <p>2. Prize will be <strong>automatically credited</strong> to your phone</p>
-                    <p>3. Check your <strong>Dashboard</strong> for claim status</p>
-                    <p>4. Airtime credited within <strong>5-10 minutes</strong></p>
+                    {selectedPrize.claimStatus === 'PROVISIONING' ? (
+                      <>
+                        <p>⏳ Your prize is <strong>being processed</strong></p>
+                        <p>1. Airtime will be credited within <strong>5-10 minutes</strong></p>
+                        <p>2. <strong>Login</strong> and check <strong>Dashboard → My Prizes</strong> for status</p>
+                      </>
+                    ) : (
+                      <>
+                        <p>1. <strong>Login</strong> with your phone number (MSISDN)</p>
+                        <p>2. Prize will be <strong>automatically credited</strong> to your phone</p>
+                        <p>3. Check your <strong>Dashboard</strong> for claim status</p>
+                        <p>4. Airtime credited within <strong>5-10 minutes</strong></p>
+                      </>
+                    )}
                   </div>
                 )}
                 {selectedPrize.type === 'DATA' && (
                   <div className="text-sm text-blue-700 space-y-1">
                     <p>📶 <strong>Data Prize:</strong> {selectedPrize.name}</p>
-                    <p>1. <strong>Login</strong> with your phone number (MSISDN)</p>
-                    <p>2. Data will be <strong>automatically credited</strong> to your phone</p>
-                    <p>3. Check your <strong>Dashboard</strong> for claim status</p>
-                    <p>4. Data credited within <strong>5-10 minutes</strong></p>
+                    {selectedPrize.claimStatus === 'PROVISIONING' ? (
+                      <>
+                        <p>⏳ Your prize is <strong>being processed</strong></p>
+                        <p>1. Data will be credited within <strong>5-10 minutes</strong></p>
+                        <p>2. <strong>Login</strong> and check <strong>Dashboard → My Prizes</strong> for status</p>
+                      </>
+                    ) : (
+                      <>
+                        <p>1. <strong>Login</strong> with your phone number (MSISDN)</p>
+                        <p>2. Data will be <strong>automatically credited</strong> to your phone</p>
+                        <p>3. Check your <strong>Dashboard</strong> for claim status</p>
+                        <p>4. Data credited within <strong>5-10 minutes</strong></p>
+                      </>
+                    )}
                   </div>
                 )}
                 {selectedPrize.type === 'DRAW_TICKETS' && (

@@ -35,37 +35,121 @@ const apiClient: AxiosInstance = axios.create({
   },
 });
 
-// Request interceptor
-// Cookies are sent automatically via withCredentials: true
-// Authorization header is only added as a fallback for environments where cookies
-// are not available (e.g., native mobile wrappers, Postman, server-side calls)
+// ---------------------------------------------------------------------------
+// CSRF token management (SEC-007)
+// ---------------------------------------------------------------------------
+
+// Simple in-memory CSRF token cache (per browser tab session).
+// The token is fetched once from GET /csrf-token and reused until it expires or
+// the server rejects it (403), at which point it is cleared and refetched.
+const csrfCache: { token: string | null; fetchingPromise: Promise<string> | null } = {
+  token: null,
+  fetchingPromise: null,
+};
+
+// Determines if a request method requires a CSRF token.
+const requiresCSRF = (method?: string): boolean =>
+  ['post', 'put', 'patch', 'delete'].includes((method || '').toLowerCase());
+
+// Fetches a fresh CSRF token from the backend and caches it.
+async function fetchCSRFToken(): Promise<string> {
+  // Deduplicate concurrent requests
+  if (csrfCache.fetchingPromise) return csrfCache.fetchingPromise;
+  csrfCache.fetchingPromise = (async () => {
+    try {
+      // Use the raw axios instance to avoid triggering the interceptors recursively
+      const baseURL = import.meta.env.VITE_API_BASE_URL?.replace('/api/v1', '') || 'http://localhost:8080';
+      const res = await axios.get<{ csrf_token: string }>(`${baseURL}/csrf-token`, {
+        withCredentials: true,
+      });
+      const token = res.data.csrf_token;
+      csrfCache.token = token;
+      return token;
+    } finally {
+      csrfCache.fetchingPromise = null;
+    }
+  })();
+  return csrfCache.fetchingPromise;
+}
+
+// Pre-warm the CSRF token on load so the first mutation does not pay the round-trip cost.
+// Errors are silently swallowed; the request interceptor below will retry if needed.
+fetchCSRFToken().catch(() => {});
+
+// ---------------------------------------------------------------------------
+// Request interceptor — attach CSRF token + rely on cookies for auth
+// ---------------------------------------------------------------------------
 apiClient.interceptors.request.use(
-  (config) => {
-    // No-op: httpOnly cookies are attached by the browser automatically.
-    // The header fallback below is intentionally kept for API/mobile clients
-    // that may store the token from the response body in their own secure storage.
+  async (config) => {
+    // httpOnly cookies are sent automatically via withCredentials: true
+    // For state-changing methods, also attach the CSRF token header (SEC-007)
+    if (requiresCSRF(config.method)) {
+      try {
+        const token = csrfCache.token || (await fetchCSRFToken());
+        config.headers = config.headers || {};
+        config.headers['X-CSRF-Token'] = token;
+      } catch {
+        // Could not fetch CSRF token — request will likely fail with 403 on the server.
+        // We do not block the request here; the server-side error is surfaced to the caller.
+      }
+    }
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// Response interceptor - Handle errors
+// ---------------------------------------------------------------------------
+// Response interceptor — handle auth expiry, rate limiting, CSRF expiry
+// ---------------------------------------------------------------------------
 apiClient.interceptors.response.use(
   (response) => response,
-  (error: AxiosError) => {
-    if (error.response?.status === 401) {
-      const requestUrl = (error.config as any)?.url || '';
+  async (error: AxiosError) => {
+    const status = error.response?.status;
+    const requestUrl = (error.config as any)?.url || '';
+
+    if (status === 401) {
       const isAdminRoute = requestUrl.includes('/admin/');
       if (isAdminRoute) {
-        // Clear non-sensitive admin profile data (token is in httpOnly cookie, auto-expired by server)
         localStorage.removeItem('rechargemax_admin_user');
         window.location.href = '/admin/login';
       } else {
-        // Clear non-sensitive user profile data
         localStorage.removeItem('rechargemax_user');
         window.location.href = '/login';
       }
     }
+
+    // CSRF token expired or invalid — clear cache and retry once (SEC-007)
+    if (status === 403 && requiresCSRF(error.config?.method)) {
+      const responseData = error.response?.data as any;
+      if (responseData?.error?.toLowerCase().includes('csrf')) {
+        csrfCache.token = null;
+        try {
+          const newToken = await fetchCSRFToken();
+          const retryConfig = { ...error.config } as any;
+          retryConfig.headers['X-CSRF-Token'] = newToken;
+          return apiClient(retryConfig); // single automatic retry
+        } catch {
+          // Retry failed — fall through to reject
+        }
+      }
+    }
+
+    // 429 Too Many Requests — surface a human-readable message
+    if (status === 429) {
+      const enhanced = new Error('Too many requests — please wait a moment before trying again') as any;
+      enhanced.status = 429;
+      enhanced.originalError = error;
+      return Promise.reject(enhanced);
+    }
+
+    // 413 Request Entity Too Large
+    if (status === 413) {
+      const enhanced = new Error('The request is too large. Please reduce the file or data size and try again') as any;
+      enhanced.status = 413;
+      enhanced.originalError = error;
+      return Promise.reject(enhanced);
+    }
+
     return Promise.reject(error);
   }
 );

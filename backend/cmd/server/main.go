@@ -16,6 +16,7 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
+	"rechargemax/internal/application/jobs"
 	"rechargemax/internal/application/services"
 	"rechargemax/internal/domain/repositories"
 	"rechargemax/internal/infrastructure/persistence"
@@ -66,6 +67,15 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
+	// ── Background Jobs ──────────────────────────────────────────────────────
+	// Commission release: auto-approve PENDING commissions past hold period,
+	// credit affiliate wallets. Runs every 6 hours.
+	serverCtx, serverCancel := context.WithCancel(context.Background())
+	_ = serverCancel // cancelled on shutdown below
+	commissionJob := jobs.NewCommissionReleaseJob(db)
+	commissionJob.StartScheduled(serverCtx, 6*time.Hour)
+	log.Println("✅ Commission release job started (interval: 6h)")
+
 	// Start server in goroutine
 	go func() {
 		log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -87,6 +97,9 @@ func main() {
 	<-quit
 
 	log.Println("\n🛑 Shutting down server...")
+
+	// Stop background jobs
+	serverCancel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

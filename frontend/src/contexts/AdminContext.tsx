@@ -26,51 +26,38 @@ interface AdminContextType {
 
 const AdminContext = createContext<AdminContextType | undefined>(undefined);
 
-interface AdminProviderProps {
-  children: ReactNode;
-}
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
-export const AdminProvider: React.FC<AdminProviderProps> = ({ children }) => {
+export const AdminProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
-  const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing admin session and validate the token with the backend
+    // On mount, check if there is a valid session by calling the backend.
+    // The httpOnly cookie is sent automatically — we don't touch localStorage for the token.
     const checkAdminSession = async () => {
       try {
         const storedAdmin = localStorage.getItem('rechargemax_admin_user');
-        const storedToken = localStorage.getItem('rechargemax_admin_token');
-
-        if (storedAdmin && storedToken) {
-          // Validate token with backend to ensure it hasn't expired
-          const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1';
-          try {
-            const res = await fetch(`${apiBaseUrl}/admin/dashboard`, {
-              headers: { Authorization: `Bearer ${storedToken}` },
-            });
-
-            if (res.ok) {
-              // Token is valid — restore session
-              const adminData = JSON.parse(storedAdmin);
-              setAdminUser(adminData);
-              setSessionToken(storedToken);
-            } else {
-              // Token expired or invalid — clear stale session
-              localStorage.removeItem('rechargemax_admin_user');
-              localStorage.removeItem('rechargemax_admin_token');
-            }
-          } catch {
-            // Network error — restore session optimistically to avoid locking out admins
-            const adminData = JSON.parse(storedAdmin);
-            setAdminUser(adminData);
-            setSessionToken(storedToken);
-          }
+        if (!storedAdmin) {
+          setIsLoading(false);
+          return;
         }
-      } catch (error) {
-        console.error('Error checking admin session:', error);
-        localStorage.removeItem('rechargemax_admin_user');
-        localStorage.removeItem('rechargemax_admin_token');
+
+        // Validate session against backend (cookie sent automatically)
+        const res = await fetch(`${API_BASE_URL}/admin/dashboard`, {
+          credentials: 'include', // send httpOnly cookie
+        });
+
+        if (res.ok) {
+          setAdminUser(JSON.parse(storedAdmin));
+        } else {
+          // Cookie expired or invalid — clear stale profile cache
+          localStorage.removeItem('rechargemax_admin_user');
+        }
+      } catch {
+        // Network error — restore session optimistically to avoid locking out admins
+        const storedAdmin = localStorage.getItem('rechargemax_admin_user');
+        if (storedAdmin) setAdminUser(JSON.parse(storedAdmin));
       } finally {
         setIsLoading(false);
       }
@@ -83,13 +70,10 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({ children }) => {
     try {
       setIsLoading(true);
 
-      // Call real backend API
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1';
-      const response = await fetch(`${apiBaseUrl}/admin/login`, {
+      const response = await fetch(`${API_BASE_URL}/admin/login`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        credentials: 'include', // receive + store httpOnly cookie
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: credentials.email || credentials.username,
           password: credentials.password,
@@ -98,23 +82,18 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({ children }) => {
 
       const data = await response.json();
 
-      if (data.success && data.token) {
-        // Store token
-        localStorage.setItem('rechargemax_admin_token', data.token);
-
-        // Store admin user data
+      if (data.success && data.admin) {
+        // Token is in the httpOnly cookie — only cache non-sensitive profile data
         const adminData: AdminUser = {
           id: data.admin.id,
           username: data.admin.email,
           email: data.admin.email,
-          role: data.admin.role.toLowerCase() as 'super_admin' | 'admin' | 'moderator',
+          role: (data.admin.role || 'admin').toLowerCase() as 'super_admin' | 'admin' | 'moderator',
           permissions: data.admin.permissions || [],
           last_login: new Date().toISOString(),
           created_at: data.admin.created_at,
         };
-
         setAdminUser(adminData);
-        setSessionToken(data.token);
         localStorage.setItem('rechargemax_admin_user', JSON.stringify(adminData));
         return true;
       }
@@ -128,11 +107,18 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({ children }) => {
     }
   };
 
-  const adminLogout = () => {
+  const adminLogout = async () => {
+    try {
+      // Ask the backend to clear the httpOnly cookie
+      await fetch(`${API_BASE_URL}/admin/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch {
+      // Proceed with local cleanup even if request fails
+    }
     setAdminUser(null);
-    setSessionToken(null);
     localStorage.removeItem('rechargemax_admin_user');
-    localStorage.removeItem('rechargemax_admin_token');
   };
 
   const hasPermission = (permission: string): boolean => {
@@ -146,7 +132,7 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({ children }) => {
     admin: adminUser,
     isAdminAuthenticated: !!adminUser,
     isAuthenticated: !!adminUser,
-    sessionToken,
+    sessionToken: null, // Token is in httpOnly cookie — not exposed to JS
     adminLogin,
     login: (username: string, password: string) => adminLogin({ username, password }),
     adminLogout,

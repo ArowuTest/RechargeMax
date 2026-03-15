@@ -7,8 +7,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
-	
+
 	"rechargemax/internal/domain/repositories"
+	"rechargemax/internal/middleware"
 )
 
 type AdminAuthHandler struct {
@@ -94,6 +95,9 @@ func (h *AdminAuthHandler) Login(c *gin.Context) {
 		// TODO: Add proper logging
 	}
 
+	// Set httpOnly cookie for browser-based admin panel
+	middleware.SetAuthCookie(c, token, "admin", 24*60*60) // 24 hours
+
 	// Return success response
 	c.JSON(http.StatusOK, LoginResponse{
 		Success: true,
@@ -174,8 +178,8 @@ func (h *AdminAuthHandler) RefreshToken(c *gin.Context) {
 
 // Logout handles admin logout
 func (h *AdminAuthHandler) Logout(c *gin.Context) {
-	// In a stateless JWT system, logout is handled client-side by removing the token
-	// For enhanced security, you could implement token blacklisting here
+	// Clear the httpOnly admin auth cookie
+	middleware.ClearAuthCookie(c, "admin")
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "Logged out successfully",

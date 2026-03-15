@@ -113,6 +113,10 @@ func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 		"is_new": isNew,
 	})
 
+	// Set httpOnly secure cookie (primary auth storage — not accessible to JS)
+	// Token also returned in body for mobile/API clients that can't use cookies
+	middleware.SetAuthCookie(c, token, "user", 24*60*60) // 24 hours
+
 	middleware.RespondWithSuccess(c, map[string]interface{}{
 		"token":  token,
 		"user":   user,
@@ -122,7 +126,7 @@ func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 
 // Logout godoc
 // @Summary User logout
-// @Description Logout user (client-side token removal)
+// @Description Logout user - clears auth cookie and token
 // @Tags auth
 // @Produce json
 // @Success 200 {object} map[string]interface{}
@@ -131,9 +135,11 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	// Get user ID from context (set by auth middleware)
 	userID, exists := c.Get("user_id")
 	if exists {
-		// Log logout
 		errors.LogAudit(userID.(string), "LOGOUT", "auth", nil)
 	}
+
+	// Clear the httpOnly auth cookie
+	middleware.ClearAuthCookie(c, "user")
 
 	middleware.RespondWithSuccess(c, map[string]interface{}{
 		"message": "Logged out successfully",

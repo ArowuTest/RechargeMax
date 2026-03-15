@@ -25,28 +25,25 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080
 const API_TIMEOUT = parseInt(import.meta.env.VITE_API_TIMEOUT || '30000');
 
 // Create axios instance
+// withCredentials: true ensures httpOnly cookies are sent with every cross-origin request
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   timeout: API_TIMEOUT,
+  withCredentials: true, // Send httpOnly auth cookies automatically
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Request interceptor - Add auth token
+// Request interceptor
+// Cookies are sent automatically via withCredentials: true
+// Authorization header is only added as a fallback for environments where cookies
+// are not available (e.g., native mobile wrappers, Postman, server-side calls)
 apiClient.interceptors.request.use(
   (config) => {
-    // Check if this is an admin API call
-    const isAdminCall = config.url?.includes('/admin/');
-    
-    // Use appropriate token based on the endpoint
-    const token = isAdminCall 
-      ? localStorage.getItem('rechargemax_admin_token')
-      : localStorage.getItem('rechargemax_token');
-    
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+    // No-op: httpOnly cookies are attached by the browser automatically.
+    // The header fallback below is intentionally kept for API/mobile clients
+    // that may store the token from the response body in their own secure storage.
     return config;
   },
   (error) => Promise.reject(error)
@@ -60,13 +57,11 @@ apiClient.interceptors.response.use(
       const requestUrl = (error.config as any)?.url || '';
       const isAdminRoute = requestUrl.includes('/admin/');
       if (isAdminRoute) {
-        // Admin token expired — clear admin session and redirect to admin login
-        localStorage.removeItem('rechargemax_admin_token');
+        // Clear non-sensitive admin profile data (token is in httpOnly cookie, auto-expired by server)
         localStorage.removeItem('rechargemax_admin_user');
         window.location.href = '/#/admin/login';
       } else {
-        // User token expired — clear user session and redirect to user login
-        localStorage.removeItem('rechargemax_token');
+        // Clear non-sensitive user profile data
         localStorage.removeItem('rechargemax_user');
         window.location.href = '/#/login';
       }
@@ -115,9 +110,9 @@ export const authApi = {
       otp: otp,
     });
     
-    // Store token and user
+    // Token is now stored as httpOnly cookie by the server
+    // Only store non-sensitive user profile data in localStorage
     if (response.data.success && response.data.data) {
-      localStorage.setItem('rechargemax_token', response.data.data.token);
       localStorage.setItem('rechargemax_user', JSON.stringify(response.data.data.user));
     }
     
@@ -127,16 +122,17 @@ export const authApi = {
   // Logout
   logout: async () => {
     try {
+      // Backend clears the httpOnly cookie on this call
       await apiClient.post('/auth/logout');
     } finally {
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('user');
+      // Clear non-sensitive user profile data
+      localStorage.removeItem('rechargemax_user');
     }
   },
 
-  // Get current user
+  // Get current user profile from localStorage
   getCurrentUser: () => {
-    const userStr = localStorage.getItem('user');
+    const userStr = localStorage.getItem('rechargemax_user');
     return userStr ? JSON.parse(userStr) : null;
   },
 };
@@ -153,8 +149,8 @@ export const adminAuthApi = {
       password,
     });
     
+    // Token stored as httpOnly cookie by server — only cache non-sensitive admin profile data
     if (response.data.success && response.data.data) {
-      localStorage.setItem('rechargemax_admin_token', response.data.data.token);
       localStorage.setItem('rechargemax_admin_user', JSON.stringify(response.data.data.admin));
     }
     
@@ -164,9 +160,10 @@ export const adminAuthApi = {
   // Admin logout
   logout: async () => {
     try {
+      // Backend clears the httpOnly admin cookie
       await apiClient.post('/admin/logout');
     } finally {
-      localStorage.removeItem('rechargemax_admin_token');
+      // Clear non-sensitive admin profile cache
       localStorage.removeItem('rechargemax_admin_user');
     }
   },

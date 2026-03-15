@@ -1,7 +1,7 @@
 -- ============================================================================
 -- OTP VERIFICATIONS TABLE
 -- Migration: 08
--- Date: 2026-01-30
+-- Date: (see git history)
 -- Purpose: Secure OTP verification for authentication and sensitive operations
 -- ============================================================================
 

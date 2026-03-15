@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Migration: Fix Points and Draw Entries Calculation
--- Created: 2026-02-20
+-- Created: 
 -- Description: Complete fix for points calculation and draw entries system
 -- 
 -- Issues Fixed:

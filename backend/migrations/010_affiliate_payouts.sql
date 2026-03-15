@@ -1,7 +1,7 @@
 -- ============================================================================
 -- AFFILIATE PAYOUTS TABLE
 -- Migration: 10
--- Date: 2026-01-30
+-- Date: (see git history)
 -- Purpose: Track affiliate commission payouts and payment processing
 -- ============================================================================
 

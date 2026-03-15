@@ -1,5 +1,5 @@
 -- Migration: Create OTPs table for phone number verification
--- Date: 2026-02-20
+-- Date: (see git history)
 -- Description: Creates the otps table for storing one-time passwords used in authentication flow
 
 -- Create OTPs table

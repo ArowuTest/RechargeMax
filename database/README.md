@@ -1,58 +1,95 @@
 # RechargeMax Database
 
-## Structure
+## Folder Structure
 
 ```
 database/
-├── migrations/          ← All 52 SQL migrations (canonical copy, mirrors backend/migrations/)
-│   ├── 001_core_tables_schema.sql
+├── schema.sql              ← FULL current schema (all CREATE TABLE, functions, triggers)
+│                             Generated from: pg_dump --schema-only
+│                             Run this on a FRESH database before anything else.
+│
+├── migrations/             ← INCREMENTAL changes only (ALTER TABLE, ADD COLUMN, fixes)
+│   ├── 001_rls_policies.sql
+│   ├── 002_points_adjustments.sql
 │   ├── ...
-│   └── 049_transaction_limits.sql
-├── seeds/
-│   ├── 001_comprehensive_seed_data.sql   ← Core reference data (networks, plans, tiers, prizes)
-│   ├── 002_test_data.sql                 ← Test users, transactions (dev/staging only)
-│   ├── MASTER_PRODUCTION_SEED_CORRECTED.sql  ← Full production seed (schema-aligned)
-│   ├── test_numbers_seed.sql             ← Nigerian test MSISDN numbers
+│   └── 029_grant_all_permissions.sql
+│
+├── seeds/                  ← Reference & test data (INSERT statements)
+│   ├── 001_comprehensive_seed_data.sql   ← Legacy comprehensive seed
+│   ├── 002_test_data.sql                 ← Test users + transactions (dev/staging only)
+│   ├── 003_test_numbers.sql              ← Nigerian test MSISDN numbers
+│   ├── 004_reference_data.sql            ← Networks, data plans, subscription tiers
+│   ├── 005_notification_templates.sql    ← Notification template definitions
+│   ├── 006_platform_settings.sql         ← Platform configuration key/value pairs
+│   ├── MASTER_PRODUCTION_SEED_CORRECTED.sql  ← Full production seed (all-in-one)
 │   └── archived/                         ← Superseded seed iterations (do not run)
-└── README.md
+│
+├── docker-init/            ← Shell scripts mounted into Docker postgres initdb.d
+│   ├── 00_schema.sh        ← Runs schema.sql on first container start
+│   └── 01_seeds.sh         ← Runs reference seeds on first container start
+│
+└── README.md               ← This file
 ```
 
-## Running Migrations
+---
 
-```bash
-# Using the backend runner (recommended)
-cd backend
-for f in migrations/*.sql; do
-  psql "$DATABASE_URL" -f "$f"
-done
-```
+## When to use each file
 
-Or use the automated migration runner built into the Go server startup.
-
-## Running Seeds
-
-**Development / Staging:**
-```bash
-psql "$DATABASE_URL" -f database/seeds/001_comprehensive_seed_data.sql
-psql "$DATABASE_URL" -f database/seeds/002_test_data.sql
-```
-
-**Production:**
-```bash
-psql "$DATABASE_URL" -f database/seeds/MASTER_PRODUCTION_SEED_CORRECTED.sql
-```
-
-## Migration Naming Convention
-
-| Pattern | Description |
+| Situation | What to run |
 |---|---|
-| `001_` – `049_` | Sequential numbered migrations |
-| `20260223HHMMSS_` | Timestamp-based migrations (Flyway-style) |
-| `999_grant_all_permissions.sql` | Always runs last — grants |
-| `fix_*` | Hotfix migrations (idempotent) |
+| **Fresh database** (dev, CI, staging) | `scripts/init_fresh_db.sh` |
+| **Existing database** (apply changes) | `scripts/run_migrations.sh` |
+| **Docker Compose first start** | Automatic via `docker-init/` |
+| **Production seed data** | `seeds/MASTER_PRODUCTION_SEED_CORRECTED.sql` |
+| **Test/dev seed data** | `seeds/002_test_data.sql` + `seeds/003_test_numbers.sql` |
 
-## Notes
+---
 
-- All migrations are **idempotent** (`IF NOT EXISTS`, `ON CONFLICT DO NOTHING`)  
-- `backend/migrations/` and `database/migrations/` are kept in sync  
-- Never modify migrations that have already run in production; add a new one instead
+## Quickstart (local dev)
+
+```bash
+# Fresh local database
+createdb rechargemax
+./scripts/init_fresh_db.sh postgres://rechargemax:rechargemax@localhost/rechargemax \
+    --with-seeds --with-test-data
+```
+
+---
+
+## Docker Compose
+
+The `postgres` service in `docker-compose.yml` mounts:
+
+| Mount | Purpose |
+|---|---|
+| `database/docker-init/` → `/docker-entrypoint-initdb.d/` | Runs `00_schema.sh` then `01_seeds.sh` on **first init only** |
+| `database/schema.sql` → `/docker-entrypoint-initdb.d/schema.sql` | Schema file referenced by `00_schema.sh` |
+| `database/seeds/` → `/docker-entrypoint-initdb.d/seeds/` | Seed files referenced by `01_seeds.sh` |
+
+> ⚠️ `docker-entrypoint-initdb.d` scripts only run when the data volume is **empty** (first start).
+> To re-initialise: `docker-compose down -v && docker-compose up`
+
+---
+
+## Adding a new migration
+
+1. Create `database/migrations/030_your_description.sql`
+2. Write only `ALTER TABLE` / `ADD COLUMN` / `DROP CONSTRAINT` statements
+3. Make it **idempotent** (`IF NOT EXISTS`, `IF EXISTS`, `ON CONFLICT DO NOTHING`)
+4. Run: `./scripts/run_migrations.sh $DATABASE_URL`
+5. After running on all environments, regenerate schema: `pg_dump ... -f database/schema.sql`
+
+---
+
+## Migration naming convention
+
+```
+NNN_descriptive_name.sql
+```
+
+| Range | Purpose |
+|---|---|
+| `001` – `029` | Current incremental migrations |
+| `030` + | Future migrations (add here) |
+
+**Never rename or renumber** migrations that have already been applied to any environment.

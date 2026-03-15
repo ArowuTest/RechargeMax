@@ -1,5 +1,5 @@
 -- Migration: Create network_cache table
--- Date: 2026-02-22
+-- Date: (see git history)
 -- Description: Create table to cache network lookups for phone numbers
 
 CREATE TABLE IF NOT EXISTS network_cache (

@@ -1,7 +1,7 @@
 -- ============================================================================
 -- PAYMENT LOGS TABLE
 -- Migration: 12
--- Date: 2026-01-30
+-- Date: (see git history)
 -- Purpose: Comprehensive audit trail for all payment operations and API calls
 -- ============================================================================
 

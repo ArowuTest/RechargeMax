@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Migration: Create Missing Tables for Production Readiness
--- Created: 2026-02-20
+-- Created: 
 -- Description: Create 4 missing tables needed for complete system functionality
 -- ============================================================================
 

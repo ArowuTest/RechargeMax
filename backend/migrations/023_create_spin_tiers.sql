@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Migration: Create Spin Tiers Table
--- Created: 2026-02-20
+-- Created: 
 -- Description: Create spin tiers system for configurable spin wheel rewards
 -- ============================================================================
 

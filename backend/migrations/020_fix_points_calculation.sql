@@ -1,6 +1,6 @@
 -- Migration: Fix points calculation formula
 -- Purpose: Correct points calculation to ₦200 = 1 point (rounded down)
--- Date: 2026-02-20
+-- Date: (see git history)
 
 -- Drop old function with incorrect calculation
 DROP FUNCTION IF EXISTS public.calculate_points_earned(numeric);

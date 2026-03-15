@@ -15,7 +15,10 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database/seeds:/docker-entrypoint-initdb.d:ro
+      # Init scripts + schema run once on first container start (alphabetical order)
+      - ./database/docker-init:/docker-entrypoint-initdb.d:ro
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+      - ./database/seeds:/docker-entrypoint-initdb.d/seeds:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U rechargemax -d rechargemax_db"]
       interval: 10s

@@ -1,6 +1,6 @@
 -- Migration: Create provider_configs table and related functions
 -- Purpose: Enable dynamic provider configuration for VTU services
--- Date: 2026-02-20
+-- Date: (see git history)
 
 -- Create provider_configs table
 CREATE TABLE IF NOT EXISTS provider_configs (

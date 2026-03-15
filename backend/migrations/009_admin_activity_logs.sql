@@ -1,7 +1,7 @@
 -- ============================================================================
 -- ADMIN ACTIVITY LOGS TABLE
 -- Migration: 09
--- Date: 2026-01-30
+-- Date: (see git history)
 -- Purpose: Audit trail for all admin actions and API calls
 -- ============================================================================
 

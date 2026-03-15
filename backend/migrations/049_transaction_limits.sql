@@ -1,7 +1,7 @@
 -- Migration: Transaction Limits Configuration System
 -- Description: Implements configurable transaction limits for fraud prevention and risk management
 -- Author: Manus AI
--- Date: 2026-02-13
+-- Date: (see git history)
 
 -- Create transaction_limits table
 CREATE TABLE IF NOT EXISTS transaction_limits (

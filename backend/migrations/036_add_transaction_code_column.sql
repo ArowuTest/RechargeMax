@@ -1,5 +1,5 @@
 -- Migration: Add transaction_code column to transactions table
--- Date: 2026-02-22
+-- Date: (see git history)
 -- Description: Add unique transaction_code column for better transaction tracking
 
 -- Add transaction_code column

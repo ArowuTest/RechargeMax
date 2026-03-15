@@ -1,5 +1,5 @@
 -- Migration: Remove redundant points calculation trigger
--- Date: 2026-02-20
+-- Date: (see git history)
 -- Reason: Business logic moved to application layer for better maintainability
 --
 -- STRATEGIC DECISION:

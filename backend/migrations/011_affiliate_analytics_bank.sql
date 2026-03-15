@@ -1,7 +1,7 @@
 -- ============================================================================
 -- AFFILIATE ANALYTICS AND BANK ACCOUNTS TABLES
 -- Migration: 11
--- Date: 2026-01-30
+-- Date: (see git history)
 -- Purpose: Track affiliate performance analytics and bank account details
 -- ============================================================================
 

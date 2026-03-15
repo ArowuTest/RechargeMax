@@ -1,5 +1,5 @@
 -- Migration: Remove business logic trigger from transactions table
--- Date: 2026-02-20
+-- Date: (see git history)
 -- Description: Removes the process_transaction_trigger and trigger_process_transaction function
 --              as part of the strategic move to application-layer business logic
 

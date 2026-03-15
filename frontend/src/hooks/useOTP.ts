@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/hooks/useToast';
 import { validateNigerianPhone } from '@/lib/utils';
 import { authApi } from '@/lib/api-client';
 

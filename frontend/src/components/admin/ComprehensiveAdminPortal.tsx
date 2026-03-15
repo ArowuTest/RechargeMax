@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useAdminContext } from '@/contexts/AdminContext';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/hooks/useToast';
 import { NetworkDialog } from './NetworkDialog';
 import { DataPlanDialog } from './DataPlanDialog';
 import { WheelPrizeDialog } from './WheelPrizeDialog';

@@ -7,7 +7,7 @@ import { formatCurrency, formatRelativeTime } from '@/lib/utils';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { Clock, Gift, Trophy, Zap, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { getActiveDraws, getRecentWinners } from '@/lib/api';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/hooks/useToast';
 
 interface Draw {
   id: string;

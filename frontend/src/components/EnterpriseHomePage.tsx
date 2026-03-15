@@ -8,7 +8,7 @@ import { PremiumRechargeForm } from '@/components/recharge/PremiumRechargeForm';
 import { DrawsList } from '@/components/draws/DrawsList';
 import { SpinWheel } from '@/components/games/SpinWheel';
 import { DailySpinProgress } from '@/components/spin/DailySpinProgress';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/hooks/useToast';
 import { useAuthContext } from '@/contexts/AuthContext';
 // Removed Supabase - using Go backend API
 import { formatCurrency } from '@/lib/utils';

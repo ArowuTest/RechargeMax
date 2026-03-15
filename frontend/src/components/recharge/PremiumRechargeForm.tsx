@@ -9,7 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { rechargeApi } from '@/lib/api-client';
 import { SpinWheel } from '@/components/games/SpinWheel';
 import { useAuthContext } from '@/contexts/AuthContext';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/hooks/useToast';
 import { logError, logPerformance } from '@/lib/api';
 import { useAffiliateTracking } from '@/hooks/useAffiliateTracking';
 import { 

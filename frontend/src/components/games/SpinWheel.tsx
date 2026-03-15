@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { SPIN_PRIZES } from '@/lib/constants';
 import { formatCurrency } from '@/lib/utils';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/hooks/useToast';
 import { Gift, Zap, RotateCcw } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 

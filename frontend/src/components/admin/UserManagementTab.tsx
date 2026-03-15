@@ -14,7 +14,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/hooks/useToast';
 import { Users, Search, RefreshCw, ShieldBan, ShieldCheck, Edit3, Eye } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';

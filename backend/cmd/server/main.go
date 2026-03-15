@@ -642,10 +642,13 @@ VALUES ('950e8400-e29b-41d4-a716-446655440001',
         '$2a$10$GSv3/EaeIzohXsGy6jIMfuoOCMkBLZJF/OiqtG7kVdVoD/dKXypoe',
         'Super Administrator',
         'SUPER_ADMIN',
-        '["view_analytics","manage_users","manage_transactions","manage_networks","manage_prizes","manage_affiliates","manage_settings","manage_admins","view_monitoring","manage_draws"]',
+        '["view_analytics","manage_users","manage_transactions","manage_networks","manage_prizes","manage_affiliates","manage_settings","manage_admins","view_monitoring","manage_draws"]'::jsonb,
         true,
         NOW(), NOW())
-ON CONFLICT (email) DO NOTHING`
+ON CONFLICT (email) DO UPDATE SET
+        password_hash = EXCLUDED.password_hash,
+        is_active = true,
+        role = EXCLUDED.role`
 		if err := db.Exec(sql).Error; err != nil {
 			log.Printf("⚠️  Admin seed warning: %v", err)
 		} else {

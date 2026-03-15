@@ -1,15 +1,25 @@
 package middleware
 
 import (
+	"context"
+	crand "crypto/rand"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
+
+// TokenBlacklister is the minimal interface the auth middlewares need.
+// Implemented by *services.TokenService; use it to avoid circular imports.
+type TokenBlacklister interface {
+	IsTokenBlacklisted(ctx context.Context, tokenString string) (bool, error)
+}
 
 // JWTClaims represents the claims in a JWT token
 type JWTClaims struct {
@@ -46,7 +56,7 @@ func extractToken(c *gin.Context, isAdmin bool) string {
 }
 
 // AuthMiddleware validates user authentication
-func AuthMiddleware(authService interface{}) gin.HandlerFunc {
+func AuthMiddleware(authService interface{}, blacklister ...TokenBlacklister) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenString := extractToken(c, false)
 		if tokenString == "" {
@@ -74,6 +84,15 @@ func AuthMiddleware(authService interface{}) gin.HandlerFunc {
 			return
 		}
 
+		// SEC-003: Check token blacklist (handles logout/revocation)
+		if len(blacklister) > 0 && blacklister[0] != nil {
+			if blacklisted, _ := blacklister[0].IsTokenBlacklisted(c.Request.Context(), tokenString); blacklisted {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Token has been revoked"})
+				c.Abort()
+				return
+			}
+		}
+
 		c.Set("msisdn", claims.MSISDN)
 		c.Set("user_id", claims.UserID)
 		c.Set("authenticated", true)
@@ -82,7 +101,7 @@ func AuthMiddleware(authService interface{}) gin.HandlerFunc {
 }
 
 // AdminAuthMiddleware validates admin authentication and sets admin_id in context
-func AdminAuthMiddleware(authService interface{}) gin.HandlerFunc {
+func AdminAuthMiddleware(authService interface{}, blacklister ...TokenBlacklister) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		log.Println("[AdminAuth] Request received:", c.Request.Method, c.Request.URL.Path)
 		tokenString := extractToken(c, true)
@@ -142,6 +161,18 @@ func AdminAuthMiddleware(authService interface{}) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		// SEC-003: Check token blacklist — allows instant admin token revocation on logout
+		if len(blacklister) > 0 && blacklister[0] != nil {
+			if blacklisted, _ := blacklister[0].IsTokenBlacklisted(c.Request.Context(), tokenString); blacklisted {
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"success": false,
+					"message": "Token has been revoked — please log in again",
+				})
+				c.Abort()
+				return
+			}
+		}
+
 		c.Set("admin_id", adminID)
 		c.Set("admin_token", tokenString)
 		c.Set("msisdn", claims.MSISDN)
@@ -211,10 +242,13 @@ func buildAllowedOrigins() []string {
 	return origins
 }
 
-// isAllowedOrigin checks if origin matches one of the allowed origins (exact or suffix match).
+// isAllowedOrigin performs exact origin matching only.
+// Suffix matching (e.g. HasSuffix) is intentionally absent: it would allow
+// "https://evil-rechargemax.com" to pass when "https://rechargemax.com" is
+// in the allow-list (SEC-006).
 func isAllowedOrigin(origin string, allowed []string) bool {
 	for _, a := range allowed {
-		if origin == a || strings.HasSuffix(origin, strings.TrimPrefix(a, "https://")) {
+		if origin == a {
 			return true
 		}
 	}
@@ -294,23 +328,94 @@ func OptionalAuthMiddleware() gin.HandlerFunc {
 	}
 }
 
-// RequestIDMiddleware adds request ID
+// RequestIDMiddleware generates a unique request ID per request and attaches
+// it to both the Gin context and the X-Request-ID response header.
 func RequestIDMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Prefer forwarded header (from load balancer) if present
+		reqID := c.GetHeader("X-Request-ID")
+		if reqID == "" {
+			reqID = generateRequestID()
+		}
+		c.Set("request_id", reqID)
+		c.Header("X-Request-ID", reqID)
 		c.Next()
 	}
 }
 
-// RequestSizeLimitMiddleware limits request size
+// generateRequestID returns a 16-byte hex request ID.
+func generateRequestID() string {
+	b := make([]byte, 16)
+	if _, err := crand.Read(b); err != nil {
+		// Fallback to timestamp-based ID if crypto/rand fails
+		return fmt.Sprintf("%x", time.Now().UnixNano())
+	}
+	return fmt.Sprintf("%x", b)
+}
+
+// RequestSizeLimitMiddleware rejects requests whose body exceeds maxSize bytes.
+// Uses http.MaxBytesReader so the body is consumed lazily and the error is
+// surfaced to the handler immediately.
 func RequestSizeLimitMiddleware(maxSize int64) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if c.Request.ContentLength > maxSize {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{
+				"error": fmt.Sprintf("request body too large (max %d MB)", maxSize/(1024*1024)),
+			})
+			c.Abort()
+			return
+		}
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxSize)
 		c.Next()
 	}
 }
 
-// RateLimitMiddleware limits request rate
+// RateLimitMiddleware is a per-IP sliding-window rate limiter backed by
+// an in-memory store (sync.Map). For multi-instance deployments move the
+// store to Redis; for now this protects a single instance.
+//
+// requestsPerMinute: maximum requests allowed per IP per 60-second window.
 func RateLimitMiddleware(requestsPerMinute int) gin.HandlerFunc {
+	type entry struct {
+		mu      sync.Mutex
+		count   int
+		resetAt time.Time
+	}
+	var store sync.Map
+
 	return func(c *gin.Context) {
+		ip := c.ClientIP()
+		now := time.Now()
+
+		v, _ := store.LoadOrStore(ip, &entry{resetAt: now.Add(time.Minute)})
+		e := v.(*entry)
+
+		e.mu.Lock()
+		if now.After(e.resetAt) {
+			e.count = 0
+			e.resetAt = now.Add(time.Minute)
+		}
+		e.count++
+		count := e.count
+		e.mu.Unlock()
+
+		c.Header("X-RateLimit-Limit", fmt.Sprintf("%d", requestsPerMinute))
+		c.Header("X-RateLimit-Remaining", fmt.Sprintf("%d", max(requestsPerMinute-count, 0)))
+
+		if count > requestsPerMinute {
+			c.JSON(http.StatusTooManyRequests, gin.H{
+				"error": "too many requests — please slow down",
+			})
+			c.Abort()
+			return
+		}
 		c.Next()
 	}
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

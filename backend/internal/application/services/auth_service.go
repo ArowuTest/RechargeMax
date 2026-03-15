@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"log"
 
 	"golang.org/x/crypto/bcrypt"
 	"math/big"
@@ -20,20 +21,23 @@ import (
 
 // AuthService handles authentication operations
 type AuthService struct {
-	otpRepo       repositories.OTPRepository
-	userRepo      repositories.UserRepository
-	jwtSecret     string
-	jwtExpiration time.Duration
-	smsAPIKey     string
-	environment   string
+	otpRepo             repositories.OTPRepository
+	userRepo            repositories.UserRepository
+	jwtSecret           string
+	adminJWTSecret      string // separate secret for admin tokens
+	jwtExpiration       time.Duration
+	smsAPIKey           string
+	environment         string
+	notificationService *NotificationService // used for production SMS delivery (BUG-004)
 }
 
 // JWTClaims represents JWT token claims
 type JWTClaims struct {
-	UserID string `json:"user_id"`
-	MSISDN string `json:"msisdn"`
-	Role   string `json:"role"` // "user", "admin", "super_admin"
-	Type   string `json:"type"` // access, refresh
+	UserID  string `json:"user_id"`
+	AdminID string `json:"admin_id"` // Populated in admin tokens; same as UserID for user tokens
+	MSISDN  string `json:"msisdn"`
+	Role    string `json:"role"` // "user", "admin", "super_admin"
+	Type    string `json:"type"` // "access" for users, "admin" for admin tokens
 	jwt.RegisteredClaims
 }
 
@@ -42,18 +46,25 @@ func NewAuthService(
 	otpRepo repositories.OTPRepository,
 	userRepo repositories.UserRepository,
 	jwtSecret string,
+	adminJWTSecret string,
 	jwtExpiration time.Duration,
 	smsAPIKey string,
 	environment string,
+	notificationService ...*NotificationService, // variadic so existing call sites need no changes
 ) *AuthService {
-	return &AuthService{
-		otpRepo:       otpRepo,
-		userRepo:      userRepo,
-		jwtSecret:     jwtSecret,
-		jwtExpiration: jwtExpiration,
-		smsAPIKey:     smsAPIKey,
-		environment:   environment,
+	svc := &AuthService{
+		otpRepo:        otpRepo,
+		userRepo:       userRepo,
+		jwtSecret:      jwtSecret,
+		adminJWTSecret: adminJWTSecret,
+		jwtExpiration:  jwtExpiration,
+		smsAPIKey:      smsAPIKey,
+		environment:    environment,
 	}
+	if len(notificationService) > 0 {
+		svc.notificationService = notificationService[0]
+	}
+	return svc
 }
 
 // SendOTP sends an OTP to the user's phone number
@@ -108,7 +119,7 @@ func (s *AuthService) SendOTP(ctx context.Context, msisdn string, purpose string
 	// Send SMS (use normalised MSISDN for delivery)
 	if err := s.sendSMS(ctx, normalizedMSISDN, otpCode); err != nil {
 		// Log error but don't fail the request
-		fmt.Printf("Failed to send SMS to %s: %v\n", normalizedMSISDN, err)
+		log.Printf("Failed to send SMS to %s: %v\n", normalizedMSISDN, err)
 	}
 
 	return nil
@@ -123,8 +134,20 @@ func (s *AuthService) VerifyOTP(ctx context.Context, msisdn, code, purpose strin
 	}
 	
 	// Find valid OTP with matching purpose (using normalised MSISDN — same as stored in SendOTP)
-	otp, err := s.otpRepo.FindValidOTPWithPurpose(ctx, normalizedMSISDN, code, purpose)
-	if err != nil {
+	otp, otpErr := s.otpRepo.FindValidOTPWithPurpose(ctx, normalizedMSISDN, code, purpose)
+	if otpErr != nil {
+		// SEC-008: Increment failed attempts on any pending OTP for this MSISDN.
+		// Use FindLatestPendingOTP — no code check so we always find the pending row.
+		pendingOTP, _ := s.otpRepo.FindLatestPendingOTP(ctx, normalizedMSISDN, purpose)
+		if pendingOTP != nil {
+			count, _ := s.otpRepo.IncrementFailedAttempts(ctx, pendingOTP.ID)
+			const maxOTPAttempts = 5
+			if count >= maxOTPAttempts {
+				// Invalidate the OTP — the user must request a new one
+				_ = s.otpRepo.InvalidateByMSISDN(ctx, normalizedMSISDN, purpose)
+				return "", nil, false, errors.Unauthorized("Too many failed attempts — please request a new OTP")
+			}
+		}
 		return "", nil, false, errors.Unauthorized("Invalid or expired OTP")
 	}
 
@@ -152,11 +175,11 @@ func (s *AuthService) VerifyOTP(ctx context.Context, msisdn, code, purpose strin
 	user.LastLoginAt = &now
 	if err := s.userRepo.Update(ctx, user); err != nil {
 		// Log error but don't fail authentication
-		fmt.Printf("Failed to update last login time: %v\n", err)
+		log.Printf("Failed to update last login time: %v\n", err)
 	}
 
 	// Generate JWT token (using normalized MSISDN)
-	fmt.Printf("[DEBUG] Generating JWT for normalized MSISDN: %s (original: %s)\n", normalizedMSISDN, msisdn)
+	log.Printf("[DEBUG] Generating JWT for normalized MSISDN: %s (original: %s)\n", normalizedMSISDN, msisdn)
 	token, err := s.GenerateToken(ctx, normalizedMSISDN)
 	if err != nil {
 		return "", nil, false, fmt.Errorf("failed to generate token: %w", err)
@@ -238,43 +261,37 @@ func (s *AuthService) generateOTP() (string, error) {
 	return fmt.Sprintf("%06d", n.Add(n, min).Int64()), nil
 }
 
-// sendSMS sends SMS (integrates with SMS provider)
+// sendSMS sends the OTP message via NotificationService (production) or logs it
+// to stdout in development. The plaintext code is NEVER logged in production
+// to prevent OTP exposure in server logs (BUG-004).
 func (s *AuthService) sendSMS(ctx context.Context, msisdn, code string) error {
 	message := fmt.Sprintf("Your RechargeMax verification code is: %s. Valid for 10 minutes. Do not share this code.", code)
-	
-	// In development, just log the SMS
-	if s.environment == "development" {
-		fmt.Printf("SMS to %s: %s\n", msisdn, message)
+
+	if s.environment != "production" {
+		// Development / staging: log without the code to avoid accidental exposure
+		// (use a separate OTP-viewing endpoint or check DB directly)
+		log.Printf("[SMS-DEV] OTP dispatched to MSISDN ending ...%s", msisdn[max(0, len(msisdn)-4):])
+		// Uncomment the line below ONLY for local debugging:
+		// log.Printf("[SMS-DEV] code=%s", code)
 		return nil
 	}
 
-	// Implement actual SMS sending via Termii
-	// In production, this would:
-	// 1. Use NotificationService.SendSMS() if available
-	// 2. Or directly call Termii API with smsAPIKey
-	// 3. Handle errors and retry logic
-	//
-	// Example:
-	// if s.notificationService != nil {
-	//     return s.notificationService.SendSMS(ctx, msisdn, message)
-	// }
-	// 
-	// // Or direct Termii API call:
-	// payload := map[string]interface{}{
-	//     "to":      msisdn,
-	//     "from":    "RechargeMax",
-	//     "sms":     message,
-	//     "type":    "plain",
-	//     "channel": "generic",
-	//     "api_key": s.smsAPIKey,
-	// }
-	// // ... HTTP POST to Termii API
-	
-	// For now, log the SMS (when integrated with NotificationService, uncomment above)
-	fmt.Printf("[SMS-PROD] To: %s, Message: %s\n", msisdn, message)
-	
-		return nil
+	// Production: route through NotificationService which calls Termii API
+	if s.notificationService != nil {
+		return s.notificationService.SendSMS(ctx, msisdn, message)
 	}
+
+	// Fallback: NotificationService not wired — log a warning (no OTP code in log)
+	log.Printf("[SMS-WARN] NotificationService unavailable for MSISDN ...%s; OTP not delivered", msisdn[max(0, len(msisdn)-4):])
+	return fmt.Errorf("SMS delivery unavailable: NotificationService not configured")
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
 
 // GenerateAdminToken generates a JWT token for admin users
 func (s *AuthService) GenerateAdminToken(ctx context.Context, adminID, msisdn string, role string) (string, error) {
@@ -285,23 +302,29 @@ func (s *AuthService) GenerateAdminToken(ctx context.Context, adminID, msisdn st
 		return "", fmt.Errorf("invalid admin role: %s", role)
 	}
 	
-	// Admin token claims
+	// Admin token claims — must use "admin" type so AdminAuthMiddleware accepts it.
+	// AdminID is populated so middleware can read it without falling back to UserID.
 	claims := JWTClaims{
-		UserID: adminID,
-		MSISDN: msisdn, // Admin's phone number for tracking
-		Role:   role,   // "admin" or "super_admin"
-		Type:   "access",
+		AdminID: adminID, // Primary field for admin tokens
+		UserID:  adminID, // Also set for backward compat with any code reading UserID
+		MSISDN:  msisdn,
+		Role:    role, // "admin" or "super_admin"
+		Type:    "admin",
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   adminID,
 			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(s.jwtExpiration)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(8 * time.Hour)), // Admin sessions expire in 8h
 			Issuer:    "rechargemax-admin",
 		},
 	}
-	
-	// Generate token
+
+	// Sign with the admin-specific secret (must differ from user JWT secret)
+	signingSecret := s.adminJWTSecret
+	if signingSecret == "" {
+		signingSecret = s.jwtSecret // dev fallback only
+	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString([]byte(s.jwtSecret))
+	tokenString, err := token.SignedString([]byte(signingSecret))
 	if err != nil {
 		return "", fmt.Errorf("failed to sign admin token: %w", err)
 	}

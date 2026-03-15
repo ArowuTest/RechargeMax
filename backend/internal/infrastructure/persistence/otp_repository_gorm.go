@@ -130,3 +130,45 @@ func (r *OTPRepositoryGORM) DeleteOld(ctx context.Context, olderThan time.Time) 
 		Where("is_used = ? AND created_at < ?", true, olderThan).
 		Delete(&entities.OTP{}).Error
 }
+
+// IncrementFailedAttempts increments the failed_attempts counter and returns
+// the new count. Used by VerifyOTP to lock an OTP after too many bad guesses.
+func (r *OTPRepositoryGORM) IncrementFailedAttempts(ctx context.Context, id uuid.UUID) (int, error) {
+	if err := r.db.WithContext(ctx).
+		Model(&entities.OTP{}).
+		Where("id = ?", id).
+		UpdateColumn("failed_attempts", gorm.Expr("failed_attempts + 1")).
+		Error; err != nil {
+		return 0, err
+	}
+	var otp entities.OTP
+	if err := r.db.WithContext(ctx).Select("failed_attempts").Where("id = ?", id).First(&otp).Error; err != nil {
+		return 0, err
+	}
+	return otp.FailedAttempts, nil
+}
+
+// InvalidateByMSISDN marks all unused, unexpired OTPs for a phone+purpose as used,
+// effectively invalidating them so the attacker must re-request.
+func (r *OTPRepositoryGORM) InvalidateByMSISDN(ctx context.Context, msisdn, purpose string) error {
+	return r.db.WithContext(ctx).
+		Model(&entities.OTP{}).
+		Where("msisdn = ? AND purpose = ? AND is_used = false AND expires_at > NOW()", msisdn, purpose).
+		Updates(map[string]interface{}{"is_used": true, "used_at": time.Now()}).
+		Error
+}
+
+// FindLatestPendingOTP returns the most recently created, unused, unexpired OTP
+// for the given msisdn+purpose — without checking the code value.
+func (r *OTPRepositoryGORM) FindLatestPendingOTP(ctx context.Context, msisdn, purpose string) (*entities.OTP, error) {
+	var otp entities.OTP
+	err := r.db.WithContext(ctx).
+		Where("msisdn = ? AND purpose = ? AND is_used = false AND expires_at > ?",
+			msisdn, purpose, time.Now()).
+		Order("created_at DESC").
+		First(&otp).Error
+	if err != nil {
+		return nil, err
+	}
+	return &otp, nil
+}

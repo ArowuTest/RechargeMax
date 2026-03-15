@@ -40,4 +40,17 @@ type OTPRepository interface {
 
 	// DeleteOld deletes old used OTPs (cleanup)
 	DeleteOld(ctx context.Context, olderThan time.Time) error
+
+	// FindLatestPendingOTP returns the most recently created, unused, unexpired OTP
+	// for the given msisdn+purpose (without code verification). Used to increment
+	// the failed attempt counter when the submitted code was wrong.
+	FindLatestPendingOTP(ctx context.Context, msisdn, purpose string) (*entities.OTP, error)
+
+	// IncrementFailedAttempts increments the failed attempt counter for an OTP.
+	// Returns the new count so the caller can decide whether to invalidate.
+	IncrementFailedAttempts(ctx context.Context, id uuid.UUID) (int, error)
+
+	// InvalidateByMSISDN marks all pending OTPs for an MSISDN as used so the
+	// attacker must request a fresh OTP after too many failures (SEC-008).
+	InvalidateByMSISDN(ctx context.Context, msisdn, purpose string) error
 }

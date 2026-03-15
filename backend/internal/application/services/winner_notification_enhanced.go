@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"rechargemax/internal/domain/entities"
 )
@@ -13,7 +14,7 @@ func (s *NotificationService) NotifyWinnerMultiChannel(ctx context.Context, winn
 	smsMessage := s.composeWinnerSMS(winner)
 	err := s.SendSMS(ctx, winner.MSISDN, smsMessage)
 	if err != nil {
-		fmt.Printf("Failed to send winner SMS: %v\n", err)
+		log.Printf("Failed to send winner SMS: %v\n", err)
 	}
 	
 	// 2. Send Email (if user has email)
@@ -22,7 +23,7 @@ func (s *NotificationService) NotifyWinnerMultiChannel(ctx context.Context, winn
 		emailSubject, emailBody := s.composeWinnerEmail(winner)
 		err = s.SendEmail(ctx, user.Email, emailSubject, emailBody)
 		if err != nil {
-			fmt.Printf("Failed to send winner email: %v\n", err)
+			log.Printf("Failed to send winner email: %v\n", err)
 		}
 	}
 	
@@ -30,7 +31,7 @@ func (s *NotificationService) NotifyWinnerMultiChannel(ctx context.Context, winn
 	pushTitle, pushBody := s.composeWinnerPush(winner)
 	err = s.SendPushNotification(ctx, winner.MSISDN, pushTitle, pushBody)
 	if err != nil {
-		fmt.Printf("Failed to send winner push: %v\n", err)
+		log.Printf("Failed to send winner push: %v\n", err)
 	}
 	
 	// 4. Create In-Platform Notification
@@ -42,7 +43,7 @@ func (s *NotificationService) NotifyWinnerMultiChannel(ctx context.Context, winn
 		"prize_amount": winner.PrizeAmount,
 	})
 	if err != nil {
-		fmt.Printf("Failed to create in-platform notification: %v\n", err)
+		log.Printf("Failed to create in-platform notification: %v\n", err)
 	}
 	
 	return nil
@@ -253,7 +254,7 @@ func (s *NotificationService) ProcessClaimReminders(ctx context.Context) error {
 	// This is a simplified version - in production, you'd query the database
 	// for winners where claim_status = 'pending' and deadline is approaching
 	
-	fmt.Println("[CRON] Processing claim reminders...")
+	log.Println("[CRON] Processing claim reminders...")
 	
 	// Example: Query would look like:
 	// SELECT * FROM winners 

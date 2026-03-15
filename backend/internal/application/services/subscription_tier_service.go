@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -303,7 +304,7 @@ func (s *SubscriptionTierService) ProcessDailyBillings(ctx context.Context) erro
 	for _, sub := range subscriptions {
 		if err := s.processSingleBilling(ctx, sub); err != nil {
 			// Log error but continue with other subscriptions
-			fmt.Printf("Failed to process billing for subscription %s: %v\n", sub.ID, err)
+			log.Printf("Failed to process billing for subscription %s: %v\n", sub.ID, err)
 		}
 	}
 

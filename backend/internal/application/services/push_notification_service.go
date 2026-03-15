@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
 )
 
 // PushNotificationService handles FCM push notifications
@@ -38,11 +39,11 @@ func (s *PushNotificationService) SendToUser(ctx context.Context, msisdn, title,
 				// Example:
 				// err := s.SendToToken(ctx, *device.FCMToken, title, body, data)
 				// if err != nil {
-				//     fmt.Printf("Failed to send push to device %s: %v\n", device.ID, err)
+				//     log.Printf("Failed to send push to device %s: %v\n", device.ID, err)
 				// }
 				
 				// For now, log the push notification
-				fmt.Printf("[PUSH] To device %s (Token: %s), Title: %s, Body: %s\n", device.ID, *device.FCMToken, title, body)
+				log.Printf("[PUSH] To device %s (Token: %s), Title: %s, Body: %s\n", device.ID, *device.FCMToken, title, body)
 			}
 		}
 
@@ -89,6 +90,6 @@ func (s *PushNotificationService) SendToToken(ctx context.Context, fcmToken, tit
 	// }
 	
 	// For now, log the push notification (when FCM server key is configured, uncomment above)
-	fmt.Printf("[PUSH-TOKEN] To: %s, Title: %s, Body: %s\n", fcmToken, title, body)
+	log.Printf("[PUSH-TOKEN] To: %s, Title: %s, Body: %s\n", fcmToken, title, body)
 	return nil
 }

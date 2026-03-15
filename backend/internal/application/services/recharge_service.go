@@ -1,10 +1,11 @@
 package services
 import (
 	"context"
+	"fmt"
+	"log"
+	"sync"
 
 	"rechargemax/internal/pkg/safe"
-	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -28,6 +29,7 @@ type RechargeService struct {
 	paymentService          *PaymentService
 	affiliateService        *AffiliateService
 	spinService             *SpinService
+	fraudService            *FraudDetectionService
 	db                      *gorm.DB
 	backendURL              string
 	frontendURL             string
@@ -71,6 +73,7 @@ func NewRechargeService(
 	paymentService *PaymentService,
 	affiliateService *AffiliateService,
 	spinService *SpinService,
+	fraudService *FraudDetectionService,
 	db *gorm.DB,
 	backendURL string,
 	frontendURL string,
@@ -86,6 +89,7 @@ func NewRechargeService(
 		paymentService:          paymentService,
 		affiliateService:        affiliateService,
 		spinService:             spinService,
+		fraudService:            fraudService,
 		db:                      db,
 		backendURL:              backendURL,
 		frontendURL:             frontendURL,
@@ -96,6 +100,15 @@ func NewRechargeService(
 func (s *RechargeService) CreateRecharge(ctx context.Context, req CreateRechargeRequest) (*RechargeResponse, error) {
 	// Normalize phone number to international format for database storage
 	normalizedMSISDN := normalizePhoneToInternational(req.MSISDN)
+
+	// BUG-003: fraud detection gate (velocity + amount ceiling + blacklist)
+	if s.fraudService != nil {
+		if isFraud, reason, err := s.fraudService.CheckRecharge(ctx, normalizedMSISDN, req.Amount); err != nil {
+			log.Printf("[fraud] check error (non-blocking): %v", err)
+		} else if isFraud {
+			return nil, fmt.Errorf("transaction declined: %s", reason)
+		}
+	}
 	
 	// NEW VALIDATION LOGIC:
 	// 1. If user selected network, validate it BEFORE proceeding
@@ -250,7 +263,7 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 		err := tx.Where("msisdn = ?", recharge.MSISDN).First(&user).Error
 		if err != nil {
 			// User doesn't exist - auto-create for guest transaction
-			fmt.Printf("Auto-creating user account for guest transaction: %s\n", recharge.MSISDN)
+			log.Printf("Auto-creating user account for guest transaction: %s\n", recharge.MSISDN)
 			
 			// Generate unique codes
 			userCode := fmt.Sprintf("USR%s", uuid.New().String()[:8])
@@ -287,12 +300,14 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 			}
 		}
 
-		// Process affiliate commission if applicable
+		// Process affiliate commission atomically inside this transaction (BUG-002).
+		// Using ProcessCommissionTx ensures the commission record and the recharge
+		// update are committed together or rolled back together.
 		if s.affiliateService != nil {
-			if err := s.affiliateService.ProcessCommission(ctx, recharge.MSISDN, recharge.Amount, recharge.ID); err != nil {
-				// Log error but don't fail the recharge
-				fmt.Printf("Failed to process affiliate commission: %v\n", err)
-				// Don't return error - commission failure shouldn't rollback recharge
+			if err := s.affiliateService.ProcessCommissionTx(ctx, tx, recharge.MSISDN, recharge.Amount, recharge.ID); err != nil {
+				// Log but don't fail — a commission calculation error should not
+				// block the user's recharge from completing.
+				log.Printf("affiliate commission error (non-fatal): %v", err)
 			}
 		}
 
@@ -300,7 +315,7 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 		if isWheelEligible && s.spinService != nil {
 			if err := s.spinService.CreateSpinOpportunity(ctx, user.ID, recharge.ID); err != nil {
 				// Log error but don't fail the recharge
-				fmt.Printf("Failed to create spin opportunity: %v\n", err)
+				log.Printf("Failed to create spin opportunity: %v\n", err)
 				// Don't return error - spin opportunity failure shouldn't rollback recharge
 			}
 		}
@@ -326,9 +341,9 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 				if dbErr2 := s.db.Model(&entities.Users{}).
 					Where("id = ?", updatedUser.ID).
 					Update("loyalty_tier", newTier).Error; dbErr2 != nil {
-					fmt.Printf("[Recharge] Loyalty tier update failed for %s: %v\n", recharge.MSISDN, dbErr2)
+					log.Printf("[Recharge] Loyalty tier update failed for %s: %v\n", recharge.MSISDN, dbErr2)
 				} else {
-					fmt.Printf("[Recharge] Loyalty tier updated %s: %s -> %s\n",
+					log.Printf("[Recharge] Loyalty tier updated %s: %s -> %s\n",
 						recharge.MSISDN, updatedUser.LoyaltyTier, newTier)
 				}
 			}
@@ -338,38 +353,76 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 	return nil
 }
 
-// computeLoyaltyTier returns the tier name for the given points balance.
-func computeLoyaltyTier(db *gorm.DB, ctx context.Context, points int64) string {
-	type setting struct {
-		Key   string  `gorm:"column:setting_key"`
-		Value float64 `gorm:"column:setting_value"`
-	}
+// ---------------------------------------------------------------------------
+// PERF-001: platform_settings in-memory cache (5-minute TTL)
+// Avoids a DB round-trip on every recharge for read-heavy loyalty settings.
+// ---------------------------------------------------------------------------
+
+var platformSettingsCache struct {
+	sync.RWMutex
+	data      map[string]float64
+	expiresAt time.Time
+}
+
+const platformSettingsCacheTTL = 5 * time.Minute
+
+// loadPlatformSettingsLocked refreshes the cache from the DB.
+// Must be called with the write-lock held.
+func loadPlatformSettingsLocked(db *gorm.DB, ctx context.Context) map[string]float64 {
 	defaults := map[string]float64{
 		"loyalty.silver_min_points":   500,
 		"loyalty.gold_min_points":     2000,
 		"loyalty.platinum_min_points": 5000,
+		"loyalty.silver_multiplier":   1.25,
+		"loyalty.gold_multiplier":     1.5,
+		"loyalty.platinum_multiplier": 2.0,
 	}
 	var rows []struct {
-		SettingKey   string `gorm:"column:setting_key"`
-		SettingValue string `gorm:"column:setting_value"`
+		Key   string  `gorm:"column:setting_key"`
+		Value float64 `gorm:"column:setting_value"`
 	}
 	if err := db.WithContext(ctx).
 		Table("platform_settings").
-		Where("setting_key LIKE 'loyalty.%_min_points'").
-		Find(&rows).Error; err == nil {
+		Where("setting_key LIKE 'loyalty.%'").
+		Select("setting_key, setting_value").
+		Scan(&rows).Error; err == nil {
 		for _, r := range rows {
-			var v float64
-			if n, _ := fmt.Sscanf(r.SettingValue, "%f", &v); n == 1 {
-				defaults[r.SettingKey] = v
-			}
+			defaults[r.Key] = r.Value
 		}
 	}
+	return defaults
+}
+
+// getPlatformSettings returns loyalty settings, using a 5-min in-memory cache.
+func getPlatformSettings(db *gorm.DB, ctx context.Context) map[string]float64 {
+	platformSettingsCache.RLock()
+	if time.Now().Before(platformSettingsCache.expiresAt) && platformSettingsCache.data != nil {
+		data := platformSettingsCache.data
+		platformSettingsCache.RUnlock()
+		return data
+	}
+	platformSettingsCache.RUnlock()
+
+	platformSettingsCache.Lock()
+	defer platformSettingsCache.Unlock()
+	// Double-checked locking
+	if time.Now().Before(platformSettingsCache.expiresAt) && platformSettingsCache.data != nil {
+		return platformSettingsCache.data
+	}
+	platformSettingsCache.data = loadPlatformSettingsLocked(db, ctx)
+	platformSettingsCache.expiresAt = time.Now().Add(platformSettingsCacheTTL)
+	return platformSettingsCache.data
+}
+
+// computeLoyaltyTier returns the tier name for the given points balance.
+func computeLoyaltyTier(db *gorm.DB, ctx context.Context, points int64) string {
+	settings := getPlatformSettings(db, ctx)
 	switch {
-	case float64(points) >= defaults["loyalty.platinum_min_points"]:
+	case float64(points) >= settings["loyalty.platinum_min_points"]:
 		return "PLATINUM"
-	case float64(points) >= defaults["loyalty.gold_min_points"]:
+	case float64(points) >= settings["loyalty.gold_min_points"]:
 		return "GOLD"
-	case float64(points) >= defaults["loyalty.silver_min_points"]:
+	case float64(points) >= settings["loyalty.silver_min_points"]:
 		return "SILVER"
 	default:
 		return "BRONZE"
@@ -772,7 +825,7 @@ func (s *RechargeService) attemptVTUWithRetry(ctx context.Context, recharge *ent
 				waitDuration = 2 * time.Minute
 			}
 			
-			fmt.Printf("🔄 Retry attempt %d/%d for transaction %s (waiting %v)\\n", 
+			log.Printf("🔄 Retry attempt %d/%d for transaction %s (waiting %v)\\n", 
 				attempt, maxRetries, recharge.ID, waitDuration)
 			time.Sleep(waitDuration)
 		}
@@ -804,7 +857,7 @@ func (s *RechargeService) attemptVTUWithRetry(ctx context.Context, recharge *ent
 		// Check if successful
 		if err == nil && vtuResponse != nil && vtuResponse.Success {
 			if attempt > 0 {
-				fmt.Printf("✅ Retry successful on attempt %d for transaction %s\\n", attempt, recharge.ID)
+				log.Printf("✅ Retry successful on attempt %d for transaction %s\\n", attempt, recharge.ID)
 			}
 			return vtuResponse, nil
 		}
@@ -816,11 +869,11 @@ func (s *RechargeService) attemptVTUWithRetry(ctx context.Context, recharge *ent
 			lastErr = fmt.Errorf("VTU failed: %s", vtuResponse.Message)
 		}
 		
-		fmt.Printf("❌ Attempt %d failed for transaction %s: %v\\n", attempt, recharge.ID, lastErr)
+		log.Printf("❌ Attempt %d failed for transaction %s: %v\\n", attempt, recharge.ID, lastErr)
 	}
 	
 	// All retries exhausted
-	fmt.Printf("⚠️  All %d retry attempts exhausted for transaction %s\\n", maxRetries+1, recharge.ID)
+	log.Printf("⚠️  All %d retry attempts exhausted for transaction %s\\n", maxRetries+1, recharge.ID)
 	return vtuResponse, lastErr
 }
 
@@ -836,7 +889,7 @@ func (s *RechargeService) handleFailedRechargeWithRefund(ctx context.Context, re
 	
 	// ✅ Initiate automatic refund after retries exhausted
 	if s.paymentService != nil && recharge.PaymentReference != "" {
-		fmt.Printf("💰 Initiating refund for transaction %s after failed retries\\n", recharge.ID)
+		log.Printf("💰 Initiating refund for transaction %s after failed retries\\n", recharge.ID)
 		
 		refundErr := s.paymentService.RefundPayment(
 			ctx,
@@ -848,14 +901,14 @@ func (s *RechargeService) handleFailedRechargeWithRefund(ctx context.Context, re
 		
 		if refundErr != nil {
 			// Log refund failure but don't fail the transaction update
-			fmt.Printf("❌ CRITICAL: Failed to refund transaction %s (₦%d): %v\\n", 
+			log.Printf("❌ CRITICAL: Failed to refund transaction %s (₦%d): %v\\n", 
 				recharge.ID, recharge.Amount/100, refundErr)
-			fmt.Printf("⚠️  MANUAL ACTION REQUIRED: Admin must manually refund payment reference: %s\\n", 
+			log.Printf("⚠️  MANUAL ACTION REQUIRED: Admin must manually refund payment reference: %s\\n", 
 				recharge.PaymentReference)
 			// TODO: Queue for manual review/alert admin
 		} else {
 			// Refund successful - update transaction
-			fmt.Printf("✅ Refund initiated successfully for transaction %s\\n", recharge.ID)
+			log.Printf("✅ Refund initiated successfully for transaction %s\\n", recharge.ID)
 			recharge.Status = "REFUNDED"
 			s.rechargeRepo.Update(ctx, recharge)
 			
@@ -876,7 +929,7 @@ func (s *RechargeService) handlePendingRecharge(ctx context.Context, recharge *e
 	recharge.ProviderReference = vtuResponse.ProviderReference
 	s.rechargeRepo.Update(ctx, recharge)
 	
-	fmt.Printf("⏳ Transaction %s is PENDING with VTPass - will requery for status\\n", recharge.ID)
+	log.Printf("⏳ Transaction %s is PENDING with VTPass - will requery for status\\n", recharge.ID)
 	
 	// TODO: Notify customer that recharge is being processed when notification service is available
 	// amountNaira := recharge.Amount / 100
@@ -891,31 +944,7 @@ func (s *RechargeService) handlePendingRecharge(ctx context.Context, recharge *e
 // getTierMultiplier returns the draw entry multiplier for a user's point balance.
 // Multipliers are loaded from platform_settings with fallback to hardcoded defaults.
 func getTierMultiplier(db *gorm.DB, ctx context.Context, totalPoints int) float64 {
-	settings := map[string]float64{
-		"loyalty.silver_min_points":   500,
-		"loyalty.gold_min_points":     2000,
-		"loyalty.platinum_min_points": 5000,
-		"loyalty.silver_multiplier":   1.25,
-		"loyalty.gold_multiplier":     1.5,
-		"loyalty.platinum_multiplier": 2.0,
-	}
-
-	// Try to load overrides from DB
-	var rows []struct {
-		Key   string `gorm:"column:setting_key"`
-		Value string `gorm:"column:setting_value"`
-	}
-	db.WithContext(ctx).Table("platform_settings").
-		Where("setting_key LIKE 'loyalty.%'").
-		Select("setting_key, setting_value").
-		Find(&rows)
-
-	for _, row := range rows {
-		if v, err := strconv.ParseFloat(row.Value, 64); err == nil {
-			settings[row.Key] = v
-		}
-	}
-
+	settings := getPlatformSettings(db, ctx)
 	points := float64(totalPoints)
 	switch {
 	case points >= settings["loyalty.platinum_min_points"]:
@@ -955,7 +984,7 @@ func (s *RechargeService) createRechargeDrawEntries(ctx context.Context, tx *gor
 	}
 	if err := tx.WithContext(ctx).Create(&entry).Error; err != nil {
 		// Log but don't fail the transaction - draw entries are non-critical
-		fmt.Printf("Failed to create draw entries for %s: %v\n", msisdn, err)
+		log.Printf("Failed to create draw entries for %s: %v\n", msisdn, err)
 		return
 	}
 

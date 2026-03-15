@@ -2,6 +2,9 @@ package services
 
 import (
 	"context"
+	"log"
+
+	"rechargemax/internal/pkg/safe"
 	cryptorand "crypto/rand"
 	"fmt"
 	"math/big"
@@ -240,35 +243,51 @@ if err != nil || len(prizes) == 0 {
 		// Set fulfillment mode on spin result
 		spin.FulfillmentMode = config.FulfillmentMode
 
-		// Auto-provision if mode is AUTO and prize is airtime/data
-		if config.FulfillmentMode == "AUTO" && 
-		   (selectedPrize.PrizeType == "DATA" || selectedPrize.PrizeType == "AIRTIME") {
-			
-			err := s.provisionPrizeWithRetry(ctx, spin, config)
-			
-			if err != nil {
-				// Log the error
-				s.logFulfillmentAttempt(ctx, spin, "FAILED", err.Error())
-				
-				// Check if we should fallback to manual
-				if config.FallbackToManual {
-					spin.ClaimStatus = "PENDING"
-					spin.FulfillmentMode = "MANUAL"
-					spin.CanRetry = true
-					fmt.Printf("⚠️ Auto-provision failed, falling back to manual claim for spin %s\n", spin.ID)
-				} else {
-					spin.ClaimStatus = "EXPIRED"
-					spin.CanRetry = false
-				}
-			} else {
-				spin.ClaimStatus = "CLAIMED"
-				s.logFulfillmentAttempt(ctx, spin, "SUCCESS", "")
-			}
-			
-			// Update spin status within transaction
+		// Auto-provision if mode is AUTO and prize is airtime/data (PERF-002).
+		// We return PROVISIONING immediately so the HTTP response is fast.
+		// The actual VTPass call (which may sleep/retry) runs in a background goroutine.
+		if config.FulfillmentMode == "AUTO" &&
+			(selectedPrize.PrizeType == "DATA" || selectedPrize.PrizeType == "AIRTIME") {
+
+			spin.ClaimStatus = "PROVISIONING"
 			if err := tx.Save(spin).Error; err != nil {
-				return fmt.Errorf("failed to update spin status: %w", err)
+				return fmt.Errorf("failed to mark spin as PROVISIONING: %w", err)
 			}
+
+			// Capture values for the goroutine (avoid closure over loop vars / tx)
+			spinID := spin.ID
+			spinCopy := *spin
+			cfgCopy := *config
+			safe.Go(func() {
+				bgCtx := context.Background()
+				provErr := s.provisionPrizeWithRetry(bgCtx, &spinCopy, &cfgCopy)
+
+				finalStatus := "CLAIMED"
+				fulfillMode := "AUTO"
+				if provErr != nil {
+					s.logFulfillmentAttempt(bgCtx, &spinCopy, "FAILED", provErr.Error())
+					if cfgCopy.FallbackToManual {
+						finalStatus = "PENDING"
+						fulfillMode = "MANUAL"
+					} else {
+						finalStatus = "EXPIRED"
+					}
+					log.Printf("[spin] auto-provision failed for spin %s: %v", spinID, provErr)
+				} else {
+					s.logFulfillmentAttempt(bgCtx, &spinCopy, "SUCCESS", "")
+					log.Printf("[spin] auto-provision succeeded for spin %s", spinID)
+				}
+
+				if s.db != nil {
+					s.db.WithContext(bgCtx).
+						Model(&entities.WheelSpin{}).
+						Where("id = ?", spinID).
+						Updates(map[string]interface{}{
+							"claim_status":     finalStatus,
+							"fulfillment_mode": fulfillMode,
+						})
+				}
+			})
 		}
 		
 		return nil // Commit transaction
@@ -348,7 +367,7 @@ func (s *SpinService) provisionPrizeWithRetry(ctx context.Context, spin *entitie
 		now := time.Now()
 		spin.LastFulfillmentAttempt = &now
 		
-		fmt.Printf("🔄 Provisioning attempt %d/%d for spin %s\n", attempt, maxAttempts, spin.ID)
+		log.Printf("🔄 Provisioning attempt %d/%d for spin %s\n", attempt, maxAttempts, spin.ID)
 		
 		err := s.provisionPrize(ctx, spin)
 		
@@ -356,7 +375,7 @@ func (s *SpinService) provisionPrizeWithRetry(ctx context.Context, spin *entitie
 			// Success!
 			completedAt := time.Now()
 			spin.ProvisionCompletedAt = &completedAt
-			fmt.Printf("✅ Prize provisioned successfully on attempt %d\n", attempt)
+			log.Printf("✅ Prize provisioned successfully on attempt %d\n", attempt)
 			return nil
 		}
 		
@@ -366,13 +385,13 @@ func (s *SpinService) provisionPrizeWithRetry(ctx context.Context, spin *entitie
 		// If this isn't the last attempt, wait before retrying
 		if attempt < maxAttempts {
 			retryDelay := time.Duration(config.RetryDelaySeconds) * time.Second
-			fmt.Printf("⚠️  Attempt %d failed: %v. Retrying in %v...\n", attempt, err, retryDelay)
+			log.Printf("⚠️  Attempt %d failed: %v. Retrying in %v...\n", attempt, err, retryDelay)
 			time.Sleep(retryDelay)
 		}
 	}
 	
 	// All attempts failed
-	fmt.Printf("❌ All %d provision attempts failed for spin %s\n", maxAttempts, spin.ID)
+	log.Printf("❌ All %d provision attempts failed for spin %s\n", maxAttempts, spin.ID)
 	return fmt.Errorf("all %d provision attempts failed: %w", maxAttempts, lastErr)
 }
 
@@ -407,7 +426,7 @@ func (s *SpinService) provisionAirtime(ctx context.Context, spin *entities.Wheel
 		return fmt.Errorf("telecom service not initialized")
 	}
 	
-	fmt.Printf("📞 Provisioning ₦%d airtime to %s on %s network\n", spin.PrizeValue/100, spin.MSISDN, network)
+	log.Printf("📞 Provisioning ₦%d airtime to %s on %s network\n", spin.PrizeValue/100, spin.MSISDN, network)
 	
 	// Call VTPass to purchase airtime (amount in kobo)
 	response, err := s.telecomService.PurchaseAirtime(ctx, network, spin.MSISDN, int(spin.PrizeValue))
@@ -418,7 +437,7 @@ func (s *SpinService) provisionAirtime(ctx context.Context, spin *entities.Wheel
 	// Store provider reference
 	if response != nil {
 		spin.ClaimReference = response.ProviderReference
-		fmt.Printf("✅ Airtime provisioned successfully. Reference: %s, Status: %s\n", 
+		log.Printf("✅ Airtime provisioned successfully. Reference: %s, Status: %s\n", 
 			response.ProviderReference, response.Status)
 	}
 	
@@ -437,7 +456,7 @@ func (s *SpinService) provisionData(ctx context.Context, spin *entities.WheelSpi
 		return fmt.Errorf("no data variation code found for value %d on %s", spin.PrizeValue, network)
 	}
 	
-	fmt.Printf("📱 Provisioning data (%s) to %s on %s network\n", variationCode, spin.MSISDN, network)
+	log.Printf("📱 Provisioning data (%s) to %s on %s network\n", variationCode, spin.MSISDN, network)
 	
 	// Call VTPass to purchase data (amount in kobo)
 	response, err := s.telecomService.PurchaseData(ctx, network, spin.MSISDN, variationCode, int(spin.PrizeValue))
@@ -448,7 +467,7 @@ func (s *SpinService) provisionData(ctx context.Context, spin *entities.WheelSpi
 	// Store provider reference
 	if response != nil {
 		spin.ClaimReference = response.ProviderReference
-		fmt.Printf("✅ Data provisioned successfully. Reference: %s, Status: %s\n", 
+		log.Printf("✅ Data provisioned successfully. Reference: %s, Status: %s\n", 
 			response.ProviderReference, response.Status)
 	}
 	
@@ -509,7 +528,7 @@ func (s *SpinService) getDataVariationCode(prizeValue int64, network string) str
 func (s *SpinService) logFulfillmentAttempt(ctx context.Context, spin *entities.WheelSpin, status string, errorMsg string) {
 	// This would insert into prize_fulfillment_logs table
 	// For now, just log to console
-	fmt.Printf("📝 Fulfillment log: spin=%s, attempt=%d, status=%s, error=%s\n",
+	log.Printf("📝 Fulfillment log: spin=%s, attempt=%d, status=%s, error=%s\n",
 		spin.ID, spin.FulfillmentAttempts, status, errorMsg)
 	
 	// TODO: Insert into database

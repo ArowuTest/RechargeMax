@@ -5,6 +5,7 @@ import (
 
 	"rechargemax/internal/pkg/safe"
 	"fmt"
+	"log"
 	"strconv"
 	"time"
 
@@ -207,7 +208,7 @@ func (s *WinnerService) ImportWinners(ctx context.Context, drawID uuid.UUID, win
 		)
 		if err != nil {
 			// Log error but continue with other winners
-			fmt.Printf("Failed to create winner %s: %v\n", w.MSISDN, err)
+			log.Printf("Failed to create winner %s: %v\n", w.MSISDN, err)
 		}
 	}
 
@@ -267,7 +268,7 @@ func (s *WinnerService) provisionPrize(ctx context.Context, winner *entities.Win
 
 	err := s.winnerRepo.Update(ctx, winner)
 	if err != nil {
-		fmt.Printf("Failed to update winner provision status: %v\n", err)
+		log.Printf("Failed to update winner provision status: %v\n", err)
 	}
 
 	// Send success notification
@@ -279,7 +280,7 @@ func (s *WinnerService) sendWinnerNotifications(ctx context.Context, winner *ent
 	// Get user details
 	user, err := s.userRepo.FindByMSISDN(ctx, winner.MSISDN)
 	if err != nil {
-		fmt.Printf("Failed to get user details for winner %s: %v\n", winner.MSISDN, err)
+		log.Printf("Failed to get user details for winner %s: %v\n", winner.MSISDN, err)
 		return
 	}
 
@@ -1153,7 +1154,7 @@ func (s *WinnerService) ClaimSpinPrize(ctx context.Context, prizeID uuid.UUID, m
 
 // triggerManualFulfillment triggers manual fulfillment for airtime/data prizes
 func (s *WinnerService) triggerManualFulfillment(ctx context.Context, spinPrize *entities.SpinResults) error {
-	fmt.Printf("🔄 Triggering manual fulfillment for spin %s\n", spinPrize.ID)
+	log.Printf("🔄 Triggering manual fulfillment for spin %s\n", spinPrize.ID)
 	
 	// Detect network
 	networkHint := ""
@@ -1198,7 +1199,7 @@ func (s *WinnerService) triggerManualFulfillment(ctx context.Context, spinPrize 
 		return fmt.Errorf("failed to update spin prize status: %w", err)
 	}
 	
-	fmt.Printf("✅ Manual fulfillment successful for spin %s\n", spinPrize.ID)
+	log.Printf("✅ Manual fulfillment successful for spin %s\n", spinPrize.ID)
 	return nil
 }
 
@@ -1208,7 +1209,7 @@ func (s *WinnerService) provisionAirtimeManual(ctx context.Context, spinPrize *e
 		return fmt.Errorf("telecom service not initialized")
 	}
 	
-	fmt.Printf("📞 [Manual] Provisioning ₦%d airtime to %s on %s network\n", 
+	log.Printf("📞 [Manual] Provisioning ₦%d airtime to %s on %s network\n", 
 		spinPrize.PrizeValue/100, spinPrize.MSISDN, network)
 	
 	// Call VTPass (amount in kobo)
@@ -1220,7 +1221,7 @@ func (s *WinnerService) provisionAirtimeManual(ctx context.Context, spinPrize *e
 	// Store provider reference
 	if response != nil {
 		spinPrize.ClaimReference = response.ProviderReference
-		fmt.Printf("✅ [Manual] Airtime provisioned successfully. Reference: %s, Status: %s\n", 
+		log.Printf("✅ [Manual] Airtime provisioned successfully. Reference: %s, Status: %s\n", 
 			response.ProviderReference, response.Status)
 	}
 	
@@ -1239,7 +1240,7 @@ func (s *WinnerService) provisionDataManual(ctx context.Context, spinPrize *enti
 		return fmt.Errorf("no data variation code found for value %d on %s", spinPrize.PrizeValue, network)
 	}
 	
-	fmt.Printf("📱 [Manual] Provisioning data (%s) to %s on %s network\n", variationCode, spinPrize.MSISDN, network)
+	log.Printf("📱 [Manual] Provisioning data (%s) to %s on %s network\n", variationCode, spinPrize.MSISDN, network)
 	
 	// Call VTPass (amount in kobo)
 	response, err := s.telecomService.PurchaseData(ctx, network, spinPrize.MSISDN, variationCode, int(spinPrize.PrizeValue))
@@ -1250,7 +1251,7 @@ func (s *WinnerService) provisionDataManual(ctx context.Context, spinPrize *enti
 	// Store provider reference
 	if response != nil {
 		spinPrize.ClaimReference = response.ProviderReference
-		fmt.Printf("✅ [Manual] Data provisioned successfully. Reference: %s, Status: %s\n", 
+		log.Printf("✅ [Manual] Data provisioned successfully. Reference: %s, Status: %s\n", 
 			response.ProviderReference, response.Status)
 	}
 	

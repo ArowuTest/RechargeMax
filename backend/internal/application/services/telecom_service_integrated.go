@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math/rand"
 	"os"
 	"strings"
@@ -147,7 +148,7 @@ func (s *TelecomServiceIntegrated) getActiveProvider(ctx context.Context, networ
 
 	if err == sql.ErrNoRows {
 		// FALLBACK: No provider configured in database, use environment-based VTPass
-		fmt.Printf("⚠️  No provider configured for %s/%s, using environment fallback\n", network, serviceType)
+		log.Printf("⚠️  No provider configured for %s/%s, using environment fallback\n", network, serviceType)
 		return &ProviderConfig{
 			ID:           0,
 			Network:      network,
@@ -170,7 +171,7 @@ func (s *TelecomServiceIntegrated) getActiveProvider(ctx context.Context, networ
 		return nil, fmt.Errorf("failed to parse provider config: %w", err)
 	}
 
-	fmt.Printf("✅ Using provider: %s (mode: %s) for %s/%s\n", config.ProviderName, config.ProviderMode, network, serviceType)
+	log.Printf("✅ Using provider: %s (mode: %s) for %s/%s\n", config.ProviderName, config.ProviderMode, network, serviceType)
 	return &config, nil
 }
 

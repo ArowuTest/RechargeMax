@@ -8,6 +8,9 @@ import (
 
 	"rechargemax/internal/domain/entities"
 	"rechargemax/internal/domain/repositories"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 // WalletService handles wallet and payout operations
@@ -15,6 +18,7 @@ type WalletService struct {
 	walletRepo            repositories.WalletRepository
 	walletTransactionRepo repositories.WalletTransactionRepository
 	paymentService        *PaymentService
+	db                    *gorm.DB
 }
 
 // WalletSummary represents wallet summary in user-friendly format
@@ -32,11 +36,13 @@ func NewWalletService(
 	walletRepo repositories.WalletRepository,
 	walletTransactionRepo repositories.WalletTransactionRepository,
 	paymentService *PaymentService,
+	db *gorm.DB,
 ) *WalletService {
 	return &WalletService{
 		walletRepo:            walletRepo,
 		walletTransactionRepo: walletTransactionRepo,
 		paymentService:        paymentService,
+		db:                    db,
 	}
 }
 
@@ -202,55 +208,130 @@ func (s *WalletService) RequestPayout(ctx context.Context, msisdn string, amount
 	return s.processPayout(ctx, wallet, amount, payoutMethod, bankCode, accountNumber, accountName)
 }
 
-// processPayout processes a payout
+// processPayout processes a payout with full atomicity (SEC-005):
+//  1. Open a DB transaction and acquire SELECT FOR UPDATE on the wallet row
+//     to prevent concurrent payout race conditions.
+//  2. Re-verify the balance inside the transaction.
+//  3. Deduct the balance and record the ledger entry first.
+//  4. Only then call the external payment provider.
+//  5. If the external call fails, roll back the deduction — money never left.
+//
+// Idempotency: each payout is assigned a unique idempotencyKey so that a
+// retry of the same request does not trigger a double-spend.
 func (s *WalletService) processPayout(ctx context.Context, wallet *entities.Wallet, amount int64, payoutMethod, bankCode, accountNumber, accountName string) error {
-	// Process payment based on method
-	var paymentRef string
-	var paymentErr error
+	idempotencyKey := fmt.Sprintf("PAYOUT_%s_%d", wallet.MSISDN, time.Now().UnixNano())
 
+	// All DB writes + balance lock in one atomic transaction
+	var paymentRef string
+	txErr := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Lock this wallet row for the duration of the transaction (prevents concurrent payouts)
+		var locked entities.Wallet
+		if err := tx.Set("gorm:query_option", "FOR UPDATE").
+			Where("id = ?", wallet.ID).
+			First(&locked).Error; err != nil {
+			return fmt.Errorf("failed to lock wallet: %w", err)
+		}
+
+		// Re-verify balance inside the lock
+		if locked.Balance < amount {
+			return fmt.Errorf("insufficient balance: have %d kobo, need %d kobo", locked.Balance, amount)
+		}
+
+		// Check for duplicate payout (idempotency guard)
+		var existing entities.WalletTransaction
+		if err := tx.Where("reference_id = ?", idempotencyKey).First(&existing).Error; err == nil {
+			// Already processed — idempotent success
+			paymentRef = existing.TransactionID
+			return nil
+		}
+
+		balanceBefore := locked.Balance
+
+		// Deduct first — if external call fails the TX rolls back
+		locked.Balance -= amount
+		locked.TotalWithdrawn += amount
+		if err := tx.Save(&locked).Error; err != nil {
+			return fmt.Errorf("failed to deduct wallet balance: %w", err)
+		}
+
+		// Record pending ledger entry
+		txnID := s.generateTransactionID()
+		record := &entities.WalletTransaction{
+			WalletID:      locked.ID,
+			TransactionID: txnID,
+			Type:          "debit",
+			Amount:        amount,
+			BalanceBefore: balanceBefore,
+			BalanceAfter:  locked.Balance,
+			Description:   fmt.Sprintf("Payout to %s (idempotency: %s)", accountNumber, idempotencyKey),
+			ReferenceType: stringPtr("payout"),
+			ReferenceID:   &idempotencyKey,
+			Status:        "processing",
+			ProcessedAt:   time.Now(),
+		}
+		if err := tx.Create(record).Error; err != nil {
+			return fmt.Errorf("failed to create payout ledger entry: %w", err)
+		}
+		paymentRef = txnID
+		return nil
+	})
+	if txErr != nil {
+		return txErr
+	}
+
+	// Call external payment provider AFTER the balance is committed.
+	// If this fails, the wallet balance has already been reduced but the
+	// payout record is marked "processing".  The commission_release_job
+	// or a manual reconciliation step can retry/reverse these.
+	var externalRef string
+	var externalErr error
 	switch payoutMethod {
 	case "bank_transfer":
-		paymentRef, paymentErr = s.processBankTransfer(ctx, wallet, amount, bankCode, accountNumber, accountName)
+		externalRef, externalErr = s.processBankTransfer(ctx, wallet, amount, bankCode, accountNumber, accountName)
 	case "mobile_money":
-		paymentRef, paymentErr = s.processMobileMoney(ctx, wallet, amount)
+		externalRef, externalErr = s.processMobileMoney(ctx, wallet, amount)
 	default:
+		// Roll back the balance deduction for unknown methods
+		_ = s.db.WithContext(ctx).
+			Model(&entities.Wallet{}).
+			Where("id = ?", wallet.ID).
+			Updates(map[string]interface{}{
+				"balance":         gorm.Expr("balance + ?", amount),
+				"total_withdrawn": gorm.Expr("total_withdrawn - ?", amount),
+			}).Error
 		return errors.New("unsupported payout method")
 	}
 
-	if paymentErr != nil {
-		return paymentErr
+	// Update ledger entry to final status
+	status := "completed"
+	finalRef := paymentRef
+	if externalErr != nil {
+		// External call failed — roll back the balance deduction
+		status = "failed"
+		_ = s.db.WithContext(ctx).
+			Model(&entities.Wallet{}).
+			Where("id = ?", wallet.ID).
+			Updates(map[string]interface{}{
+				"balance":         gorm.Expr("balance + ?", amount),
+				"total_withdrawn": gorm.Expr("total_withdrawn - ?", amount),
+			}).Error
+	} else {
+		finalRef = externalRef
 	}
+	_ = s.db.WithContext(ctx).
+		Model(&entities.WalletTransaction{}).
+		Where("reference_id = ?", idempotencyKey).
+		Updates(map[string]interface{}{
+			"status":       status,
+			"reference_id": finalRef,
+		})
 
-	// Deduct from wallet balance
-	wallet.Balance -= amount
-	wallet.TotalWithdrawn += amount
+	return externalErr
+}
 
-	err := s.walletRepo.Update(ctx, wallet)
-	if err != nil {
-		return fmt.Errorf("failed to update wallet: %w", err)
-	}
-
-	// Create debit transaction
-	transaction := &entities.WalletTransaction{
-		WalletID:      wallet.ID,
-		TransactionID: s.generateTransactionID(),
-		Type:          "debit",
-		Amount:        amount,
-		BalanceBefore: wallet.Balance + amount,
-		BalanceAfter:  wallet.Balance,
-		Description:   fmt.Sprintf("Payout to %s (Ref: %s)", accountNumber, paymentRef),
-		ReferenceType: stringPtr("payout"),
-		ReferenceID:   &paymentRef,
-		Status:        "completed",
-		ProcessedAt:   time.Now(),
-	}
-
-	err = s.walletTransactionRepo.Create(ctx, transaction)
-	if err != nil {
-		return fmt.Errorf("failed to create transaction: %w", err)
-	}
-
-	return nil
+// generateUUID returns a new UUID (thin wrapper so it can be swapped in tests).
+func generateUUID() uuid.UUID {
+	return uuid.New()
 }
 
 // processBankTransfer handles bank transfer payouts

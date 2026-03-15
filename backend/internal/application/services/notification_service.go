@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -110,11 +111,11 @@ func (s *NotificationService) SendSMS(ctx context.Context, msisdn, message strin
 	
 	// For now, log the SMS (when Termii API key is configured, uncomment above)
 	if s.smsAPIKey != "" {
-		fmt.Printf("[SMS] To: %s, Message: %s\n", msisdn, message)
+		log.Printf("[SMS] To: %s, Message: %s\n", msisdn, message)
 		// Actual API call would go here
 		s.logDelivery("sms", "sent", "termii", "")
 	} else {
-		fmt.Printf("[SMS-MOCK] To: %s, Message: %s\n", msisdn, message)
+		log.Printf("[SMS-MOCK] To: %s, Message: %s\n", msisdn, message)
 		s.logDelivery("sms", "sent", "mock", "")
 	}
 	return nil
@@ -149,10 +150,10 @@ func (s *NotificationService) SendEmail(ctx context.Context, email, subject, bod
 	
 	// For now, log the email (when SendGrid API key is configured, uncomment above)
 	if s.emailAPIKey != "" {
-		fmt.Printf("[EMAIL] To: %s, Subject: %s, Body: %s\n", email, subject, body)
+		log.Printf("[EMAIL] To: %s, Subject: %s, Body: %s\n", email, subject, body)
 		// Actual API call would go here
 	} else {
-		fmt.Printf("[EMAIL-MOCK] To: %s, Subject: %s, Body: %s\n", email, subject, body)
+		log.Printf("[EMAIL-MOCK] To: %s, Subject: %s, Body: %s\n", email, subject, body)
 	}
 	return nil
 }
@@ -200,13 +201,13 @@ func (s *NotificationService) SendPushNotification(ctx context.Context, msisdn, 
 	//     client := &http.Client{Timeout: 10 * time.Second}
 	//     resp, err := client.Do(req)
 	//     if err != nil {
-	//         fmt.Printf("Failed to send push to %s: %v\n", *device.FCMToken, err)
+	//         log.Printf("Failed to send push to %s: %v\n", *device.FCMToken, err)
 	//         continue
 	//     }
 	//     defer resp.Body.Close()
 	//     
 	//     if resp.StatusCode != 200 {
-	//         fmt.Printf("FCM API returned status %d for token %s\n", resp.StatusCode, *device.FCMToken)
+	//         log.Printf("FCM API returned status %d for token %s\n", resp.StatusCode, *device.FCMToken)
 	//     }
 	// }
 	
@@ -217,10 +218,10 @@ func (s *NotificationService) SendPushNotification(ctx context.Context, msisdn, 
 			token = *device.FCMToken
 		}
 		if s.fcmServerKey != "" {
-			fmt.Printf("[PUSH] To: %s (Device: %s), Title: %s, Body: %s\n", msisdn, token, title, body)
+			log.Printf("[PUSH] To: %s (Device: %s), Title: %s, Body: %s\n", msisdn, token, title, body)
 			// Actual API call would go here
 		} else {
-			fmt.Printf("[PUSH-MOCK] To: %s (Device: %s), Title: %s, Body: %s\n", msisdn, token, title, body)
+			log.Printf("[PUSH-MOCK] To: %s (Device: %s), Title: %s, Body: %s\n", msisdn, token, title, body)
 		}
 	}
 

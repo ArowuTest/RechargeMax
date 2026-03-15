@@ -16,7 +16,8 @@ type OTP struct {
 	IsUsed    bool       `gorm:"default:false;index" json:"is_used"`
 	UsedAt    *time.Time `gorm:"index" json:"used_at,omitempty"`
 	CreatedAt time.Time  `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
-	UpdatedAt time.Time  `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
+	FailedAttempts int       `gorm:"default:0" json:"failed_attempts"` // SEC-008: brute-force guard
+	UpdatedAt      time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
 }
 
 // TableName specifies the table name for OTP

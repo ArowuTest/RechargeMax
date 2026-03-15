@@ -5,7 +5,8 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
-	"math/rand"
+	crand "crypto/rand"
+	"encoding/binary"
 	"os"
 	"strconv"
 	"strings"
@@ -60,7 +61,10 @@ func NewDrawService(
 
 // generateDrawCode generates a unique draw code in the format DRAW-YYYYMMDD-XXXX
 func generateDrawCode() string {
-	return fmt.Sprintf("DRAW-%s-%04d", time.Now().Format("20060102"), rand.Intn(9000)+1000)
+	var b [8]byte
+	crand.Read(b[:]) //nolint:errcheck — Read never fails on Linux
+	n := int(binary.BigEndian.Uint64(b[:]) % 9000)
+	return fmt.Sprintf("DRAW-%s-%04d", time.Now().Format("20060102"), n+1000)
 }
 
 // CreateDraw creates a new draw record
@@ -133,63 +137,28 @@ func (s *DrawService) CreateDrawWithTemplate(
 	return draw, nil
 }
 
-// ExportDrawEntries exports draw entries to CSV file
-// Aggregates points from recharges, subscriptions, and wheel spins
+// ExportDrawEntries aggregates draw entries from the draw_entries table for
+// the given date range and writes a CSV to outputPath.
+// Each row = one MSISDN + its total entries count across the period.
 func (s *DrawService) ExportDrawEntries(ctx context.Context, startDate, endDate time.Time, outputPath string) (string, error) {
-	// Aggregate points by MSISDN
-	pointsMap := make(map[string]int64)
+	// Aggregate entries count from draw_entries joined to draws (by date)
+	type row struct {
+		MSISDN       string
+		TotalEntries int64
+	}
+	var rows []row
 
-	// 1. Get points from recharges (₦200 = 1 point)
-	// Note: We need to implement a method in recharge repo to get recharges by date range
-	// Returns draw statistics - enhance with more metrics as needed
-	
-	// 2. Get points from subscription billings (₦20 = 1 point)
-	// Note: We need to implement a method in subscription repo to get billings by date range
-	
-	// 3. Get points from wheel spins (bonus points)
-	// Note: We need to implement a method in wheel spin repo to get spins by date range
-
-	// Implement actual aggregation logic
-	// Aggregate points from all sources for the draw period
-	// 
-	// In production, this would:
-	// 1. Query recharges table for the date range
-	// 2. Calculate points: amount / 20000 (₦200 = 1 point)
-	// 3. Query subscriptions table for active subscriptions
-	// 4. Calculate subscription points: ₦20/day = 1 point
-	// 5. Query wheel_spins for bonus points awarded
-	// 6. Aggregate all points by MSISDN
-	// 7. Each point = 1 draw entry
-	//
-	// Example aggregation:
-	// pointsByMSISDN := make(map[string]int64)
-	// 
-	// // From recharges
-	// recharges, _ := s.rechargeRepo.FindByDateRange(ctx, startDate, endDate)
-	// for _, r := range recharges {
-	//     if r.Status == "completed" {
-	//         points := r.Amount / 20000 // ₦200 = 1 point
-	//         pointsByMSISDN[r.MSISDN] += points
-	//     }
-	// }
-	// 
-	// // From subscriptions (₦20 = 1 point per day)
-	// subscriptions, _ := s.subscriptionRepo.FindActiveInPeriod(ctx, startDate, endDate)
-	// for _, sub := range subscriptions {
-	//     days := calculateDaysInPeriod(sub, startDate, endDate)
-	//     pointsByMSISDN[sub.MSISDN] += days // 1 point per day
-	// }
-	// 
-	// // From wheel spins (bonus points)
-	// spins, _ := s.spinRepo.FindByDateRange(ctx, startDate, endDate)
-	// for _, spin := range spins {
-	//     if spin.PrizeType == "points" && spin.Status == "claimed" {
-	//         pointsByMSISDN[spin.MSISDN] += spin.PointsEarned
-	//     }
-	// }
-	
-	// For now, this is a simplified version
-	// When repository methods are implemented, uncomment above code
+	err := s.db.WithContext(ctx).
+		Table("draw_entries de").
+		Select("de.msisdn, COALESCE(SUM(de.entries_count), 0) AS total_entries").
+		Joins("JOIN draws d ON d.id = de.draw_id").
+		Where("d.created_at BETWEEN ? AND ?", startDate, endDate).
+		Group("de.msisdn").
+		Order("total_entries DESC").
+		Scan(&rows).Error
+	if err != nil {
+		return "", fmt.Errorf("failed to aggregate draw entries: %w", err)
+	}
 
 	// Create CSV file
 	file, err := os.Create(outputPath)
@@ -201,14 +170,11 @@ func (s *DrawService) ExportDrawEntries(ctx context.Context, startDate, endDate 
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
 
-	// Write header
-	if err := writer.Write([]string{"MSISDN", "Points"}); err != nil {
+	if err := writer.Write([]string{"MSISDN", "TotalEntries"}); err != nil {
 		return "", fmt.Errorf("failed to write CSV header: %w", err)
 	}
-
-	// Write entries
-	for msisdn, points := range pointsMap {
-		if err := writer.Write([]string{msisdn, strconv.FormatInt(points, 10)}); err != nil {
+	for _, r := range rows {
+		if err := writer.Write([]string{r.MSISDN, strconv.FormatInt(r.TotalEntries, 10)}); err != nil {
 			return "", fmt.Errorf("failed to write CSV row: %w", err)
 		}
 	}
@@ -216,7 +182,6 @@ func (s *DrawService) ExportDrawEntries(ctx context.Context, startDate, endDate 
 	return outputPath, nil
 }
 
-// ImportWinners imports winners from CSV file
 func (s *DrawService) ImportWinners(ctx context.Context, drawID uuid.UUID, csvPath string) ([]*WinnerImport, error) {
 	file, err := os.Open(csvPath)
 	if err != nil {
@@ -651,12 +616,10 @@ func (s *DrawService) ExecuteDraw(ctx context.Context, drawID string) error {
 				category.CategoryName, totalNeeded, len(availableMSISDNs))
 		}
 		
-		// Shuffle available MSISDNs for random selection
+		// Crypto-random Fisher-Yates shuffle (SEC-009: crypto/rand, not math/rand)
 		shuffledMSISDNs := make([]string, len(availableMSISDNs))
 		copy(shuffledMSISDNs, availableMSISDNs)
-		rand.Shuffle(len(shuffledMSISDNs), func(i, j int) {
-			shuffledMSISDNs[i], shuffledMSISDNs[j] = shuffledMSISDNs[j], shuffledMSISDNs[i]
-		})
+		cryptoShuffle(shuffledMSISDNs)
 		
 		// Select winners for this category
 		for i := 0; i < category.WinnerCount; i++ {
@@ -805,3 +768,14 @@ func isValidNigerianMSISDN(msisdn string) bool {
 }
 
 
+
+// cryptoShuffle performs a Fisher-Yates shuffle using crypto/rand to ensure
+// unpredictable draw winner selection (SEC-009).
+func cryptoShuffle(s []string) {
+	for i := len(s) - 1; i > 0; i-- {
+		var b [8]byte
+		crand.Read(b[:]) //nolint:errcheck
+		j := int(binary.BigEndian.Uint64(b[:]) % uint64(i+1))
+		s[i], s[j] = s[j], s[i]
+	}
+}

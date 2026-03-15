@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -101,7 +102,7 @@ func (s *PrizeFulfillmentConfigService) GetConfig(ctx context.Context, prizeType
 
 	if err == sql.ErrNoRows {
 		// Return safe default config if not found
-		fmt.Printf("⚠️  No config found for prize type %s, using safe defaults\n", prizeType)
+		log.Printf("⚠️  No config found for prize type %s, using safe defaults\n", prizeType)
 		return s.getDefaultConfig(prizeType), nil
 	}
 
@@ -164,7 +165,7 @@ func (s *PrizeFulfillmentConfigService) UpdateConfig(ctx context.Context, config
 	// Invalidate cache
 	delete(s.cache, config.PrizeType)
 
-	fmt.Printf("✅ Updated fulfillment config for %s: mode=%s, retry=%v, fallback=%v\n",
+	log.Printf("✅ Updated fulfillment config for %s: mode=%s, retry=%v, fallback=%v\n",
 		config.PrizeType, config.FulfillmentMode, config.AutoRetryEnabled, config.FallbackToManual)
 
 	return nil
@@ -228,7 +229,7 @@ func (s *PrizeFulfillmentConfigService) ListAllConfigs(ctx context.Context) ([]*
 // InvalidateCache clears the configuration cache
 func (s *PrizeFulfillmentConfigService) InvalidateCache() {
 	s.cache = make(map[string]*FulfillmentConfig)
-	fmt.Println("🔄 Prize fulfillment config cache invalidated")
+	log.Println("🔄 Prize fulfillment config cache invalidated")
 }
 
 // ============================================================================

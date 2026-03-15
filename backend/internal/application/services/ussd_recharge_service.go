@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -160,7 +161,7 @@ func (s *USSDRechargeService) createDrawEntries(ctx context.Context, ussdRecharg
 	activeDraw, err := s.drawRepo.FindByStatus(ctx, "ACTIVE", 1, 0)
 	if err != nil || len(activeDraw) == 0 {
 		// No active draw - entries will be created when draw opens
-		fmt.Printf("No active draw found for USSD recharge %s - draw entries not created\n", ussdRecharge.ID)
+		log.Printf("No active draw found for USSD recharge %s - draw entries not created\n", ussdRecharge.ID)
 		return
 	}
 
@@ -177,7 +178,7 @@ func (s *USSDRechargeService) createDrawEntries(ctx context.Context, ussdRecharg
 			CreatedAt: &now,
 		}
 		if err := s.drawRepo.CreateEntry(ctx, entry); err != nil {
-			fmt.Printf("Failed to create draw entry for USSD recharge %s: %v\n", ussdRecharge.ID, err)
+			log.Printf("Failed to create draw entry for USSD recharge %s: %v\n", ussdRecharge.ID, err)
 			break
 		}
 	}
@@ -235,7 +236,7 @@ func (s *USSDRechargeService) ProcessUnprocessedRecharges(ctx context.Context) e
 
 	for _, recharge := range recharges {
 		if err := s.allocatePoints(ctx, recharge); err != nil {
-			fmt.Printf("Failed to allocate points for USSD recharge %s: %v\n", recharge.ID, err)
+			log.Printf("Failed to allocate points for USSD recharge %s: %v\n", recharge.ID, err)
 		}
 	}
 
@@ -254,10 +255,10 @@ func (s *USSDRechargeService) RetryFailedWebhooks(ctx context.Context) error {
 		return fmt.Errorf("failed to find failed webhooks: %w", err)
 	}
 
-	for _, log := range logs {
+	for _, wlog := range logs {
 		// Re-process webhook
-		if err := s.ProcessWebhook(ctx, log.Provider, log.Endpoint, log.Method, log.Headers, log.Body, log.IPAddress); err != nil {
-			fmt.Printf("Failed to retry webhook %s: %v\n", log.ID, err)
+		if err := s.ProcessWebhook(ctx, wlog.Provider, wlog.Endpoint, wlog.Method, wlog.Headers, wlog.Body, wlog.IPAddress); err != nil {
+			log.Printf("Failed to retry webhook %s: %v\n", wlog.ID, err)
 		}
 	}
 

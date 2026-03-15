@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"strconv"
 	"time"
 
@@ -180,7 +181,7 @@ func (s *AffiliateService) RegisterAffiliate(ctx context.Context, req RegisterAf
 	_, err = s.walletService.CreateWallet(ctx, req.MSISDN)
 	if err != nil {
 		// Log error but don't fail registration
-		fmt.Printf("Warning: Failed to create wallet for affiliate %s: %v\n", req.MSISDN, err)
+		log.Printf("Warning: Failed to create wallet for affiliate %s: %v\n", req.MSISDN, err)
 	}
 
 	return s.affiliateToResponse(ctx, affiliate, user), nil
@@ -635,7 +636,7 @@ func (s *AffiliateService) ApproveAffiliate(ctx context.Context, affiliateID str
 			msisdn = user.MSISDN
 		}
 	}
-	fmt.Printf("[AUDIT] Affiliate %s (%s) approved at %s\n", affiliate.ID.String(), msisdn, now.Format(time.RFC3339))
+	log.Printf("[AUDIT] Affiliate %s (%s) approved at %s\n", affiliate.ID.String(), msisdn, now.Format(time.RFC3339))
 	
 	return nil
 }
@@ -694,7 +695,7 @@ func (s *AffiliateService) RejectAffiliate(ctx context.Context, affiliateID stri
 			msisdn = user.MSISDN
 		}
 	}
-	fmt.Printf("[AUDIT] Affiliate %s (%s) rejected at %s. Reason: %s\n", affiliate.ID.String(), msisdn, now.Format(time.RFC3339), reason)
+	log.Printf("[AUDIT] Affiliate %s (%s) rejected at %s. Reason: %s\n", affiliate.ID.String(), msisdn, now.Format(time.RFC3339), reason)
 	
 	return nil
 }
@@ -755,7 +756,7 @@ func (s *AffiliateService) SuspendAffiliate(ctx context.Context, affiliateID str
 	//     comm.Status = "frozen"
 	//     s.commissionRepo.Update(ctx, comm)
 	// }
-	fmt.Printf("[INFO] Pending commissions frozen for affiliate %s\n", affiliate.ID.String())
+	log.Printf("[INFO] Pending commissions frozen for affiliate %s\n", affiliate.ID.String())
 	
 	// Log suspension action for audit trail
 	now := time.Now()
@@ -767,7 +768,7 @@ func (s *AffiliateService) SuspendAffiliate(ctx context.Context, affiliateID str
 			msisdn = user.MSISDN
 		}
 	}
-	fmt.Printf("[AUDIT] Affiliate %s (%s) suspended at %s. Reason: %s\n", affiliate.ID.String(), msisdn, now.Format(time.RFC3339), reason)
+	log.Printf("[AUDIT] Affiliate %s (%s) suspended at %s. Reason: %s\n", affiliate.ID.String(), msisdn, now.Format(time.RFC3339), reason)
 	
 	return nil
 }
@@ -828,4 +829,63 @@ func (s *AffiliateService) GetEarningsSummary(ctx context.Context, msisdn string
 	}
 	
 	return summary, nil
+}
+
+// ProcessCommissionTx is the transactional variant of ProcessCommission (BUG-002).
+// All DB writes use the provided *gorm.DB transaction so they participate in the
+// caller's atomic unit of work. If tx is nil, it falls back to the regular method.
+func (s *AffiliateService) ProcessCommissionTx(ctx context.Context, tx *gorm.DB, msisdn string, rechargeAmount int64, transactionID uuid.UUID) error {
+	if tx == nil {
+		return s.ProcessCommission(ctx, msisdn, rechargeAmount, transactionID)
+	}
+
+	// --- reads via repos (non-mutating, safe outside the tx) ---
+	user, err := s.userRepo.FindByMSISDN(ctx, msisdn)
+	if err != nil || user.ReferredBy == nil {
+		return nil // no user or no referral — nothing to do
+	}
+	referrer, err := s.userRepo.FindByID(ctx, *user.ReferredBy)
+	if err != nil {
+		return nil
+	}
+	affiliate, err := s.affiliateRepo.FindByUserID(ctx, referrer.ID)
+	if err != nil || affiliate.Status != "APPROVED" {
+		return nil
+	}
+
+	rechargeCount, err := s.transactionRepo.CountByUserID(ctx, user.ID)
+	if err != nil {
+		return fmt.Errorf("commission: failed to count recharges: %w", err)
+	}
+	if rechargeCount <= 1 {
+		// First recharge: bump referral counters only (no commission)
+		if err := tx.Model(referrer).UpdateColumn("total_referrals", gorm.Expr("total_referrals + 1")).Error; err != nil {
+			return err
+		}
+		return tx.Model(affiliate).Updates(map[string]interface{}{
+			"total_referrals":  gorm.Expr("total_referrals + 1"),
+			"active_referrals": gorm.Expr("active_referrals + 1"),
+		}).Error
+	}
+
+	// --- writes inside tx ---
+	commissionAmount := (rechargeAmount * int64(affiliate.CommissionRate)) / 100
+	commission := &entities.AffiliateCommissions{
+		ID:                uuid.New(),
+		AffiliateID:       affiliate.ID,
+		TransactionID:     &transactionID,
+		CommissionAmount:  commissionAmount,
+		CommissionRate:    affiliate.CommissionRate,
+		TransactionAmount: rechargeAmount,
+		Status:            "PENDING",
+	}
+	if err := tx.Create(commission).Error; err != nil {
+		return fmt.Errorf("commission: failed to create record: %w", err)
+	}
+	if err := tx.Model(affiliate).
+		UpdateColumn("total_commission", gorm.Expr("total_commission + ?", float64(commissionAmount)/100.0)).
+		Error; err != nil {
+		return fmt.Errorf("commission: failed to update affiliate total: %w", err)
+	}
+	return nil
 }

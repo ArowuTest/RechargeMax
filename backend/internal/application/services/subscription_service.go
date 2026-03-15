@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -62,7 +63,7 @@ func NewSubscriptionService(
 
 // CreateSubscription creates a new subscription
 func (s *SubscriptionService) CreateSubscription(ctx context.Context, req CreateSubscriptionRequest) (*SubscriptionResponse, error) {
-	fmt.Printf("[DEBUG] CreateSubscription called for MSISDN: %s, PaymentMethod: %s\n", req.MSISDN, req.PaymentMethod)
+	log.Printf("[DEBUG] CreateSubscription called for MSISDN: %s, PaymentMethod: %s\n", req.MSISDN, req.PaymentMethod)
 	// Detect network (optional)
 	networkHint := ""
 	if req.Network != "" {
@@ -70,20 +71,20 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 	}
 	_, err := s.hlrService.DetectNetwork(ctx, req.MSISDN, &networkHint)
 	if err != nil {
-		fmt.Printf("[DEBUG] DetectNetwork error (non-fatal): %v\n", err)
+		log.Printf("[DEBUG] DetectNetwork error (non-fatal): %v\n", err)
 	}
 
 	// Check for existing active subscription
 	// Query all subscriptions for this MSISDN
-	fmt.Printf("[DEBUG] Looking up user by MSISDN: %s\n", req.MSISDN)
+	log.Printf("[DEBUG] Looking up user by MSISDN: %s\n", req.MSISDN)
 	user, err := s.userRepo.FindByMSISDN(ctx, req.MSISDN)
 	if err != nil {
-		fmt.Printf("[DEBUG] FindByMSISDN error: %v\n", err)
+		log.Printf("[DEBUG] FindByMSISDN error: %v\n", err)
 	} else if user != nil {
-		fmt.Printf("[DEBUG] Found user: %s\n", user.ID)
+		log.Printf("[DEBUG] Found user: %s\n", user.ID)
 		existingSubs, err := s.subscriptionRepo.FindByUserID(ctx, user.ID)
 		if err != nil {
-			fmt.Printf("[DEBUG] FindByUserID error: %v\n", err)
+			log.Printf("[DEBUG] FindByUserID error: %v\n", err)
 		} else {
 			// Check if any subscription is active
 				for _, sub := range existingSubs {
@@ -110,7 +111,7 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 	}
 
 	if err := s.subscriptionRepo.Create(ctx, subscription); err != nil {
-		fmt.Printf("[DEBUG] Subscription create error: %v\n", err)
+		log.Printf("[DEBUG] Subscription create error: %v\n", err)
 		// Check for unique constraint violation (duplicate subscription for today)
 		if strings.Contains(err.Error(), "23505") || strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
 			return nil, errors.Conflict("You already have a subscription for today")

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"io"
 	"net/http"
 	"time"
@@ -138,17 +139,17 @@ func NewVTPassService(config VTPassConfig) *VTPassService {
 		baseURL = "https://sandbox.vtpass.com/api"
 	}
 
-	fmt.Printf("🔧 Initializing VTPassService with:\n")
-	fmt.Printf("   API Key: %s\n", config.APIKey)
-	fmt.Printf("   Public Key: %s\n", config.PublicKey)
+	log.Printf("🔧 Initializing VTPassService with:\n")
+	log.Printf("   API Key: %s\n", config.APIKey)
+	log.Printf("   Public Key: %s\n", config.PublicKey)
 	// Only show first 20 chars of secret if it's long enough
 	if len(config.SecretKey) > 20 {
-		fmt.Printf("   Secret Key: %s...\n", config.SecretKey[:20])
+		log.Printf("   Secret Key: %s...\n", config.SecretKey[:20])
 	} else {
-		fmt.Printf("   Secret Key: %s\n", config.SecretKey)
+		log.Printf("   Secret Key: %s\n", config.SecretKey)
 	}
-	fmt.Printf("   Base URL: %s\n", baseURL)
-	fmt.Printf("   Is Sandbox: %v\n", config.IsSandbox)
+	log.Printf("   Base URL: %s\n", baseURL)
+	log.Printf("   Is Sandbox: %v\n", config.IsSandbox)
 	
 	return &VTPassService{
 		apiKey:    config.APIKey,
@@ -285,7 +286,7 @@ func (s *VTPassService) RequeryTransaction(ctx context.Context, requestID string
 	}
 
 	// Log raw response for debugging
-	fmt.Printf("VTPass Raw Response (Status %d): %s\n", resp.StatusCode, string(body))
+	log.Printf("VTPass Raw Response (Status %d): %s\n", resp.StatusCode, string(body))
 
 	var vtpassResp VTPassResponse
 	if err := json.Unmarshal(body, &vtpassResp); err != nil {
@@ -331,7 +332,7 @@ func (s *VTPassService) purchase(ctx context.Context, request VTPassPurchaseRequ
 	}
 
 	// Log raw response for debugging
-	fmt.Printf("VTPass Raw Response (Status %d): %s\n", resp.StatusCode, string(body))
+	log.Printf("VTPass Raw Response (Status %d): %s\n", resp.StatusCode, string(body))
 
 	var vtpassResp VTPassResponse
 	if err := json.Unmarshal(body, &vtpassResp); err != nil {

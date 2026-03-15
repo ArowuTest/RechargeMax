@@ -377,6 +377,7 @@ func initServices(repos *Repositories, config *Config, db *gorm.DB) *Services {
 		repos.Wallet,
 		repos.WalletTransaction,
 		paymentService,
+		db,
 	)
 
 	affiliateService := services.NewAffiliateService(
@@ -430,6 +431,8 @@ func initServices(repos *Repositories, config *Config, db *gorm.DB) *Services {
 		db, // Database connection for advisory locks
 	)
 
+	fraudDetectionService := services.NewFraudDetectionService(db)
+
 	rechargeService := services.NewRechargeService(
 		repos.Transaction, // RechargeRepository (alias)
 		repos.User,
@@ -441,7 +444,8 @@ func initServices(repos *Repositories, config *Config, db *gorm.DB) *Services {
 		paymentService,
 		affiliateService,
 		spinService,
-			db,
+		fraudDetectionService,
+		db,
 			config.BackendURL,
 			config.FrontendURL,
 		)
@@ -469,15 +473,17 @@ func initServices(repos *Repositories, config *Config, db *gorm.DB) *Services {
 		repos.OTP,
 		repos.User,
 		config.JWTSecret,
-		24 * time.Hour,
+		config.AdminJWTSecret,
+		24*time.Hour,
 		config.TermiiKey,
-		"production",
+		config.Environment,
+		notificationService, // BUG-004: wire NotificationService for production SMS
 	)
 
-	// TokenService requires TokenBlacklistRepository - using nil for now
-	var tokenService *services.TokenService = nil
+	// Wire TokenBlacklistRepository and TokenService (SEC-003)
+	tokenBlacklistRepo := persistence.NewTokenBlacklistRepository(db)
+	tokenService := services.NewTokenService(tokenBlacklistRepo)
 
-	fraudDetectionService := services.NewFraudDetectionService()
 
 	// Initialize new services
 	subscriptionTierService := services.NewSubscriptionTierService(
@@ -649,6 +655,9 @@ func setupRouter(hdlrs *Handlers, svcs *Services, db *gorm.DB) *gin.Engine {
 	router.Use(middleware.RequestSizeLimitMiddleware(10 * 1024 * 1024)) // 10MB default limit
 	router.Use(middleware.RateLimitMiddleware(100))      // 100 requests per minute
 
+	// INFRA-001: initialise PostgreSQL-backed CSRF token store
+	middleware.InitCSRF(db)
+
 	// Health check (no auth required)
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
@@ -659,6 +668,9 @@ func setupRouter(hdlrs *Handlers, svcs *Services, db *gorm.DB) *gin.Engine {
 		})
 	})
 
+	// CSRF token endpoint (SEC-007) — call this before any state-changing request
+	router.GET("/csrf-token", middleware.GetCSRFTokenHandler())
+
 	// API v1
 	v1 := router.Group("/api/v1")
 	{
@@ -668,7 +680,7 @@ func setupRouter(hdlrs *Handlers, svcs *Services, db *gorm.DB) *gin.Engine {
 		// OTP rate limiting is handled within the handler itself
 		{
 			auth.POST("/send-otp", middleware.OTPRateLimit(otpLimiter), hdlrs.Auth.SendOTP)
-			auth.POST("/verify-otp", hdlrs.Auth.VerifyOTP)
+			auth.POST("/verify-otp", middleware.OTPRateLimit(otpLimiter), hdlrs.Auth.VerifyOTP)
 		}
 
 			// Network routes (public)
@@ -753,7 +765,8 @@ func setupRouter(hdlrs *Handlers, svcs *Services, db *gorm.DB) *gin.Engine {
 
 		// Protected routes (require authentication)
 		protected := v1.Group("")
-		protected.Use(middleware.AuthMiddleware(svcs.Auth))
+		protected.Use(middleware.AuthMiddleware(svcs.Auth, svcs.Token))
+		protected.Use(middleware.CSRFMiddleware()) // SEC-007: CSRF protection on all state-changing endpoints
 		{
 				// User routes
 				user := protected.Group("/user")
@@ -829,7 +842,7 @@ func setupRouter(hdlrs *Handlers, svcs *Services, db *gorm.DB) *gin.Engine {
 
 			// Admin routes (require admin authentication)
 			admin := v1.Group("/admin")
-			admin.Use(middleware.AdminAuthMiddleware(svcs.Auth))
+			admin.Use(middleware.AdminAuthMiddleware(svcs.Auth, svcs.Token))
 			admin.Use(middleware.AdminAuditMiddleware(db))
 			{
 			admin.GET("/dashboard", hdlrs.Admin.GetDashboardStats)

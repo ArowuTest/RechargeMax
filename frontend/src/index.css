@@ -71,22 +71,58 @@
 }
 
 @layer components {
+  /* ── Spin wheel ── */
   .animate-spin-wheel {
     animation: spin-wheel 4s cubic-bezier(0.23, 1, 0.32, 1) forwards;
   }
-  
   @keyframes spin-wheel {
-    0% { transform: rotate(0deg); }
+    0%   { transform: rotate(0deg); }
     100% { transform: rotate(1800deg); }
   }
-  
+
+  /* ── Bounce in ── */
   .animate-bounce-in {
     animation: bounce-in 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
   }
-  
   @keyframes bounce-in {
-    0% { transform: scale(0); opacity: 0; }
-    50% { transform: scale(1.1); opacity: 0.8; }
-    100% { transform: scale(1); opacity: 1; }
+    0%   { transform: scale(0);   opacity: 0; }
+    50%  { transform: scale(1.1); opacity: 0.8; }
+    100% { transform: scale(1);   opacity: 1; }
+  }
+
+  /* ── Slide up (recharge success alert) ── */
+  .animate-slide-up {
+    animation: slide-up 0.4s ease-out;
+  }
+  @keyframes slide-up {
+    0%   { transform: translateY(16px); opacity: 0; }
+    100% { transform: translateY(0);    opacity: 1; }
+  }
+
+  /* ── Float up (hero particles) ── */
+  .animate-float-up {
+    animation: float-up linear infinite;
+  }
+  @keyframes float-up {
+    0%   { transform: translateY(0)    scale(1);    opacity: 0.6; }
+    80%  { opacity: 0.4; }
+    100% { transform: translateY(-600px) scale(0.5); opacity: 0; }
+  }
+
+  /* ── Ticker slide in ── */
+  .animate-ticker-in {
+    animation: ticker-in 0.4s ease-out;
+  }
+  @keyframes ticker-in {
+    0%   { transform: translateY(12px); opacity: 0; }
+    100% { transform: translateY(0);    opacity: 1; }
+  }
+
+  /* ── Gradient utilities ── */
+  .bg-gradient-nigeria {
+    background: linear-gradient(135deg, #008751 0%, #004d30 100%);
+  }
+  .bg-gradient-primary {
+    background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
   }
 }

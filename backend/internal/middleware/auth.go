@@ -195,7 +195,12 @@ func SetAuthCookie(c *gin.Context, token, tokenType string, maxAgeSecs int) {
 	}
 	// Determine if we're in production (HTTPS)
 	secure := os.Getenv("GIN_MODE") == "release"
-	c.SetSameSite(http.SameSiteStrictMode)
+	// SameSiteLaxMode: required when frontend and backend are on different
+	// subdomains (e.g. Render deployment). Strict would silently drop the
+	// cookie on every cross-origin request, breaking authentication.
+	// Lax still blocks cookies on cross-origin sub-resource requests (XHR/fetch)
+	// while allowing them on top-level navigations.
+	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie(
 		cookieName, // name
 		token,      // value
@@ -214,7 +219,7 @@ func ClearAuthCookie(c *gin.Context, tokenType string) {
 		cookieName = "admin_auth_token"
 	}
 	secure := os.Getenv("GIN_MODE") == "release"
-	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie(cookieName, "", -1, "/", "", secure, true)
 }
 

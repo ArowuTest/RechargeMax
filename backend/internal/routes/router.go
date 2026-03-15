@@ -247,6 +247,7 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	admin := v1.Group("/admin")
 	admin.Use(middleware.AdminAuthMiddleware(svcs.Auth, svcs.Token))
 	admin.Use(middleware.AdminAuditMiddleware(db))
+	admin.Use(middleware.CSRFMiddleware()) // SEC-007 — admin routes mutate state and use httpOnly cookies
 
 	// Dashboard
 	admin.GET("/dashboard", hdlrs.Admin.GetDashboardStats)

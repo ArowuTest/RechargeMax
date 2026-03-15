@@ -20,6 +20,7 @@ import (
 	"rechargemax/internal/domain/entities"
 	"rechargemax/internal/domain/repositories"
 	"rechargemax/internal/errors"
+	"rechargemax/internal/utils"
 )
 
 // SpinService handles wheel spin operations
@@ -101,8 +102,7 @@ Message:        fmt.Sprintf("You have %d spin(s) available!", pendingSpins),
 }, nil
 }
 
-	// Check if user has made a qualifying transaction (₦1000+) today
-	// Query transactions table directly by MSISDN
+	// Check if user has made qualifying transactions today and apply daily tier limit
 	if s.db == nil {
 		return &SpinEligibilityResponse{
 			Eligible: false,
@@ -110,22 +110,47 @@ Message:        fmt.Sprintf("You have %d spin(s) available!", pendingSpins),
 		}, nil
 	}
 	today := time.Now().Truncate(24 * time.Hour)
-	var transaction entities.Transactions
-	txErr := s.db.Where("msisdn = ? AND amount >= ? AND status = ? AND created_at >= ?",
-		msisdn, int64(100000), "SUCCESS", today).First(&transaction).Error
-	
-	if txErr != nil {
+
+	// Sum today's successful recharge amount for this MSISDN
+	var todayAmountKobo int64
+	s.db.Model(&entities.Transactions{}).
+		Where("msisdn = ? AND status = ? AND created_at >= ?", msisdn, "SUCCESS", today).
+		Select("COALESCE(SUM(amount), 0)").
+		Scan(&todayAmountKobo)
+
+	if todayAmountKobo < 100000 { // minimum ₦1,000
 		return &SpinEligibilityResponse{
 			Eligible: false,
 			Message:  "No qualifying recharges found. Recharge ₦1000+ to earn a spin!",
 		}, nil
 	}
 
-return &SpinEligibilityResponse{
-Eligible:       true,
-AvailableSpins: 1,
-Message:        "You're eligible to spin!",
-}, nil
+	// Determine how many spins the tier allows today
+	dailyLimit := 1 // default fallback
+	tierCalc := utils.NewSpinTierCalculatorDB(s.db)
+	if tier, err := tierCalc.GetSpinTierFromDB(todayAmountKobo); err == nil && tier.SpinsPerDay > 0 {
+		dailyLimit = tier.SpinsPerDay
+	}
+
+	// Count spins already used today
+	var spinsToday int64
+	s.db.Model(&entities.WheelSpin{}).
+		Where("msisdn = ? AND created_at >= ?", msisdn, today).
+		Count(&spinsToday)
+
+	available := int64(dailyLimit) - spinsToday
+	if available <= 0 {
+		return &SpinEligibilityResponse{
+			Eligible: false,
+			Message:  fmt.Sprintf("Daily spin limit reached (%d/%d used today). Recharge more to unlock additional spins!", spinsToday, dailyLimit),
+		}, nil
+	}
+
+	return &SpinEligibilityResponse{
+		Eligible:       true,
+		AvailableSpins: available,
+		Message:        fmt.Sprintf("You have %d spin(s) available today!", available),
+	}, nil
 }
 
 // PlaySpin plays the wheel spin
@@ -808,6 +833,18 @@ func (s *SpinService) CreatePrize(ctx context.Context, data map[string]interface
 	if probability < 0 || probability > 100 {
 		return nil, fmt.Errorf("probability must be between 0 and 100")
 	}
+
+	// Enforce global cap: sum of all active prizes must not exceed 100%
+	if s.db != nil {
+		var currentTotal float64
+		s.db.Model(&entities.WheelPrizes{}).
+			Where("is_active = ?", true).
+			Select("COALESCE(SUM(probability), 0)").
+			Scan(&currentTotal)
+		if currentTotal+probability > 100 {
+			return nil, fmt.Errorf("adding this prize (%.2f%%) would exceed 100%% total probability (current total: %.2f%%)", probability, currentTotal)
+		}
+	}
 	
 	// Extract optional fields
 	colorScheme, _ := data["color"].(string)
@@ -904,6 +941,20 @@ func (s *SpinService) UpdatePrize(ctx context.Context, prizeID string, data map[
 		prize.PrizeValue = int64(value)
 	}
 	if prob, ok := data["probability"].(float64); ok {
+		if prob < 0 || prob > 100 {
+			return nil, fmt.Errorf("probability must be between 0 and 100")
+		}
+		// Enforce global cap: sum excluding this prize + new value must not exceed 100%
+		if s.db != nil {
+			var otherTotal float64
+			s.db.Model(&entities.WheelPrizes{}).
+				Where("is_active = ? AND id != ?", true, prizeUUID).
+				Select("COALESCE(SUM(probability), 0)").
+				Scan(&otherTotal)
+			if otherTotal+prob > 100 {
+				return nil, fmt.Errorf("updating this prize to %.2f%% would exceed 100%% total probability (other prizes total: %.2f%%)", prob, otherTotal)
+			}
+		}
 		prize.Probability = prob
 	}
 	if isActive, ok := data["is_active"].(bool); ok {

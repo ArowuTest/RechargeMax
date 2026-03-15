@@ -1,19 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import { apiClient } from '@/lib/api-client';
-
-
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { 
-  Gift, 
-  CheckCircle2, 
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Gift,
+  CheckCircle2,
   Clock,
   AlertCircle,
   Loader2,
-  Trophy
+  Trophy,
 } from 'lucide-react';
+
+// Claim details required for cash / physical prizes
+interface ClaimDetails {
+  account_number: string;
+  account_name: string;
+  bank_name: string;
+  bank_code: string;
+  address: string;
+  phone_number: string;
+}
+
+const EMPTY_CLAIM_DETAILS: ClaimDetails = {
+  account_number: '',
+  account_name: '',
+  bank_name: '',
+  bank_code: '',
+  address: '',
+  phone_number: '',
+};
 
 interface Prize {
   id: string;
@@ -39,6 +58,7 @@ const MyPrizesPanel: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [showClaimModal, setShowClaimModal] = useState(false);
   const [selectedPrize, setSelectedPrize] = useState<Prize | null>(null);
+  const [claimDetails, setClaimDetails] = useState<ClaimDetails>(EMPTY_CLAIM_DETAILS);
 
   useEffect(() => {
     fetchMyPrizes();
@@ -59,24 +79,49 @@ const MyPrizesPanel: React.FC = () => {
 
   const handleClaimClick = (prize: Prize) => {
     setSelectedPrize(prize);
+    setClaimDetails(EMPTY_CLAIM_DETAILS);
     setShowClaimModal(true);
   };
 
+  const needsBankDetails = (prize: Prize) =>
+    prize.prizeType === 'CASH' || prize.prizeType === 'GOODS' || prize.prizeType === 'PHYSICAL';
+
   const handleConfirmClaim = async () => {
     if (!selectedPrize) return;
-    
+
+    // Validate bank details for cash/physical prizes
+    if (needsBankDetails(selectedPrize)) {
+      if (!claimDetails.account_number || !claimDetails.account_name || !claimDetails.bank_name) {
+        setError('Please fill in your bank account number, account name, and bank name.');
+        return;
+      }
+    }
+
     setClaiming(selectedPrize.id);
     setSuccess(null);
     setError(null);
     setShowClaimModal(false);
-    
+
     try {
-      await apiClient.post(`/winner/${selectedPrize.id}/claim`);
-      
-      setSuccess('Prize claimed successfully! Your reward will be delivered shortly.');
-      setTimeout(() => setSuccess(null), 5000);
-      
-      // Refresh prizes
+      const body = needsBankDetails(selectedPrize)
+        ? {
+            account_number: claimDetails.account_number,
+            account_name:   claimDetails.account_name,
+            bank_name:      claimDetails.bank_name,
+            bank_code:      claimDetails.bank_code,
+            address:        claimDetails.address,
+            phone_number:   claimDetails.phone_number,
+          }
+        : {};
+
+      await apiClient.post(`/winner/${selectedPrize.id}/claim`, body);
+
+      setSuccess(
+        needsBankDetails(selectedPrize)
+          ? 'Claim submitted! Bank details saved. Payment will be processed within 24-48 hours.'
+          : 'Prize claimed successfully! Your reward will be delivered shortly.',
+      );
+      setTimeout(() => setSuccess(null), 8000);
       await fetchMyPrizes();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to claim prize');
@@ -312,11 +357,79 @@ const MyPrizesPanel: React.FC = () => {
                   </div>
                 </div>
 
-                <Alert>
-                  <AlertDescription>
-                    Your prize will be delivered to your registered phone number within a few minutes.
-                  </AlertDescription>
-                </Alert>
+                {/* Bank / address details for CASH and GOODS prizes */}
+                {selectedPrize && needsBankDetails(selectedPrize) ? (
+                  <div className="space-y-3">
+                    <p className="text-sm font-medium text-gray-700">
+                      Please provide your bank details so we can transfer your prize.
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="col-span-2">
+                        <Label htmlFor="acct-num">Account Number *</Label>
+                        <Input
+                          id="acct-num"
+                          placeholder="0123456789"
+                          value={claimDetails.account_number}
+                          onChange={(e) => setClaimDetails((p) => ({ ...p, account_number: e.target.value }))}
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <Label htmlFor="acct-name">Account Name *</Label>
+                        <Input
+                          id="acct-name"
+                          placeholder="Full name on account"
+                          value={claimDetails.account_name}
+                          onChange={(e) => setClaimDetails((p) => ({ ...p, account_name: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="bank-name">Bank Name *</Label>
+                        <Input
+                          id="bank-name"
+                          placeholder="e.g. GTBank"
+                          value={claimDetails.bank_name}
+                          onChange={(e) => setClaimDetails((p) => ({ ...p, bank_name: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="bank-code">Bank Code</Label>
+                        <Input
+                          id="bank-code"
+                          placeholder="058"
+                          value={claimDetails.bank_code}
+                          onChange={(e) => setClaimDetails((p) => ({ ...p, bank_code: e.target.value }))}
+                        />
+                      </div>
+                      {(selectedPrize.prizeType === 'GOODS' ||
+                        selectedPrize.prizeType === 'PHYSICAL') && (
+                        <div className="col-span-2">
+                          <Label htmlFor="address">Delivery Address</Label>
+                          <Input
+                            id="address"
+                            placeholder="Full delivery address"
+                            value={claimDetails.address}
+                            onChange={(e) => setClaimDetails((p) => ({ ...p, address: e.target.value }))}
+                          />
+                        </div>
+                      )}
+                      <div className="col-span-2">
+                        <Label htmlFor="phone-claim">Contact Phone</Label>
+                        <Input
+                          id="phone-claim"
+                          placeholder="0801 234 5678"
+                          value={claimDetails.phone_number}
+                          onChange={(e) => setClaimDetails((p) => ({ ...p, phone_number: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <Alert>
+                    <AlertDescription>
+                      Your prize will be delivered to your registered phone number within a few minutes.
+                    </AlertDescription>
+                  </Alert>
+                )}
 
                 <div className="flex gap-3">
                   <Button

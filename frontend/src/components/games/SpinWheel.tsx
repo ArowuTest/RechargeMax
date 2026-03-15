@@ -2,108 +2,144 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { SPIN_PRIZES } from '@/lib/constants';
 import { formatCurrency } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
-import { Gift, Zap, RotateCcw } from 'lucide-react';
+import { Gift, Zap, RotateCcw, Loader2 } from 'lucide-react';
 import apiClient from '@/lib/api-client';
+
+// Fallback prizes used only when /spin/prizes is unreachable
+const FALLBACK_PRIZES = [
+  { name: '₦100 Airtime',   type: 'AIRTIME', value: 10000,  probability: 25, color: '#10b981' },
+  { name: '₦200 Airtime',   type: 'AIRTIME', value: 20000,  probability: 20, color: '#3b82f6' },
+  { name: '500MB Data',     type: 'DATA',    value: 50000,  probability: 15, color: '#8b5cf6' },
+  { name: '1GB Data',       type: 'DATA',    value: 100000, probability: 15, color: '#f59e0b' },
+  { name: '₦100 Cash',      type: 'CASH',    value: 10000,  probability: 10, color: '#ef4444' },
+  { name: '₦200 Cash',      type: 'CASH',    value: 20000,  probability: 8,  color: '#ec4899' },
+  { name: '₦500 Cash',      type: 'CASH',    value: 50000,  probability: 5,  color: '#fbbf24' },
+  { name: '₦1000 Cash',     type: 'CASH',    value: 100000, probability: 2,  color: '#6b7280' },
+];
+
+interface WheelPrize {
+  name: string;
+  type: string;
+  value: number;
+  probability: number;
+  color: string;
+}
 
 interface SpinWheelProps {
   isOpen: boolean;
   onClose: () => void;
   transactionAmount: number;
-  userPhone: string; // User's phone number for guest spin
+  userPhone: string;
   onPrizeWon?: (prize: any) => void;
 }
 
-export const SpinWheel: React.FC<SpinWheelProps> = ({ 
-  isOpen, 
-  onClose, 
+export const SpinWheel: React.FC<SpinWheelProps> = ({
+  isOpen,
+  onClose,
   transactionAmount,
   userPhone,
-  onPrizeWon 
+  onPrizeWon,
 }) => {
   const { toast } = useToast();
+  const [prizes, setPrizes] = useState<WheelPrize[]>(FALLBACK_PRIZES);
+  const [loadingPrizes, setLoadingPrizes] = useState(true);
   const [isSpinning, setIsSpinning] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [selectedPrize, setSelectedPrize] = useState<any>(null);
   const [hasSpun, setHasSpun] = useState(false);
 
-  // Calculate segment angles
-  const segmentAngle = 360 / SPIN_PRIZES.length;
-  
+  // Fetch live prizes from backend when the wheel opens
+  useEffect(() => {
+    if (!isOpen) return;
+    setLoadingPrizes(true);
+    apiClient
+      .get('/spin/prizes')
+      .then((res) => {
+        const raw: any[] = res.data?.data ?? [];
+        if (raw.length > 0) {
+          const mapped: WheelPrize[] = raw
+            .filter((p) => p.is_active !== false)
+            .map((p) => ({
+              name:        p.prize_name ?? p.name ?? 'Prize',
+              type:        (p.prize_type ?? p.type ?? 'AIRTIME').toUpperCase(),
+              value:       Number(p.prize_value ?? p.value ?? 0),
+              probability: Number(p.probability ?? 0),
+              color:       p.color_scheme ?? p.color ?? '#6b7280',
+            }));
+          if (mapped.length > 0) setPrizes(mapped);
+        }
+      })
+      .catch(() => {
+        // Silently fall back to FALLBACK_PRIZES; wheel still works
+      })
+      .finally(() => setLoadingPrizes(false));
+  }, [isOpen]);
+
+  const segmentAngle = 360 / prizes.length;
+
   const spinWheel = async () => {
     if (isSpinning || hasSpun) return;
-    
     setIsSpinning(true);
-    
+
     try {
-      // Call backend API to play spin - SECURITY: Prize determined server-side
-      const response = await apiClient.post('/spin/play', {
-        msisdn: userPhone
-      });
-      
+      // SECURITY: prize is always determined server-side
+      const response = await apiClient.post('/spin/play', { msisdn: userPhone });
+
       if (!response.data.success) {
         throw new Error(response.data.error || 'Failed to spin');
       }
-      
+
       const spinResult = response.data.data;
-      
-      // Find the matching prize from SPIN_PRIZES based on backend response
-      const winningPrize = SPIN_PRIZES.find(p => 
-        p.type === spinResult.prize_type && 
-        p.value === spinResult.prize_value
-      ) || SPIN_PRIZES.find(p => p.name === spinResult.prize_won);
-      
-      if (!winningPrize) {
-        console.error('Prize not found in SPIN_PRIZES:', spinResult);
-        throw new Error('Prize configuration error');
-      }
-      
-      // Calculate rotation to land on winning prize
-      const prizeIndex = SPIN_PRIZES.findIndex(p => p.name === winningPrize.name);
-      const targetAngle = (prizeIndex * segmentAngle) + (segmentAngle / 2);
-      const spins = 5 + Math.random() * 3; // 5-8 full rotations for visual effect
-      const finalRotation = (spins * 360) + (360 - targetAngle);
-      
-      setRotation(prev => prev + finalRotation);
-      
-      // Show result after animation
+
+      // Match backend result to a wheel segment — fall back to first prize if nothing matches
+      const winningPrize: WheelPrize =
+        prizes.find(
+          (p) => p.type === spinResult.prize_type && p.value === spinResult.prize_value,
+        ) ??
+        prizes.find((p) => p.name === spinResult.prize_won) ??
+        prizes[0] ?? { name: spinResult.prize_won ?? 'Prize', type: spinResult.prize_type ?? 'AIRTIME', value: 0, probability: 0, color: '#6b7280' };
+
+      // Animate to the winning segment
+      const prizeIndex = prizes.findIndex((p) => p.name === winningPrize.name);
+      const targetAngle = prizeIndex * segmentAngle + segmentAngle / 2;
+      const spins = 5 + Math.random() * 3;
+      const finalRotation = spins * 360 + (360 - targetAngle);
+      setRotation((prev) => prev + finalRotation);
+
       setTimeout(() => {
         setIsSpinning(false);
         setSelectedPrize({ ...winningPrize, claimStatus: spinResult.claim_status });
         setHasSpun(true);
-        
-        // Show enhanced toast notification
-        // PERF-002: Backend returns PROVISIONING for async airtime/data prizes.
-        // Show "being processed" copy instead of "immediately credited" to set correct expectations.
+
         const isProvisioning = spinResult.claim_status === 'PROVISIONING';
-        const claimInstructions = winningPrize.type === 'AIRTIME' || winningPrize.type === 'DATA'
-          ? isProvisioning
-            ? 'Your prize is being processed — it will be credited to your phone within 5-10 minutes. Check Dashboard for status updates.'
-            : 'Login with your phone number to claim. Prize will be automatically credited within 5-10 minutes.'
-          : winningPrize.type === 'CASH'
-          ? 'Login with your phone number, then go to Dashboard → Prize Claims to complete bank details form.'
-          : 'Login to see your updated account.';
-        
+        const claimInstructions =
+          winningPrize.type === 'AIRTIME' || winningPrize.type === 'DATA'
+            ? isProvisioning
+              ? 'Your prize is being processed — it will be credited within 5-10 minutes.'
+              : 'Login and check Dashboard → My Prizes for status.'
+            : winningPrize.type === 'CASH'
+            ? 'Login, then go to Dashboard → Prize Claims to submit your bank details.'
+            : 'Login to see your updated account.';
+
         toast({
-          title: "🎉 Congratulations! You Won!",
+          title: '🎉 Congratulations! You Won!',
           description: `${winningPrize.name}! ${claimInstructions}`,
-          duration: 10000, // Show for 10 seconds
+          duration: 10000,
         });
-        
-        // Call the prize won callback
+
         onPrizeWon?.(winningPrize);
       }, 4000);
-      
     } catch (error: any) {
-      console.error('Spin error:', error);
       setIsSpinning(false);
-      
       toast({
-        title: "Spin Failed",
-        description: error.response?.data?.error || error.message || 'Failed to spin the wheel. Please try again.',
-        variant: "destructive",
+        title: 'Spin Failed',
+        description:
+          error.response?.data?.error ??
+          error.message ??
+          'Failed to spin the wheel. Please try again.',
+        variant: 'destructive',
         duration: 5000,
       });
     }
@@ -132,65 +168,72 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Wheel Container */}
-          <div className="relative mx-auto w-80 h-80">
-            {/* Wheel */}
-            <div 
-              className="w-full h-full rounded-full border-4 border-gray-300 relative overflow-hidden transition-transform duration-4000 ease-out"
-              style={{ 
-                transform: `rotate(${rotation}deg)`,
-                background: `conic-gradient(${SPIN_PRIZES.map((prize, index) => 
-                  `${prize.color} ${index * segmentAngle}deg ${(index + 1) * segmentAngle}deg`
-                ).join(', ')})`
-              }}
-            >
-              {/* Prize Labels */}
-              {SPIN_PRIZES.map((prize, index) => {
-                const angle = (index * segmentAngle) + (segmentAngle / 2);
-                const radian = (angle * Math.PI) / 180;
-                const x = Math.cos(radian) * 120;
-                const y = Math.sin(radian) * 120;
-                
-                return (
-                  <div
-                    key={prize.name}
-                    className="absolute text-white text-xs font-bold text-center"
-                    style={{
-                      left: `calc(50% + ${x}px - 30px)`,
-                      top: `calc(50% + ${y}px - 10px)`,
-                      width: '60px',
-                      transform: `rotate(${angle}deg)`,
-                      textShadow: '1px 1px 2px rgba(0,0,0,0.8)'
-                    }}
-                  >
-                    {prize.name.split(' ').map((word, i) => (
-                      <div key={i}>{word}</div>
-                    ))}
-                  </div>
-                );
-              })}
+          {loadingPrizes ? (
+            <div className="flex justify-center items-center h-80">
+              <Loader2 className="w-10 h-10 animate-spin text-primary" />
             </div>
-            
-            {/* Center Spin Button */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <Button
-                onClick={spinWheel}
-                disabled={isSpinning || hasSpun}
-                className="w-20 h-20 rounded-full bg-white text-primary border-4 border-primary hover:bg-gray-50 disabled:opacity-50"
-                size="lg"
+          ) : (
+            <div className="relative mx-auto w-80 h-80">
+              {/* Spinning disc */}
+              <div
+                className="w-full h-full rounded-full border-4 border-gray-300 relative overflow-hidden transition-transform duration-[4000ms] ease-out"
+                style={{
+                  transform: `rotate(${rotation}deg)`,
+                  background: `conic-gradient(${prizes
+                    .map(
+                      (prize, i) =>
+                        `${prize.color} ${i * segmentAngle}deg ${(i + 1) * segmentAngle}deg`,
+                    )
+                    .join(', ')})`,
+                }}
               >
-                {isSpinning ? (
-                  <RotateCcw className="w-8 h-8 animate-spin" />
-                ) : (
-                  <span className="font-bold text-lg">SPIN</span>
-                )}
-              </Button>
+                {prizes.map((prize, index) => {
+                  const angle = index * segmentAngle + segmentAngle / 2;
+                  const radian = (angle * Math.PI) / 180;
+                  const x = Math.cos(radian) * 120;
+                  const y = Math.sin(radian) * 120;
+                  return (
+                    <div
+                      key={prize.name}
+                      className="absolute text-white text-xs font-bold text-center"
+                      style={{
+                        left: `calc(50% + ${x}px - 30px)`,
+                        top: `calc(50% + ${y}px - 10px)`,
+                        width: '60px',
+                        transform: `rotate(${angle}deg)`,
+                        textShadow: '1px 1px 2px rgba(0,0,0,0.8)',
+                      }}
+                    >
+                      {prize.name.split(' ').map((word, i) => (
+                        <div key={i}>{word}</div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Centre spin button */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Button
+                  onClick={spinWheel}
+                  disabled={isSpinning || hasSpun}
+                  className="w-20 h-20 rounded-full bg-white text-primary border-4 border-primary hover:bg-gray-50 disabled:opacity-50"
+                  size="lg"
+                >
+                  {isSpinning ? (
+                    <RotateCcw className="w-8 h-8 animate-spin" />
+                  ) : (
+                    <span className="font-bold text-lg">SPIN</span>
+                  )}
+                </Button>
+              </div>
+
+              {/* Pointer */}
+              <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-2">
+                <div className="w-0 h-0 border-l-4 border-r-4 border-b-8 border-l-transparent border-r-transparent border-b-red-500" />
+              </div>
             </div>
-            
-            {/* Pointer */}
-            <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-2">
-              <div className="w-0 h-0 border-l-4 border-r-4 border-b-8 border-l-transparent border-r-transparent border-b-red-500"></div>
-            </div>
-          </div>
+          )}
 
           {/* Prize Result */}
           {selectedPrize && (
@@ -208,57 +251,43 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
                   {selectedPrize.type === 'DRAW_TICKETS' && 'Extra Draw Entries'}
                 </Badge>
               </div>
-              
-              {/* Prize Claiming Instructions - Enhanced */}
-              <div className="bg-gradient-to-r from-blue-50 to-green-50 border-2 border-blue-300 p-6 rounded-xl text-left shadow-lg animate-pulse">
+
+              <div className="bg-gradient-to-r from-blue-50 to-green-50 border-2 border-blue-300 p-6 rounded-xl text-left shadow-lg">
                 <h4 className="font-bold text-lg text-blue-900 mb-4 flex items-center gap-2">
-                  🎁 <span className="bg-yellow-200 px-2 py-1 rounded">IMPORTANT: How to Claim Your Prize</span>
+                  🎁{' '}
+                  <span className="bg-yellow-200 px-2 py-1 rounded">
+                    IMPORTANT: How to Claim Your Prize
+                  </span>
                 </h4>
+                {(selectedPrize.type === 'AIRTIME' || selectedPrize.type === 'DATA') && (
+                  <div className="text-sm text-blue-700 space-y-1">
+                    <p>
+                      {selectedPrize.type === 'AIRTIME' ? '📱' : '📶'}{' '}
+                      <strong>{selectedPrize.type === 'AIRTIME' ? 'Airtime' : 'Data'} Prize:</strong>{' '}
+                      {selectedPrize.name}
+                    </p>
+                    {selectedPrize.claimStatus === 'PROVISIONING' ? (
+                      <>
+                        <p>⏳ Your prize is <strong>being processed</strong></p>
+                        <p>1. It will be credited within <strong>5-10 minutes</strong></p>
+                        <p>2. <strong>Login</strong> and check <strong>Dashboard → My Prizes</strong> for status</p>
+                      </>
+                    ) : (
+                      <>
+                        <p>1. <strong>Login</strong> with your phone number</p>
+                        <p>2. Prize will be <strong>automatically credited</strong> to your phone</p>
+                        <p>3. Credited within <strong>5-10 minutes</strong></p>
+                      </>
+                    )}
+                  </div>
+                )}
                 {selectedPrize.type === 'CASH' && (
                   <div className="text-sm text-blue-700 space-y-1">
                     <p>💰 <strong>Cash Prize:</strong> {selectedPrize.name}</p>
-                    <p>1. <strong>Login</strong> with your phone number (MSISDN)</p>
-                    <p>2. Go to your <strong>Dashboard</strong> → <strong>Prize Claims</strong></p>
+                    <p>1. <strong>Login</strong> with your phone number</p>
+                    <p>2. Go to <strong>Dashboard → Prize Claims</strong></p>
                     <p>3. Complete the <strong>Bank Details Form</strong></p>
-                    <p>4. Cash will be transferred within <strong>24-48 hours</strong></p>
-                  </div>
-                )}
-                {selectedPrize.type === 'AIRTIME' && (
-                  <div className="text-sm text-blue-700 space-y-1">
-                    <p>📱 <strong>Airtime Prize:</strong> {selectedPrize.name}</p>
-                    {selectedPrize.claimStatus === 'PROVISIONING' ? (
-                      <>
-                        <p>⏳ Your prize is <strong>being processed</strong></p>
-                        <p>1. Airtime will be credited within <strong>5-10 minutes</strong></p>
-                        <p>2. <strong>Login</strong> and check <strong>Dashboard → My Prizes</strong> for status</p>
-                      </>
-                    ) : (
-                      <>
-                        <p>1. <strong>Login</strong> with your phone number (MSISDN)</p>
-                        <p>2. Prize will be <strong>automatically credited</strong> to your phone</p>
-                        <p>3. Check your <strong>Dashboard</strong> for claim status</p>
-                        <p>4. Airtime credited within <strong>5-10 minutes</strong></p>
-                      </>
-                    )}
-                  </div>
-                )}
-                {selectedPrize.type === 'DATA' && (
-                  <div className="text-sm text-blue-700 space-y-1">
-                    <p>📶 <strong>Data Prize:</strong> {selectedPrize.name}</p>
-                    {selectedPrize.claimStatus === 'PROVISIONING' ? (
-                      <>
-                        <p>⏳ Your prize is <strong>being processed</strong></p>
-                        <p>1. Data will be credited within <strong>5-10 minutes</strong></p>
-                        <p>2. <strong>Login</strong> and check <strong>Dashboard → My Prizes</strong> for status</p>
-                      </>
-                    ) : (
-                      <>
-                        <p>1. <strong>Login</strong> with your phone number (MSISDN)</p>
-                        <p>2. Data will be <strong>automatically credited</strong> to your phone</p>
-                        <p>3. Check your <strong>Dashboard</strong> for claim status</p>
-                        <p>4. Data credited within <strong>5-10 minutes</strong></p>
-                      </>
-                    )}
+                    <p>4. Cash transferred within <strong>24-48 hours</strong></p>
                   </div>
                 )}
                 {selectedPrize.type === 'DRAW_TICKETS' && (
@@ -266,7 +295,6 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
                     <p>🎫 <strong>Draw Entries:</strong> {selectedPrize.value} extra entries</p>
                     <p>1. Entries <strong>automatically added</strong> to your account</p>
                     <p>2. <strong>Login</strong> to see updated entry count</p>
-                    <p>3. Check <strong>Daily Draws</strong> for upcoming draws</p>
                   </div>
                 )}
               </div>
@@ -277,7 +305,7 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
           <div className="flex gap-3">
             {!hasSpun ? (
               <>
-                <Button onClick={spinWheel} disabled={isSpinning} className="flex-1">
+                <Button onClick={spinWheel} disabled={isSpinning || loadingPrizes} className="flex-1">
                   {isSpinning ? 'Spinning...' : 'Spin Now!'}
                 </Button>
                 <Button variant="outline" onClick={handleClose}>
@@ -286,12 +314,8 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
               </>
             ) : (
               <div className="space-y-3 w-full">
-                {/* Prominent Login/Claim Button */}
-                <Button 
-                  onClick={() => {
-                    // Redirect to login page or show login modal
-                    window.location.href = '/login';
-                  }}
+                <Button
+                  onClick={() => (window.location.href = '/login')}
                   className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3"
                 >
                   📱 Login to Claim Your Prize
@@ -303,16 +327,13 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
             )}
           </div>
 
-          {/* Prizes List */}
+          {/* Prizes list */}
           <div className="border-t pt-4">
             <h4 className="font-semibold mb-3 text-center">Possible Prizes</h4>
             <div className="grid grid-cols-2 gap-2 text-sm">
-              {SPIN_PRIZES.map((prize) => (
+              {prizes.map((prize) => (
                 <div key={prize.name} className="flex items-center gap-2">
-                  <div 
-                    className="w-3 h-3 rounded-full" 
-                    style={{ backgroundColor: prize.color }}
-                  />
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: prize.color }} />
                   <span>{prize.name}</span>
                 </div>
               ))}

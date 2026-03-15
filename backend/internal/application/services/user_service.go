@@ -239,20 +239,12 @@ func (s *UserService) GetDashboard(ctx context.Context, msisdn string) (*Dashboa
 		stats["total_spins"] = totalSpins
 	}
 
-	// Pending spins
-	// Get all spins for this user and count pending ones
-	allSpins, err := s.spinRepo.FindByUserID(ctx, user.ID, 100, 0)
-	var pendingSpins int64 = 0
-	if err == nil {
-		for _, spin := range allSpins {
-			if spin.ClaimStatus == "PENDING" {
-				pendingSpins++
-			}
-		}
-		stats["pending_spins"] = pendingSpins
-	} else {
+	// Pending spins — single COUNT query (avoids O(N) fetch)
+	pendingSpins, err := s.spinRepo.CountPendingByUserID(ctx, user.ID)
+	if err != nil {
 		pendingSpins = 0
 	}
+	stats["pending_spins"] = pendingSpins
 
 	// Total points
 	stats["total_points"] = user.TotalPoints

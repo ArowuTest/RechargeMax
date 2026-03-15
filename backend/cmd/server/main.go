@@ -229,8 +229,8 @@ func initDatabase(dbURL string) (*gorm.DB, error) {
 
 	// STRATEGIC PRODUCTION APPROACH: Manual SQL Migrations
 	// GORM AutoMigrate is NOT production-ready (no version control, no rollback, race conditions)
-	// All schema changes MUST be done via versioned SQL migration files in /migrations/
-	// Run migrations manually: psql -f migrations/XX_migration_name.sql
+	// All schema changes MUST be done via versioned SQL files in /database/
+	// Run migrations: ./scripts/run_migrations.sh  (reads from database/migrations/)
 	// For production, use golang-migrate/migrate or pressly/goose for automated migration management
 	log.Println("✅ Database connection established (using manual migrations)")
 

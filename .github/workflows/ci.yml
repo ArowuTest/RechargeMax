@@ -24,21 +24,46 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+
     defaults:
       run:
         working-directory: backend
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22'
           cache: true
+
       - name: Download dependencies
         run: go mod download
+
+      - name: Apply database schema (tables)
+        env:
+          PGPASSWORD: rechargemax
+        run: |
+          for f in $(ls ../database/[0-9]*.sql | sort); do
+            psql -h localhost -U rechargemax -d rechargemax_test -f "$f" > /dev/null 2>&1 || true
+          done
+          echo "✓ Tables created"
+
+      - name: Apply migrations
+        env:
+          PGPASSWORD: rechargemax
+        run: |
+          for f in $(ls ../database/migrations/*.sql | sort); do
+            psql -h localhost -U rechargemax -d rechargemax_test -f "$f" > /dev/null 2>&1 || true
+          done
+          echo "✓ Migrations applied"
+
       - name: Vet
         run: go vet ./...
+
       - name: Build
         run: go build ./...
+
       - name: Test
         run: go test ./... -timeout 120s
         env:
@@ -52,17 +77,22 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+
       - name: Install dependencies
         run: npm ci
+
       - name: Type check
         run: npx tsc --noEmit
+
       - name: Lint
         run: npx eslint src --ext .ts,.tsx --max-warnings 0 || true
+
       - name: Build
         run: npm run build
         env:

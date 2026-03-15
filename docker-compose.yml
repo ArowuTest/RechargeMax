@@ -72,6 +72,7 @@ services:
       - rechargemax_network
     volumes:
       - ./backend/logs:/app/logs
+      - ./database:/app/database:ro   # migrations read from here at startup
 
   # Frontend (React/Vite)
   frontend:

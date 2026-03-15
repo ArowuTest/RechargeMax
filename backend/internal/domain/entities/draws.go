@@ -8,8 +8,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// Draws represents the draws table
-type Draws struct {
+// Draw represents the draws table
+type Draw struct {
 	ID       uuid.UUID `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
 	DrawCode string    `json:"draw_code" gorm:"column:draw_code;uniqueIndex;size:20"`
 
@@ -44,17 +44,17 @@ type Draws struct {
 	CompletedAt *time.Time     `json:"completed_at" gorm:"column:completed_at"`
 
 	// Associations
-	Winners []*DrawWinners `json:"winners,omitempty" gorm:"foreignKey:DrawID"`
-	Entries []*DrawEntries `json:"entries,omitempty" gorm:"foreignKey:DrawID"`
+	Winners []*DrawWinner `json:"winners,omitempty" gorm:"foreignKey:DrawID"`
+	Entries []*DrawEntry `json:"entries,omitempty" gorm:"foreignKey:DrawID"`
 }
 
-// TableName specifies the table name for Draws
-func (Draws) TableName() string {
+// TableName specifies the table name for Draw
+func (Draw) TableName() string {
 	return "draws"
 }
 
 // BeforeCreate hook
-func (d *Draws) BeforeCreate(tx *gorm.DB) error {
+func (d *Draw) BeforeCreate(tx *gorm.DB) error {
 	if d.ID == uuid.Nil {
 		d.ID = uuid.New()
 	}
@@ -62,17 +62,17 @@ func (d *Draws) BeforeCreate(tx *gorm.DB) error {
 }
 
 // IsActive checks if the draw is currently active
-func (d *Draws) IsActive() bool {
+func (d *Draw) IsActive() bool {
 	now := time.Now()
 	return d.Status == "ACTIVE" && now.After(d.StartTime) && now.Before(d.EndTime)
 }
 
 // IsUpcoming checks if the draw is upcoming
-func (d *Draws) IsUpcoming() bool {
+func (d *Draw) IsUpcoming() bool {
 	return d.Status == "UPCOMING" && time.Now().Before(d.StartTime)
 }
 
 // IsCompleted checks if the draw is completed
-func (d *Draws) IsCompleted() bool {
+func (d *Draw) IsCompleted() bool {
 	return d.Status == "COMPLETED"
 }

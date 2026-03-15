@@ -5,8 +5,8 @@ import (
 
 )
 
-// NetworkConfigs represents the network_configs table
-type NetworkConfigs struct {
+// NetworkConfig represents the network_configs table
+type NetworkConfig struct {
 	ID             string     `json:"id" gorm:"column:id;type:uuid;primaryKey;default:uuid_generate_v4()"` 
 	NetworkName    string     `json:"network_name" gorm:"column:network_name;not null" validate:"required"`
 	NetworkCode    string     `json:"network_code" gorm:"column:network_code;uniqueIndex;not null" validate:"required"`
@@ -23,7 +23,7 @@ type NetworkConfigs struct {
 	UpdatedAt      *time.Time `json:"updated_at" gorm:"column:updated_at"`
 }
 
-// TableName specifies the table name for NetworkConfigs
-func (NetworkConfigs) TableName() string {
+// TableName specifies the table name for NetworkConfig
+func (NetworkConfig) TableName() string {
 	return "network_configs"
 }

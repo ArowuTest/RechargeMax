@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+
+	"rechargemax/internal/domain/entities"
 )
 
 type PlatformSettingsHandler struct {
@@ -18,20 +19,6 @@ func NewPlatformSettingsHandler(db *gorm.DB) *PlatformSettingsHandler {
 	return &PlatformSettingsHandler{
 		db: db,
 	}
-}
-
-// PlatformSetting is the GORM model for the platform_settings table
-type PlatformSetting struct {
-	SettingKey   string    `gorm:"column:setting_key;primaryKey"`
-	SettingValue string    `gorm:"column:setting_value"`
-	Description  string    `gorm:"column:description"`
-	IsPublic     bool      `gorm:"column:is_public"`
-	CreatedAt    time.Time `gorm:"column:created_at"`
-	UpdatedAt    time.Time `gorm:"column:updated_at"`
-}
-
-func (PlatformSetting) TableName() string {
-	return "platform_settings"
 }
 
 // SettingItem represents a single setting
@@ -54,7 +41,7 @@ func (h *PlatformSettingsHandler) upsertSetting(key, value, description string) 
 
 // loadSettingsFromDB loads all settings from the database into a map
 func (h *PlatformSettingsHandler) loadSettingsFromDB() (map[string]string, error) {
-	var rows []PlatformSetting
+	var rows []entities.PlatformSetting
 	if err := h.db.Find(&rows).Error; err != nil {
 		return nil, err
 	}
@@ -67,48 +54,48 @@ func (h *PlatformSettingsHandler) loadSettingsFromDB() (map[string]string, error
 
 // defaultSettings provides fallback values when a key is not in the DB
 var defaultSettings = map[string]string{
-	"platform.name":                    "RechargeMax Rewards",
-	"platform.description":             "Gamified mobile recharge platform with rewards",
-	"platform.version":                 "1.0.0",
-	"platform.environment":             "development",
-	"branding.logo_url":                "",
-	"branding.primary_color":           "#4F46E5",
-	"branding.company_name":            "RechargeMax",
-	"branding.support_email":           "support@rechargemax.ng",
-	"branding.support_phone":           "+234-XXX-XXX-XXXX",
-	"features.daily_draw_enabled":      "true",
-	"features.spin_wheel_enabled":      "true",
-	"features.affiliates_enabled":      "true",
-	"features.ussd_enabled":            "true",
-	"features.daily_subscription_enabled": "true",
-	"points.points_per_naira":          "0.005",
-	"points.min_recharge_for_points":   "200",
-	"spin.enabled":                     "true",
-	"spin.min_recharge_amount":         "1000",
-	"spin.daily_spin_limit":            "10",
-	"spin.daily_spins":                 "3",
-	"daily_subscription.daily_price":   "20",
-	"daily_subscription.weekly_price":  "100",
-	"daily_subscription.monthly_price": "300",
-	"daily_subscription.daily_spins":   "3",
-	"daily_subscription.weekly_spins":  "25",
-	"daily_subscription.monthly_spins": "100",
-	"daily_subscription.auto_renewal":  "true",
+	"platform.name":                        "RechargeMax Rewards",
+	"platform.description":                 "Gamified mobile recharge platform with rewards",
+	"platform.version":                     "1.0.0",
+	"platform.environment":                 "development",
+	"branding.logo_url":                    "",
+	"branding.primary_color":               "#4F46E5",
+	"branding.company_name":                "RechargeMax",
+	"branding.support_email":               "support@rechargemax.ng",
+	"branding.support_phone":               "+234-XXX-XXX-XXXX",
+	"features.daily_draw_enabled":          "true",
+	"features.spin_wheel_enabled":          "true",
+	"features.affiliates_enabled":          "true",
+	"features.ussd_enabled":                "true",
+	"features.daily_subscription_enabled":  "true",
+	"points.points_per_naira":              "0.005",
+	"points.min_recharge_for_points":       "200",
+	"spin.enabled":                         "true",
+	"spin.min_recharge_amount":             "1000",
+	"spin.daily_spin_limit":                "10",
+	"spin.daily_spins":                     "3",
+	"daily_subscription.daily_price":       "20",
+	"daily_subscription.weekly_price":      "100",
+	"daily_subscription.monthly_price":     "300",
+	"daily_subscription.daily_spins":       "3",
+	"daily_subscription.weekly_spins":      "25",
+	"daily_subscription.monthly_spins":     "100",
+	"daily_subscription.auto_renewal":      "true",
 	"daily_subscription.grace_period_days": "3",
-	"recharge.provider":                "vtpass",
-	"recharge.mode":                    "sandbox",
-	"recharge.min_amount":              "50",
-	"recharge.max_amount":              "50000",
-	"recharge.commission_rate":         "2.5",
-	"security.jwt_expiry_hours":        "24",
-	"security.admin_jwt_expiry_hours":  "8",
-	"security.password_min_length":     "8",
-	"security.max_login_attempts":      "5",
-	"security.lockout_duration_minutes": "30",
-	"notifications.sms_enabled":        "true",
-	"notifications.email_enabled":      "true",
-	"notifications.sms_provider":       "termii",
-	"notifications.sms_sender_id":      "RechargeMax",
+	"recharge.provider":                    "vtpass",
+	"recharge.mode":                        "sandbox",
+	"recharge.min_amount":                  "50",
+	"recharge.max_amount":                  "50000",
+	"recharge.commission_rate":             "2.5",
+	"security.jwt_expiry_hours":            "24",
+	"security.admin_jwt_expiry_hours":      "8",
+	"security.password_min_length":         "8",
+	"security.max_login_attempts":          "5",
+	"security.lockout_duration_minutes":    "30",
+	"notifications.sms_enabled":            "true",
+	"notifications.email_enabled":          "true",
+	"notifications.sms_provider":           "termii",
+	"notifications.sms_sender_id":          "RechargeMax",
 }
 
 // buildSettingsMap merges DB values over defaults and groups by category
@@ -290,7 +277,7 @@ func (h *PlatformSettingsHandler) UpdateCategorySettings(c *gin.Context) {
 func (h *PlatformSettingsHandler) GetSetting(c *gin.Context) {
 	key := c.Param("key")
 
-	var setting PlatformSetting
+	var setting entities.PlatformSetting
 	err := h.db.Where("setting_key = ?", key).First(&setting).Error
 	if err != nil {
 		// Try default

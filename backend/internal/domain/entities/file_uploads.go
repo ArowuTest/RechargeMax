@@ -5,8 +5,8 @@ import (
 
 )
 
-// FileUploads represents the file_uploads table
-type FileUploads struct {
+// FileUpload represents the file_uploads table
+type FileUpload struct {
 	FileName    string     `json:"file_name" gorm:"column:file_name;not null" validate:"required"`
 	FilePath    string     `json:"file_path" gorm:"column:file_path;not null" validate:"required"`
 	FileSize    int        `json:"file_size" gorm:"column:file_size;not null" validate:"required"`
@@ -22,7 +22,7 @@ type FileUploads struct {
 	UpdatedAt   *time.Time `json:"updated_at" gorm:"column:updated_at"`
 }
 
-// TableName specifies the table name for FileUploads
-func (FileUploads) TableName() string {
+// TableName specifies the table name for FileUpload
+func (FileUpload) TableName() string {
 	return "file_uploads"
 }

@@ -6,8 +6,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// DrawWinners represents the draw_winners table
-type DrawWinners struct {
+// DrawWinner represents the draw_winners table
+type DrawWinner struct {
 	ID             uuid.UUID  `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
 	DrawID         uuid.UUID  `json:"draw_id" gorm:"column:draw_id;not null;index"`
 	UserID         *uuid.UUID `json:"user_id" gorm:"column:user_id;index"`
@@ -25,7 +25,7 @@ type DrawWinners struct {
 	ExpiresAt      *time.Time `json:"expires_at" gorm:"column:expires_at"`
 }
 
-// TableName specifies the table name for DrawWinners
-func (DrawWinners) TableName() string {
+// TableName specifies the table name for DrawWinner
+func (DrawWinner) TableName() string {
 	return "draw_winners"
 }

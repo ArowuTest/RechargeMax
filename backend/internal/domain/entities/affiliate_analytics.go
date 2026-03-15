@@ -5,8 +5,8 @@ import (
 
 )
 
-// AffiliateAnalytics represents the affiliate_analytics table
-type AffiliateAnalytics struct {
+// AffiliateAnalytic represents the affiliate_analytics table
+type AffiliateAnalytic struct {
 	AnalyticsDate           time.Time  `json:"analytics_date" gorm:"column:analytics_date;not null" validate:"required"`
 	TotalClicks             *int       `json:"total_clicks" gorm:"column:total_clicks"`
 	UniqueClicks            *int       `json:"unique_clicks" gorm:"column:unique_clicks;uniqueIndex"`
@@ -21,7 +21,7 @@ type AffiliateAnalytics struct {
 	UpdatedAt               *time.Time `json:"updated_at" gorm:"column:updated_at"`
 }
 
-// TableName specifies the table name for AffiliateAnalytics
-func (AffiliateAnalytics) TableName() string {
+// TableName specifies the table name for AffiliateAnalytic
+func (AffiliateAnalytic) TableName() string {
 	return "affiliate_analytics"
 }

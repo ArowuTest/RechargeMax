@@ -5,8 +5,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// ServicePricing represents the service_pricing table
-type ServicePricing struct {
+// ServicePrice represents the service_pricing table
+type ServicePrice struct {
 	Id                             uuid.UUID                 `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
 	NetworkProvider                string                    `json:"network_provider" gorm:"column:network_provider;not null"`
 	ServiceType                    string                    `json:"service_type" gorm:"column:service_type;not null"`
@@ -27,7 +27,7 @@ type ServicePricing struct {
 	UpdatedAt                      *time.Time                `json:"updated_at" gorm:"column:updated_at;autoUpdateTime"`
 }
 
-// TableName specifies the table name for ServicePricing
-func (ServicePricing) TableName() string {
+// TableName specifies the table name for ServicePrice
+func (ServicePrice) TableName() string {
 	return "service_pricing"
 }

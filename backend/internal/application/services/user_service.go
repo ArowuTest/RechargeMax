@@ -802,7 +802,7 @@ func (s *UserService) getUserSubscriptions(ctx context.Context, msisdn string) [
 
 	var result []SubscriptionItem
 	result = append(result, SubscriptionItem{
-		ID:              activeSub.Id,
+		ID:              activeSub.ID,
 		TransactionDate: activeSub.SubscriptionDate,
 		Reference:       activeSub.SubscriptionCode,
 		Amount:          activeSub.Amount,

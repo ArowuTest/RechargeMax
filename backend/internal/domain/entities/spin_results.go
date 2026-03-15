@@ -7,8 +7,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// SpinResults represents the spin_results table
-type SpinResults struct {
+// SpinResult represents the spin_results table
+type SpinResult struct {
 	ID            uuid.UUID  `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
 	SpinCode      string     `json:"spin_code" gorm:"column:spin_code;uniqueIndex;size:30"`
 	UserID        *uuid.UUID `json:"user_id" gorm:"column:user_id;index"`
@@ -52,18 +52,18 @@ type SpinResults struct {
 	ExpiresAt *time.Time     `json:"expires_at" gorm:"column:expires_at"` // Default NOW() + 30 days
 
 	// Associations
-	User        *Users        `json:"user,omitempty" gorm:"foreignKey:UserID"`
-	Transaction *Transactions `json:"transaction,omitempty" gorm:"foreignKey:TransactionID"`
-	Prize       *WheelPrizes  `json:"prize,omitempty" gorm:"foreignKey:PrizeID"`
+	User        *User        `json:"user,omitempty" gorm:"foreignKey:UserID"`
+	Transaction *Transaction `json:"transaction,omitempty" gorm:"foreignKey:TransactionID"`
+	Prize       *WheelPrize  `json:"prize,omitempty" gorm:"foreignKey:PrizeID"`
 }
 
-// TableName specifies the table name for SpinResults
-func (SpinResults) TableName() string {
+// TableName specifies the table name for SpinResult
+func (SpinResult) TableName() string {
 	return "spin_results"
 }
 
 // BeforeCreate hook
-func (s *SpinResults) BeforeCreate(tx *gorm.DB) error {
+func (s *SpinResult) BeforeCreate(tx *gorm.DB) error {
 	if s.ID == uuid.Nil {
 		s.ID = uuid.New()
 	}
@@ -76,16 +76,16 @@ func (s *SpinResults) BeforeCreate(tx *gorm.DB) error {
 }
 
 // IsPending checks if spin result is pending claim
-func (s *SpinResults) IsPending() bool {
+func (s *SpinResult) IsPending() bool {
 	return s.ClaimStatus == "PENDING"
 }
 
 // IsClaimed checks if spin result is claimed
-func (s *SpinResults) IsClaimed() bool {
+func (s *SpinResult) IsClaimed() bool {
 	return s.ClaimStatus == "CLAIMED"
 }
 
 // IsExpired checks if spin result is expired
-func (s *SpinResults) IsExpired() bool {
+func (s *SpinResult) IsExpired() bool {
 	return s.ClaimStatus == "EXPIRED" || (s.ExpiresAt != nil && time.Now().After(*s.ExpiresAt))
 }

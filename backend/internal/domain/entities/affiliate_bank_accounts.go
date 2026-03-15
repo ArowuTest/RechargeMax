@@ -5,8 +5,8 @@ import (
 
 )
 
-// AffiliateBankAccounts represents the affiliate_bank_accounts table
-type AffiliateBankAccounts struct {
+// AffiliateBankAccount represents the affiliate_bank_accounts table
+type AffiliateBankAccount struct {
 	BankName      string     `json:"bank_name" gorm:"column:bank_name;not null" validate:"required"`
 	AccountNumber string     `json:"account_number" gorm:"column:account_number;not null" validate:"required"`
 	AccountName   string     `json:"account_name" gorm:"column:account_name;not null" validate:"required"`
@@ -18,7 +18,7 @@ type AffiliateBankAccounts struct {
 	UpdatedAt     *time.Time `json:"updated_at" gorm:"column:updated_at"`
 }
 
-// TableName specifies the table name for AffiliateBankAccounts
-func (AffiliateBankAccounts) TableName() string {
+// TableName specifies the table name for AffiliateBankAccount
+func (AffiliateBankAccount) TableName() string {
 	return "affiliate_bank_accounts"
 }

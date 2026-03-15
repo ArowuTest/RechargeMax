@@ -22,7 +22,7 @@ type PrizeCategory struct {
 
 	// Relationships
 	PrizeTemplate *PrizeTemplate `json:"prize_template,omitempty" gorm:"foreignKey:PrizeTemplateID"`
-	Draw          *Draws         `json:"draw,omitempty" gorm:"foreignKey:DrawID"`
+	Draw          *Draw         `json:"draw,omitempty" gorm:"foreignKey:DrawID"`
 }
 
 // TableName specifies the table name for PrizeCategory

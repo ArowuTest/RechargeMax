@@ -6,8 +6,8 @@ import (
 	"gorm.io/datatypes"
 )
 
-// WebhookLogs represents the webhook_logs table
-type WebhookLogs struct {
+// WebhookLog represents the webhook_logs table
+type WebhookLog struct {
 	Id                             uuid.UUID                 `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
 	Source                         string                    `json:"source" gorm:"column:source;not null"`
 	EventType                      string                    `json:"event_type" gorm:"column:event_type;not null"`
@@ -32,7 +32,7 @@ type WebhookLogs struct {
 	Metadata                       datatypes.JSON            `json:"metadata" gorm:"column:metadata;type:jsonb"`
 }
 
-// TableName specifies the table name for WebhookLogs
-func (WebhookLogs) TableName() string {
+// TableName specifies the table name for WebhookLog
+func (WebhookLog) TableName() string {
 	return "webhook_logs"
 }

@@ -8,8 +8,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// Transactions represents the transactions table
-type Transactions struct {
+// Transaction represents the transactions table
+type Transaction struct {
 	ID              uuid.UUID  `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
 	TransactionCode string     `json:"transaction_code" gorm:"column:transaction_code;uniqueIndex;size:30"`
 	UserID          *uuid.UUID `json:"user_id" gorm:"column:user_id;index"`
@@ -34,7 +34,7 @@ type Transactions struct {
 
 	// Rewards and gamification
 	PointsEarned int  `json:"points_earned" gorm:"column:points_earned;default:0"`
-	DrawEntries  int  `json:"draw_entries" gorm:"column:draw_entries;default:0"`
+	DrawEntry  int  `json:"draw_entries" gorm:"column:draw_entries;default:0"`
 	SpinEligible bool `json:"spin_eligible" gorm:"column:spin_eligible;default:false"`
 
 	// Customer information (for guest transactions)
@@ -53,17 +53,17 @@ type Transactions struct {
 	// DeletedAt is not used in this table (no soft delete)
 
 	// Associations
-	User     *Users     `json:"user,omitempty" gorm:"foreignKey:UserID"`
-	DataPlan *DataPlans `json:"data_plan,omitempty" gorm:"foreignKey:DataPlanID"`
+	User     *User     `json:"user,omitempty" gorm:"foreignKey:UserID"`
+	DataPlan *DataPlan `json:"data_plan,omitempty" gorm:"foreignKey:DataPlanID"`
 }
 
-// TableName specifies the table name for Transactions
-func (Transactions) TableName() string {
+// TableName specifies the table name for Transaction
+func (Transaction) TableName() string {
 	return "transactions"
 }
 
 // BeforeCreate hook
-func (t *Transactions) BeforeCreate(tx *gorm.DB) error {
+func (t *Transaction) BeforeCreate(tx *gorm.DB) error {
 	if t.ID == uuid.Nil {
 		t.ID = uuid.New()
 	}
@@ -71,16 +71,16 @@ func (t *Transactions) BeforeCreate(tx *gorm.DB) error {
 }
 
 // IsPending checks if transaction is pending
-func (t *Transactions) IsPending() bool {
+func (t *Transaction) IsPending() bool {
 	return t.Status == "PENDING"
 }
 
 // IsSuccess checks if transaction is successful
-func (t *Transactions) IsSuccess() bool {
+func (t *Transaction) IsSuccess() bool {
 	return t.Status == "SUCCESS"
 }
 
 // IsFailed checks if transaction failed
-func (t *Transactions) IsFailed() bool {
+func (t *Transaction) IsFailed() bool {
 	return t.Status == "FAILED"
 }

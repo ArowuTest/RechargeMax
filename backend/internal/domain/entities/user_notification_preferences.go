@@ -6,8 +6,8 @@ import (
 	"gorm.io/datatypes"
 )
 
-// UserNotificationPreferences represents the user_notification_preferences table
-type UserNotificationPreferences struct {
+// UserNotificationPreference represents the user_notification_preferences table
+type UserNotificationPreference struct {
 	TransactionNotifications datatypes.JSON `json:"transaction_notifications" gorm:"column:transaction_notifications"`
 	PrizeNotifications       datatypes.JSON `json:"prize_notifications" gorm:"column:prize_notifications"`
 	DrawNotifications        datatypes.JSON `json:"draw_notifications" gorm:"column:draw_notifications"`
@@ -22,7 +22,7 @@ type UserNotificationPreferences struct {
 	UpdatedAt                *time.Time     `json:"updated_at" gorm:"column:updated_at"`
 }
 
-// TableName specifies the table name for UserNotificationPreferences
-func (UserNotificationPreferences) TableName() string {
+// TableName specifies the table name for UserNotificationPreference
+func (UserNotificationPreference) TableName() string {
 	return "user_notification_preferences"
 }

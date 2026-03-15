@@ -6,8 +6,8 @@ import (
 	"gorm.io/datatypes"
 )
 
-// VtuTransactions represents the vtu_transactions table
-type VtuTransactions struct {
+// VtuTransaction represents the vtu_transactions table
+type VtuTransaction struct {
 	Id                             uuid.UUID                 `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
 	TransactionReference           string                    `json:"transaction_reference" gorm:"column:transaction_reference;uniqueIndex;not null"`
 	ParentTransactionId            *uuid.UUID                `json:"parent_transaction_id" gorm:"column:parent_transaction_id"`
@@ -41,7 +41,7 @@ type VtuTransactions struct {
 	ReconciliationNotes            string                    `json:"reconciliation_notes" gorm:"column:reconciliation_notes"`
 }
 
-// TableName specifies the table name for VtuTransactions
-func (VtuTransactions) TableName() string {
+// TableName specifies the table name for VtuTransaction
+func (VtuTransaction) TableName() string {
 	return "vtu_transactions"
 }

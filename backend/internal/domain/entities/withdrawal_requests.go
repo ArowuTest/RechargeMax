@@ -6,8 +6,8 @@ import (
 	"gorm.io/datatypes"
 )
 
-// WithdrawalRequests represents the withdrawal_requests table
-type WithdrawalRequests struct {
+// WithdrawalRequest represents the withdrawal_requests table
+type WithdrawalRequest struct {
 	Id                             uuid.UUID                 `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
 	UserId                         uuid.UUID                 `json:"user_id" gorm:"column:user_id;not null"`
 	BankAccountId                  uuid.UUID                 `json:"bank_account_id" gorm:"column:bank_account_id;not null"`
@@ -32,7 +32,7 @@ type WithdrawalRequests struct {
 	RequestUserAgent               string                    `json:"request_user_agent" gorm:"column:request_user_agent"`
 }
 
-// TableName specifies the table name for WithdrawalRequests
-func (WithdrawalRequests) TableName() string {
+// TableName specifies the table name for WithdrawalRequest
+func (WithdrawalRequest) TableName() string {
 	return "withdrawal_requests"
 }

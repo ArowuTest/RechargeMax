@@ -6,8 +6,8 @@ import (
 	"gorm.io/datatypes"
 )
 
-// BankAccounts represents the bank_accounts table
-type BankAccounts struct {
+// BankAccount represents the bank_accounts table
+type BankAccount struct {
 	Id                             uuid.UUID                 `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
 	UserId                         uuid.UUID                 `json:"user_id" gorm:"column:user_id;not null"`
 	AccountName                    string                    `json:"account_name" gorm:"column:account_name;not null"`
@@ -23,7 +23,7 @@ type BankAccounts struct {
 	LastUsedAt                     *time.Time                `json:"last_used_at" gorm:"column:last_used_at"`
 }
 
-// TableName specifies the table name for BankAccounts
-func (BankAccounts) TableName() string {
+// TableName specifies the table name for BankAccount
+func (BankAccount) TableName() string {
 	return "bank_accounts"
 }

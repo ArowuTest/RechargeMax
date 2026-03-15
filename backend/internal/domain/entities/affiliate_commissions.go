@@ -7,8 +7,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// AffiliateCommissions represents the affiliate_commissions table
-type AffiliateCommissions struct {
+// AffiliateCommission represents the affiliate_commissions table
+type AffiliateCommission struct {
 	ID            uuid.UUID  `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
 	AffiliateID   uuid.UUID  `json:"affiliate_id" gorm:"column:affiliate_id;not null;index"`
 	TransactionID *uuid.UUID `json:"transaction_id" gorm:"column:transaction_id;index"`
@@ -31,17 +31,17 @@ type AffiliateCommissions struct {
 	PaidAt    *time.Time     `json:"paid_at" gorm:"column:paid_at"`
 
 	// Associations
-	Affiliate   *Affiliates   `json:"affiliate,omitempty" gorm:"foreignKey:AffiliateID"`
-	Transaction *Transactions `json:"transaction,omitempty" gorm:"foreignKey:TransactionID"`
+	Affiliate   *Affiliate   `json:"affiliate,omitempty" gorm:"foreignKey:AffiliateID"`
+	Transaction *Transaction `json:"transaction,omitempty" gorm:"foreignKey:TransactionID"`
 }
 
-// TableName specifies the table name for AffiliateCommissions
-func (AffiliateCommissions) TableName() string {
+// TableName specifies the table name for AffiliateCommission
+func (AffiliateCommission) TableName() string {
 	return "affiliate_commissions"
 }
 
 // BeforeCreate hook
-func (ac *AffiliateCommissions) BeforeCreate(tx *gorm.DB) error {
+func (ac *AffiliateCommission) BeforeCreate(tx *gorm.DB) error {
 	if ac.ID == uuid.Nil {
 		ac.ID = uuid.New()
 	}
@@ -49,16 +49,16 @@ func (ac *AffiliateCommissions) BeforeCreate(tx *gorm.DB) error {
 }
 
 // IsPending checks if commission is pending
-func (ac *AffiliateCommissions) IsPending() bool {
+func (ac *AffiliateCommission) IsPending() bool {
 	return ac.Status == "PENDING"
 }
 
 // IsApproved checks if commission is approved
-func (ac *AffiliateCommissions) IsApproved() bool {
+func (ac *AffiliateCommission) IsApproved() bool {
 	return ac.Status == "APPROVED"
 }
 
 // IsPaid checks if commission is paid
-func (ac *AffiliateCommissions) IsPaid() bool {
+func (ac *AffiliateCommission) IsPaid() bool {
 	return ac.Status == "PAID"
 }

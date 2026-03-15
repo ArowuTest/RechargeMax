@@ -6,8 +6,8 @@ import (
 	"gorm.io/datatypes"
 )
 
-// NotificationTemplates represents the notification_templates table
-type NotificationTemplates struct {
+// NotificationTemplate represents the notification_templates table
+type NotificationTemplate struct {
 	TemplateKey          string         `json:"template_key" gorm:"column:template_key;uniqueIndex;not null" validate:"required"`
 	TemplateName         string         `json:"template_name" gorm:"column:template_name;not null" validate:"required"`
 	Description          string         `json:"description" gorm:"column:description"`
@@ -26,7 +26,7 @@ type NotificationTemplates struct {
 	UpdatedAt            *time.Time     `json:"updated_at" gorm:"column:updated_at"`
 }
 
-// TableName specifies the table name for NotificationTemplates
-func (NotificationTemplates) TableName() string {
+// TableName specifies the table name for NotificationTemplate
+func (NotificationTemplate) TableName() string {
 	return "notification_templates"
 }

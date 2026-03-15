@@ -40,32 +40,6 @@ func (SubscriptionPricing) TableName() string {
 	return "subscription_pricing"
 }
 
-// DailySubscription represents a user's daily subscription with bundle quantity
-type DailySubscription struct {
-	ID                uuid.UUID  `json:"id" gorm:"type:uuid;primary_key;default:uuid_generate_v4()"`
-	UserID            *uuid.UUID `json:"user_id" gorm:"type:uuid;index"`
-	MSISDN            string     `json:"msisdn" gorm:"not null;index" validate:"required"`
-	TierID            uuid.UUID  `json:"tier_id" gorm:"type:uuid;not null" validate:"required"`
-	BundleQuantity    int        `json:"bundle_quantity" gorm:"not null;default:1" validate:"required,min=1"` // How many bundles
-	TotalEntries      int        `json:"total_entries" gorm:"not null"` // Tier.Entries × BundleQuantity
-	DailyAmount       int64      `json:"daily_amount" gorm:"not null"` // Total daily cost in kobo
-	Status            string     `json:"status" gorm:"default:'active'"` // active, paused, cancelled
-	AutoRenew         bool       `json:"auto_renew" gorm:"default:true"`
-	NextBillingDate   time.Time  `json:"next_billing_date" gorm:"not null"`
-	LastBillingDate   *time.Time `json:"last_billing_date,omitempty"`
-	PaymentMethod     string     `json:"payment_method" gorm:"not null"`
-	PaymentReference  string     `json:"payment_reference"`
-	SubscriptionDate  time.Time  `json:"subscription_date" gorm:"not null"`
-	CancelledAt       *time.Time `json:"cancelled_at,omitempty"`
-	CancellationReason string    `json:"cancellation_reason"`
-	CreatedAt         time.Time  `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt         time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
-}
-
-// TableName specifies the table name
-func (DailySubscription) TableName() string {
-	return "daily_subscriptions"
-}
 
 // SubscriptionBilling represents a daily billing record
 type SubscriptionBilling struct {

@@ -5,8 +5,8 @@ import (
 
 )
 
-// AdminSessions represents the admin_sessions table
-type AdminSessions struct {
+// AdminSession represents the admin_sessions table
+type AdminSession struct {
 	SessionToken   string     `json:"session_token" gorm:"column:session_token;uniqueIndex;not null" validate:"required"`
 	IpAddress      string     `json:"ip_address" gorm:"column:ip_address"`
 	UserAgent      string     `json:"user_agent" gorm:"column:user_agent"`
@@ -16,7 +16,7 @@ type AdminSessions struct {
 	LastAccessedAt *time.Time `json:"last_accessed_at" gorm:"column:last_accessed_at"`
 }
 
-// TableName specifies the table name for AdminSessions
-func (AdminSessions) TableName() string {
+// TableName specifies the table name for AdminSession
+func (AdminSession) TableName() string {
 	return "admin_sessions"
 }

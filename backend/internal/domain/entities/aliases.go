@@ -1,43 +1,64 @@
 package entities
 
-// Type aliases for backward compatibility
-// Services written with singular entity names can work with plural entity definitions
+// ---------------------------------------------------------------------------
+// Backward-compatibility aliases
+//
+// All entity structs are now SINGULAR (idiomatic Go).
+// Services/repos written before the rename still compile via these aliases.
+// Remove an alias once all callers have been updated to use the singular name.
+// ---------------------------------------------------------------------------
 
-// Singular aliases for plural entity types
-type Draw = Draws
-type User = Users
-type Affiliate = Affiliates
-type Transaction = Transactions
-type Recharge = Transactions // Recharges are transactions
-type WheelPrize = WheelPrizes
-type WheelSpin = SpinResults // Wheel spins are spin results
-type Subscription = DailySubscriptions
-type NetworkConfig = NetworkConfigs
-type DataPlan = DataPlans
-type AdminUser = AdminUsers
-type AdminSession = AdminSessions
-type AdminActivityLog = AdminActivityLogs
-type BankAccount = BankAccounts
-type WithdrawalRequest = WithdrawalRequests
-type Withdrawal = WithdrawalRequests
-type AffiliateCommission = AffiliateCommissions
-type AffiliatePayout = AffiliatePayouts
-type AffiliateClick = AffiliateClicks
-type AffiliateBankAccount = AffiliateBankAccounts
-type AffiliateAnalytic = AffiliateAnalytics
-type DrawEntry = DrawEntries
-type DrawWinner = DrawWinners
-type PaymentLog = PaymentLogs
-type VtuTransaction = VtuTransactions
-type ApiLog = ApiLogs
-type WebhookLog = WebhookLogs
-type ApplicationLog = ApplicationLogs
-type ApplicationMetric = ApplicationMetrics
-type PlatformSetting = PlatformSettings
-type NotificationTemplate = NotificationTemplates
-type NotificationDeliveryLogEntry = NotificationDeliveryLog
-type UserNotificationPreference = UserNotificationPreferences
-type UserNotification = UserNotifications
-type OtpVerification = OtpVerifications
-type FileUpload = FileUploads
-type ServicePrice = ServicePricing
+// Core domain — plural aliases
+type Draws = Draw
+type Users = User
+type Affiliates = Affiliate
+type Transactions = Transaction
+type NetworkConfigs = NetworkConfig
+type DataPlans = DataPlan
+type DailySubscriptions = DailySubscription
+
+// Admin — plural aliases
+type AdminUsers = AdminUser
+type AdminSessions = AdminSession
+type AdminActivityLogs = AdminActivityLog
+
+// Financial
+type BankAccounts = BankAccount
+type WithdrawalRequests = WithdrawalRequest
+type AffiliateCommissions = AffiliateCommission
+type AffiliatePayouts = AffiliatePayout
+type AffiliateClicks = AffiliateClick
+type AffiliateBankAccounts = AffiliateBankAccount
+type AffiliateAnalytics = AffiliateAnalytic
+
+// Draw / prize
+type DrawEntries = DrawEntry
+type DrawWinners = DrawWinner
+type PaymentLogs = PaymentLog
+type VtuTransactions = VtuTransaction
+
+// Logging / observability
+type ApiLogs = APILog
+type WebhookLogs = WebhookLog
+type ApplicationLogs = ApplicationLog
+type ApplicationMetrics = ApplicationMetric
+
+// Settings / config / notifications
+type PlatformSettings = PlatformSetting
+type NotificationTemplates = NotificationTemplate
+type UserNotificationPreferences = UserNotificationPreference
+type FileUploads = FileUpload
+type ServicePricing = ServicePrice
+type SpinResults = SpinResult
+type WheelPrizes = WheelPrize
+
+// Semantic aliases (different concept name → same underlying type)
+type Recharge = Transaction          // recharges are transactions
+type WheelSpin = SpinResult          // wheel spins are spin results
+type Subscription = DailySubscription
+type Withdrawal = WithdrawalRequest
+
+// Repository aliases (kept in domain/repositories/aliases.go; mirrored here for clarity)
+// ReferralRepository → UserRepository  (referrals tracked via users.referred_by)
+// RechargeRepository → TransactionRepository
+// SpinResultRepository → SpinRepository

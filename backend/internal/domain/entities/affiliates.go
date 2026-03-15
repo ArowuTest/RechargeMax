@@ -8,8 +8,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// Affiliates represents the affiliates table
-type Affiliates struct {
+// Affiliate represents the affiliates table
+type Affiliate struct {
 	ID     uuid.UUID  `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
 	UserID *uuid.UUID `json:"user_id" gorm:"column:user_id;index"`
 
@@ -43,16 +43,16 @@ type Affiliates struct {
 	ApprovedAt  *time.Time     `json:"approved_at" gorm:"column:approved_at"`
 
 	// Associations
-	User *Users `json:"user,omitempty" gorm:"foreignKey:UserID"`
+	User *User `json:"user,omitempty" gorm:"foreignKey:UserID"`
 }
 
-// TableName specifies the table name for Affiliates
-func (Affiliates) TableName() string {
+// TableName specifies the table name for Affiliate
+func (Affiliate) TableName() string {
 	return "affiliates"
 }
 
 // BeforeCreate hook
-func (a *Affiliates) BeforeCreate(tx *gorm.DB) error {
+func (a *Affiliate) BeforeCreate(tx *gorm.DB) error {
 	if a.ID == uuid.Nil {
 		a.ID = uuid.New()
 	}
@@ -60,16 +60,16 @@ func (a *Affiliates) BeforeCreate(tx *gorm.DB) error {
 }
 
 // IsApproved checks if affiliate is approved
-func (a *Affiliates) IsApproved() bool {
+func (a *Affiliate) IsApproved() bool {
 	return a.Status == "APPROVED"
 }
 
 // IsSuspended checks if affiliate is suspended
-func (a *Affiliates) IsSuspended() bool {
+func (a *Affiliate) IsSuspended() bool {
 	return a.Status == "SUSPENDED"
 }
 
 // IsPending checks if affiliate is pending approval
-func (a *Affiliates) IsPending() bool {
+func (a *Affiliate) IsPending() bool {
 	return a.Status == "PENDING"
 }

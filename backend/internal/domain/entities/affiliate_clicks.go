@@ -5,8 +5,8 @@ import (
 
 )
 
-// AffiliateClicks represents the affiliate_clicks table
-type AffiliateClicks struct {
+// AffiliateClick represents the affiliate_clicks table
+type AffiliateClick struct {
 	IpAddress   string     `json:"ip_address" gorm:"column:ip_address"`
 	UserAgent   string     `json:"user_agent" gorm:"column:user_agent"`
 	ReferrerUrl string     `json:"referrer_url" gorm:"column:referrer_url"`
@@ -16,7 +16,7 @@ type AffiliateClicks struct {
 	ConvertedAt *time.Time `json:"converted_at" gorm:"column:converted_at"`
 }
 
-// TableName specifies the table name for AffiliateClicks
-func (AffiliateClicks) TableName() string {
+// TableName specifies the table name for AffiliateClick
+func (AffiliateClick) TableName() string {
 	return "affiliate_clicks"
 }

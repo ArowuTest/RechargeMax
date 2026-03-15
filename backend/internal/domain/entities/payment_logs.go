@@ -6,8 +6,8 @@ import (
 	"gorm.io/datatypes"
 )
 
-// PaymentLogs represents the payment_logs table
-type PaymentLogs struct {
+// PaymentLog represents the payment_logs table
+type PaymentLog struct {
 	EventType        string         `json:"event_type" gorm:"column:event_type"`
 	PaymentProvider  string         `json:"payment_provider" gorm:"column:payment_provider"`
 	PaymentReference string         `json:"payment_reference" gorm:"column:payment_reference"`
@@ -29,7 +29,7 @@ type PaymentLogs struct {
 	CreatedAt        *time.Time     `json:"created_at" gorm:"column:created_at"`
 }
 
-// TableName specifies the table name for PaymentLogs
-func (PaymentLogs) TableName() string {
+// TableName specifies the table name for PaymentLog
+func (PaymentLog) TableName() string {
 	return "payment_logs"
 }

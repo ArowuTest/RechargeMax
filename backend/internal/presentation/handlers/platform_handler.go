@@ -25,7 +25,7 @@ return &PlatformHandler{db: db}
 func (h *PlatformHandler) GetStatistics(c *gin.Context) {
 // Get total users count
 var totalUsers int64
-	if err := h.db.Model(&entities.Users{}).Where("is_active = ?", true).Count(&totalUsers).Error; err != nil {
+	if err := h.db.Model(&entities.User{}).Where("is_active = ?", true).Count(&totalUsers).Error; err != nil {
 c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to count users"})
 return
 }

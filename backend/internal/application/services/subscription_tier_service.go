@@ -204,7 +204,7 @@ func (s *SubscriptionTierService) CreateDailySubscription(ctx context.Context, m
 	}
 	paymentRef := subscription.ID.String() // Use subscription ID as reference
 
-	subscription.PaymentReference = paymentRef
+	subscription.PaymentReference = &paymentRef
 
 	if err := s.tierRepo.CreateDailySubscription(ctx, subscription); err != nil {
 		return nil, "", fmt.Errorf("failed to create subscription: %w", err)

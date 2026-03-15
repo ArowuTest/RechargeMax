@@ -6,8 +6,8 @@ import (
 	"gorm.io/datatypes"
 )
 
-// ApiLogs represents the api_logs table
-type ApiLogs struct {
+// APILog represents the api_logs table
+type APILog struct {
 	Id                             uuid.UUID                 `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
 	ServiceName                    string                    `json:"service_name" gorm:"column:service_name;not null"`
 	Endpoint                       string                    `json:"endpoint" gorm:"column:endpoint;not null"`
@@ -29,7 +29,7 @@ type ApiLogs struct {
 	Metadata                       datatypes.JSON            `json:"metadata" gorm:"column:metadata;type:jsonb"`
 }
 
-// TableName specifies the table name for ApiLogs
-func (ApiLogs) TableName() string {
+// TableName specifies the table name for APILog
+func (APILog) TableName() string {
 	return "api_logs"
 }

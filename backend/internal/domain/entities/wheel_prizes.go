@@ -6,8 +6,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// WheelPrizes represents the wheel_prizes table
-type WheelPrizes struct {
+// WheelPrize represents the wheel_prizes table
+type WheelPrize struct {
 	ID                 uuid.UUID `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
 	PrizeCode          string    `json:"prize_code" gorm:"column:prize_code;uniqueIndex;size:50"`
 	PrizeName          string    `json:"prize_name" gorm:"column:prize_name;not null" validate:"required"`
@@ -25,7 +25,7 @@ type WheelPrizes struct {
 	UpdatedAt          time.Time `json:"updated_at" gorm:"column:updated_at;autoUpdateTime"`
 }
 
-// TableName specifies the table name for WheelPrizes
-func (WheelPrizes) TableName() string {
+// TableName specifies the table name for WheelPrize
+func (WheelPrize) TableName() string {
 	return "wheel_prizes"
 }

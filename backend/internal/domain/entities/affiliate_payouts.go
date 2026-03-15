@@ -7,8 +7,8 @@ import (
 	"gorm.io/datatypes"
 )
 
-// AffiliatePayouts represents the affiliate_payouts table
-type AffiliatePayouts struct {
+// AffiliatePayout represents the affiliate_payouts table
+type AffiliatePayout struct {
 	PayoutBatchId   *uuid.UUID     `json:"payout_batch_id" gorm:"column:payout_batch_id"`
 	CommissionCount int            `json:"commission_count" gorm:"column:commission_count;not null" validate:"required"`
 	CommissionIds   datatypes.JSON `json:"commission_ids" gorm:"column:commission_ids"`
@@ -27,7 +27,7 @@ type AffiliatePayouts struct {
 	UpdatedAt       *time.Time     `json:"updated_at" gorm:"column:updated_at"`
 }
 
-// TableName specifies the table name for AffiliatePayouts
-func (AffiliatePayouts) TableName() string {
+// TableName specifies the table name for AffiliatePayout
+func (AffiliatePayout) TableName() string {
 	return "affiliate_payouts"
 }

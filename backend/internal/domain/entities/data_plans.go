@@ -6,8 +6,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// DataPlans represents the data_plans table
-type DataPlans struct {
+// DataPlan represents the data_plans table
+type DataPlan struct {
 	ID                 uuid.UUID  `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
 	NetworkProvider    string     `json:"network_provider" gorm:"column:network_provider;not null"`
 	PlanName           string     `json:"plan_name" gorm:"column:plan_name;not null" validate:"required"`
@@ -23,7 +23,7 @@ type DataPlans struct {
 	UpdatedAt          *time.Time `json:"updated_at" gorm:"column:updated_at"`
 }
 
-// TableName specifies the table name for DataPlans
-func (DataPlans) TableName() string {
+// TableName specifies the table name for DataPlan
+func (DataPlan) TableName() string {
 	return "data_plans"
 }

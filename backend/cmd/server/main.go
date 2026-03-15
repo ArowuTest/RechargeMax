@@ -567,7 +567,6 @@ type Handlers struct {
 	ValidationStats *handlers.ValidationStatsHandler
 	Webhook      *handlers.WebhookHandler
 	AdminSpinClaims *handlers.AdminSpinClaimsHandler
-	Test         *handlers.TestHandler
 }
 
 func initHandlers(svcs *Services, repos *Repositories, appConfig *Config, db *gorm.DB) *Handlers {
@@ -613,7 +612,6 @@ func initHandlers(svcs *Services, repos *Repositories, appConfig *Config, db *go
 		ValidationStats: handlers.NewValidationStatsHandler(db),
 		Webhook: handlers.NewWebhookHandler(svcs.Webhook),
 		AdminSpinClaims: handlers.NewAdminSpinClaimsHandler(svcs.AdminSpinClaims),
-		Test: handlers.NewTestHandler(svcs.Recharge, svcs.Subscription),
 	}
 }
 
@@ -733,11 +731,6 @@ func setupRouter(hdlrs *Handlers, svcs *Services, db *gorm.DB) *gin.Engine {
 				spins.GET("/tier-progress", hdlrs.Spin.GetTierProgress) // Get user's tier progress
 			}
 
-			// Test routes (for development/testing)
-			test := v1.Group("/test")
-			{
-				test.POST("/process-payment", hdlrs.Test.ProcessPaymentManually)
-			}
 
 		// Protected routes (require authentication)
 		protected := v1.Group("")

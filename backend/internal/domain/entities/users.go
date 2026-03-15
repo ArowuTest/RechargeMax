@@ -7,8 +7,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// Users represents the users table
-type Users struct {
+// User represents the users table
+type User struct {
 	ID         uuid.UUID  `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
 	UserCode   string     `json:"user_code" gorm:"column:user_code;uniqueIndex;size:20"`
 	AuthUserID *uuid.UUID `json:"auth_user_id" gorm:"column:auth_user_id;uniqueIndex"`
@@ -50,13 +50,13 @@ type Users struct {
 	LastLoginAt *time.Time     `json:"last_login_at" gorm:"column:last_login_at"`
 }
 
-// TableName specifies the table name for Users
-func (Users) TableName() string {
+// TableName specifies the table name for User
+func (User) TableName() string {
 	return "users"
 }
 
 // BeforeCreate hook
-func (u *Users) BeforeCreate(tx *gorm.DB) error {
+func (u *User) BeforeCreate(tx *gorm.DB) error {
 	if u.ID == uuid.Nil {
 		u.ID = uuid.New()
 	}
@@ -64,16 +64,16 @@ func (u *Users) BeforeCreate(tx *gorm.DB) error {
 }
 
 // IsPhoneVerified checks if phone is verified
-func (u *Users) IsPhoneVerified() bool {
+func (u *User) IsPhoneVerified() bool {
 	return u.PhoneVerified
 }
 
 // IsEmailVerified checks if email is verified
-func (u *Users) IsEmailVerified() bool {
+func (u *User) IsEmailVerified() bool {
 	return u.EmailVerified
 }
 
 // IsKYCVerified checks if KYC is verified
-func (u *Users) IsKYCVerified() bool {
+func (u *User) IsKYCVerified() bool {
 	return u.KYCStatus == "VERIFIED"
 }

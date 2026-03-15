@@ -6,8 +6,8 @@ import (
 	"gorm.io/datatypes"
 )
 
-// AdminActivityLogs represents the admin_activity_logs table
-type AdminActivityLogs struct {
+// AdminActivityLog represents the admin_activity_logs table
+type AdminActivityLog struct {
 	Action         string         `json:"action" gorm:"column:action;not null" validate:"required"`
 	Resource       string         `json:"resource" gorm:"column:resource"`
 	ResourceId     string         `json:"resource_id" gorm:"column:resource_id"`
@@ -23,7 +23,7 @@ type AdminActivityLogs struct {
 	CreatedAt      *time.Time     `json:"created_at" gorm:"column:created_at"`
 }
 
-// TableName specifies the table name for AdminActivityLogs
-func (AdminActivityLogs) TableName() string {
+// TableName specifies the table name for AdminActivityLog
+func (AdminActivityLog) TableName() string {
 	return "admin_activity_logs"
 }

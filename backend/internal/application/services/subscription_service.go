@@ -93,16 +93,16 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 	// Generate unique subscription code
 	subscriptionCode := fmt.Sprintf("SUB_%s_%d", req.MSISDN[len(req.MSISDN)-4:], time.Now().Unix())
 	subscription := &entities.Subscription{
-		Id:               uuid.New(),
+		ID:               uuid.New(),
 		SubscriptionCode: subscriptionCode,
-		Msisdn:           req.MSISDN,
+		MSISDN:           req.MSISDN,
 		SubscriptionDate: time.Now(),
 		Amount:           20.00, // ₦20 daily
 		Status:           "pending",
 	}
 	// Set UserId if user was found
 	if user != nil {
-		subscription.UserId = &user.ID
+		subscription.UserID = &user.ID
 	}
 
 	if err := s.subscriptionRepo.Create(ctx, subscription); err != nil {
@@ -115,8 +115,8 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 	}
 
 	response := &SubscriptionResponse{
-		ID:            subscription.Id,
-		MSISDN:        subscription.Msisdn,
+		ID:            subscription.ID,
+		MSISDN:        subscription.MSISDN,
 		Network:       req.Network,
 		Status:        subscription.Status,
 		PaymentMethod: req.PaymentMethod,
@@ -130,12 +130,12 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 		subscription.Status = "active"
 		s.subscriptionRepo.Update(ctx, subscription)
 	} else {
-		reference := fmt.Sprintf("SUB_%s_%d", subscription.Id.String()[:8], time.Now().Unix())
+		reference := fmt.Sprintf("SUB_%s_%d", subscription.ID.String()[:8], time.Now().Unix())
 		paymentReq := PaymentRequest{
 			Amount:    2000,
-			Email:     s.getUserEmail(ctx, subscription.Msisdn),
+			Email:     s.getUserEmail(ctx, subscription.MSISDN),
 			Reference: reference,
-			Metadata:  map[string]interface{}{"msisdn": subscription.Msisdn, "type": "subscription"},
+			Metadata:  map[string]interface{}{"msisdn": subscription.MSISDN, "type": "subscription"},
 		}
 		paymentURL, err := s.paymentService.InitializePayment(ctx, paymentReq)
 		if err != nil {
@@ -179,8 +179,8 @@ func (s *SubscriptionService) GetSubscription(ctx context.Context, msisdn string
 	// Calculate next billing date
 	nextBilling := latestSub.SubscriptionDate.Add(24 * time.Hour)
 	return &SubscriptionResponse{
-		ID:            latestSub.Id,
-		MSISDN:        latestSub.Msisdn,
+		ID:            latestSub.ID,
+		MSISDN:        latestSub.MSISDN,
 		Network:       "auto",
 		Status:        latestSub.Status,
 		PaymentMethod: "paystack",
@@ -245,8 +245,8 @@ func (s *SubscriptionService) GetSubscriptionHistory(ctx context.Context, msisdn
 		nextBilling := sub.SubscriptionDate.Add(24 * time.Hour)
 		
 		result = append(result, SubscriptionResponse{
-			ID:            sub.Id,
-			MSISDN:        sub.Msisdn,
+			ID:            sub.ID,
+			MSISDN:        sub.MSISDN,
 			Network:       "auto",      // Network auto-detected via HLR
 			Status:        sub.Status,
 			PaymentMethod: "paystack", // Default
@@ -287,7 +287,7 @@ func (s *SubscriptionService) ProcessSuccessfulPayment(ctx context.Context, paym
 	pointsEarned := int64(1)
 
 	// Get user to award points
-	user, err := s.userRepo.FindByMSISDN(ctx, subscription.Msisdn)
+	user, err := s.userRepo.FindByMSISDN(ctx, subscription.MSISDN)
 	if err != nil {
 		return fmt.Errorf("failed to find user: %w", err)
 	}
@@ -303,7 +303,7 @@ func (s *SubscriptionService) ProcessSuccessfulPayment(ctx context.Context, paym
 		paymentRef,
 	)
 	// Note: Actual notification sending would be handled by NotificationService
-	// In production: s.notificationService.SendSMS(ctx, subscription.Msisdn, notificationMsg)
+	// In production: s.notificationService.SendSMS(ctx, subscription.MSISDN, notificationMsg)
 	// In production: s.notificationService.SendEmail(ctx, userEmail, "Subscription Activated", notificationMsg)
 	// In production: s.notificationService.SendPush(ctx, user.ID, "Subscription Activated", notificationMsg)
 	_ = notificationMsg

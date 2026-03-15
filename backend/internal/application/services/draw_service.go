@@ -93,7 +93,7 @@ func (s *DrawService) CreateDrawWithTemplate(
 	ctx context.Context,
 	name, description string,
 	drawDate time.Time,
-	drawTypeID, prizeTemplateID uint,
+	drawTypeID, prizeTemplateID uuid.UUID,
 ) (*entities.Draw, error) {
 	// Get prize template to calculate total prize pool
 	var totalPrizePool float64

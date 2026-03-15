@@ -2,6 +2,8 @@ package middleware
 
 import (
 	"crypto/rand"
+
+	"rechargemax/internal/pkg/safe"
 	"encoding/base64"
 	"net/http"
 	"sync"
@@ -121,7 +123,7 @@ func GetCSRFTokenHandler() gin.HandlerFunc {
 // CleanupExpiredTokens periodically removes expired CSRF tokens
 func CleanupExpiredTokens() {
 	ticker := time.NewTicker(15 * time.Minute)
-	go func() {
+	safe.Go(func() {
 		for range ticker.C {
 			csrfStore.mu.Lock()
 			now := time.Now()
@@ -132,5 +134,5 @@ func CleanupExpiredTokens() {
 			}
 			csrfStore.mu.Unlock()
 		}
-	}()
+	})
 }

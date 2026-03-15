@@ -1,6 +1,8 @@
 package services
 import (
 	"context"
+
+	"rechargemax/internal/pkg/safe"
 	"fmt"
 	"strconv"
 	"strings"
@@ -316,7 +318,7 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 	// Update the user's cached loyalty_tier field based on their new total points.
 	// This is done asynchronously outside the transaction so a failure here never
 	// rolls back the recharge.
-	go func() {
+	safe.Go(func() {
 		var updatedUser entities.Users
 		if dbErr := s.db.Where("msisdn = ?", recharge.Msisdn).First(&updatedUser).Error; dbErr == nil {
 			newTier := computeLoyaltyTier(s.db, context.Background(), int64(updatedUser.TotalPoints))
@@ -331,7 +333,7 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 				}
 			}
 		}
-	}()
+	})
 
 	return nil
 }

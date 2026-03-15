@@ -5,6 +5,8 @@ import (
 
 	"rechargemax/internal/domain/entities"
 	"rechargemax/internal/infrastructure/persistence"
+
+	"github.com/google/uuid"
 )
 
 type PrizeTemplateService struct {
@@ -24,19 +26,17 @@ func NewPrizeTemplateService(
 
 func (s *PrizeTemplateService) CreateTemplate(
 	name, description string,
-	drawTypeID uint,
+	drawTypeID uuid.UUID,
 	isDefault bool,
 	categories []entities.PrizeCategory,
 ) (*entities.PrizeTemplate, error) {
 	if name == "" {
 		return nil, errors.New("template name cannot be empty")
 	}
-
 	if len(categories) == 0 {
 		return nil, errors.New("template must have at least one prize category")
 	}
 
-	// Check if template with same name already exists
 	existing, _ := s.templateRepo.FindByName(name)
 	if existing != nil {
 		return nil, errors.New("template with this name already exists")
@@ -46,7 +46,7 @@ func (s *PrizeTemplateService) CreateTemplate(
 	if description != "" {
 		desc = &description
 	}
-	
+
 	template := &entities.PrizeTemplate{
 		Name:        name,
 		Description: desc,
@@ -58,7 +58,6 @@ func (s *PrizeTemplateService) CreateTemplate(
 		return nil, err
 	}
 
-	// Create associated prize categories
 	for i := range categories {
 		categories[i].PrizeTemplateID = template.ID
 		if categories[i].DisplayOrder == 0 {
@@ -67,21 +66,18 @@ func (s *PrizeTemplateService) CreateTemplate(
 	}
 
 	if err := s.categoryRepo.BulkCreate(categories); err != nil {
-		// Rollback template creation if categories fail
-		s.templateRepo.Delete(template.ID)
+		_ = s.templateRepo.Delete(template.ID)
 		return nil, err
 	}
 
-	// If this is set as default, unset other defaults
 	if isDefault {
-		s.templateRepo.SetAsDefault(template.ID, drawTypeID)
+		_ = s.templateRepo.SetAsDefault(template.ID, drawTypeID)
 	}
 
-	// Reload with categories
 	return s.templateRepo.FindByID(template.ID)
 }
 
-func (s *PrizeTemplateService) GetTemplate(id uint) (*entities.PrizeTemplate, error) {
+func (s *PrizeTemplateService) GetTemplate(id uuid.UUID) (*entities.PrizeTemplate, error) {
 	return s.templateRepo.FindByID(id)
 }
 
@@ -89,12 +85,12 @@ func (s *PrizeTemplateService) GetAllTemplates() ([]entities.PrizeTemplate, erro
 	return s.templateRepo.FindAll()
 }
 
-func (s *PrizeTemplateService) GetTemplatesByDrawType(drawTypeID uint) ([]entities.PrizeTemplate, error) {
+func (s *PrizeTemplateService) GetTemplatesByDrawType(drawTypeID uuid.UUID) ([]entities.PrizeTemplate, error) {
 	return s.templateRepo.FindByDrawTypeID(drawTypeID)
 }
 
 func (s *PrizeTemplateService) UpdateTemplate(
-	id uint,
+	id uuid.UUID,
 	name, description string,
 	isDefault *bool,
 ) (*entities.PrizeTemplate, error) {
@@ -104,7 +100,6 @@ func (s *PrizeTemplateService) UpdateTemplate(
 	}
 
 	if name != "" {
-		// Check if another template with same name exists
 		existing, _ := s.templateRepo.FindByName(name)
 		if existing != nil && existing.ID != id {
 			return nil, errors.New("template with this name already exists")
@@ -119,7 +114,7 @@ func (s *PrizeTemplateService) UpdateTemplate(
 	if isDefault != nil {
 		template.IsDefault = *isDefault
 		if *isDefault {
-			s.templateRepo.SetAsDefault(id, template.DrawTypeID)
+			_ = s.templateRepo.SetAsDefault(id, template.DrawTypeID)
 		}
 	}
 
@@ -130,18 +125,16 @@ func (s *PrizeTemplateService) UpdateTemplate(
 	return s.templateRepo.FindByID(id)
 }
 
-func (s *PrizeTemplateService) DeleteTemplate(id uint) error {
-	// Check if template exists
+func (s *PrizeTemplateService) DeleteTemplate(id uuid.UUID) error {
 	_, err := s.templateRepo.FindByID(id)
 	if err != nil {
 		return errors.New("template not found")
 	}
-
 	return s.templateRepo.Delete(id)
 }
 
 func (s *PrizeTemplateService) AddCategoryToTemplate(
-	templateID uint,
+	templateID uuid.UUID,
 	categoryName string,
 	prizeAmount float64,
 	winnerCount, runnerUpCount int,
@@ -151,7 +144,6 @@ func (s *PrizeTemplateService) AddCategoryToTemplate(
 		return nil, errors.New("template not found")
 	}
 
-	// Get current categories to determine display order
 	categories, _ := s.categoryRepo.FindByTemplateID(templateID)
 	displayOrder := len(categories) + 1
 
@@ -167,12 +159,11 @@ func (s *PrizeTemplateService) AddCategoryToTemplate(
 	if err := s.categoryRepo.Create(category); err != nil {
 		return nil, err
 	}
-
 	return category, nil
 }
 
 func (s *PrizeTemplateService) UpdateCategory(
-	id uint,
+	id uuid.UUID,
 	categoryName *string,
 	prizeAmount *float64,
 	winnerCount, runnerUpCount *int,
@@ -198,19 +189,18 @@ func (s *PrizeTemplateService) UpdateCategory(
 	if err := s.categoryRepo.Update(category); err != nil {
 		return nil, err
 	}
-
 	return category, nil
 }
 
-func (s *PrizeTemplateService) DeleteCategory(id uint) error {
+func (s *PrizeTemplateService) DeleteCategory(id uuid.UUID) error {
 	return s.categoryRepo.Delete(id)
 }
 
-func (s *PrizeTemplateService) GetCategoriesByTemplate(templateID uint) ([]entities.PrizeCategory, error) {
+func (s *PrizeTemplateService) GetCategoriesByTemplate(templateID uuid.UUID) ([]entities.PrizeCategory, error) {
 	return s.categoryRepo.FindByTemplateID(templateID)
 }
 
-func (s *PrizeTemplateService) CalculateTotalPrizePool(templateID uint) (float64, error) {
+func (s *PrizeTemplateService) CalculateTotalPrizePool(templateID uuid.UUID) (float64, error) {
 	categories, err := s.categoryRepo.FindByTemplateID(templateID)
 	if err != nil {
 		return 0, err
@@ -220,6 +210,5 @@ func (s *PrizeTemplateService) CalculateTotalPrizePool(templateID uint) (float64
 	for _, cat := range categories {
 		total += cat.PrizeAmount * float64(cat.WinnerCount)
 	}
-
 	return total, nil
 }

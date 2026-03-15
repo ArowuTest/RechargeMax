@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+
+	"rechargemax/internal/pkg/safe"
 	"fmt"
 	"strconv"
 	"time"
@@ -169,11 +171,11 @@ func (s *WinnerService) CreateWinner(ctx context.Context, drawID uuid.UUID, msis
 	}
 
 	// Send notifications
-	go s.sendWinnerNotifications(context.Background(), winner, draw)
+	safe.Go(func() { s.sendWinnerNotifications(context.Background(), winner, draw) })
 
 	// Auto-provision if applicable
 	if winner.AutoProvision {
-		go s.provisionPrize(context.Background(), winner)
+		safe.Go(func() { s.provisionPrize(context.Background(), winner) })
 	}
 
 	return winner, nil
@@ -511,7 +513,7 @@ func (s *WinnerService) RetryProvisioning(ctx context.Context, winnerID uuid.UUI
 	}
 
 	// Retry provisioning
-	go s.provisionPrize(context.Background(), winner)
+	safe.Go(func() { s.provisionPrize(context.Background(), winner) })
 
 	return nil
 }

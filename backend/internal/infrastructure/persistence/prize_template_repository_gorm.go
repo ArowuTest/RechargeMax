@@ -2,6 +2,8 @@ package persistence
 
 import (
 	"rechargemax/internal/domain/entities"
+
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -17,9 +19,9 @@ func (r *PrizeTemplateRepositoryGORM) Create(template *entities.PrizeTemplate) e
 	return r.db.Create(template).Error
 }
 
-func (r *PrizeTemplateRepositoryGORM) FindByID(id uint) (*entities.PrizeTemplate, error) {
+func (r *PrizeTemplateRepositoryGORM) FindByID(id uuid.UUID) (*entities.PrizeTemplate, error) {
 	var template entities.PrizeTemplate
-	err := r.db.Preload("PrizeCategories").First(&template, id).Error
+	err := r.db.Preload("PrizeCategories").First(&template, "id = ?", id).Error
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +34,7 @@ func (r *PrizeTemplateRepositoryGORM) FindAll() ([]entities.PrizeTemplate, error
 	return templates, err
 }
 
-func (r *PrizeTemplateRepositoryGORM) FindByDrawTypeID(drawTypeID uint) ([]entities.PrizeTemplate, error) {
+func (r *PrizeTemplateRepositoryGORM) FindByDrawTypeID(drawTypeID uuid.UUID) ([]entities.PrizeTemplate, error) {
 	var templates []entities.PrizeTemplate
 	err := r.db.Where("draw_type_id = ?", drawTypeID).Preload("PrizeCategories").Find(&templates).Error
 	return templates, err
@@ -42,12 +44,11 @@ func (r *PrizeTemplateRepositoryGORM) Update(template *entities.PrizeTemplate) e
 	return r.db.Save(template).Error
 }
 
-func (r *PrizeTemplateRepositoryGORM) Delete(id uint) error {
-	// Delete associated prize categories first
-	if err := r.db.Where("prize_template_id = ?", id).Delete(&entities.PrizeCategory{}).Error; err != nil {
+func (r *PrizeTemplateRepositoryGORM) Delete(id uuid.UUID) error {
+	if err := r.db.Where("template_id = ?", id).Delete(&entities.PrizeCategory{}).Error; err != nil {
 		return err
 	}
-	return r.db.Delete(&entities.PrizeTemplate{}, id).Error
+	return r.db.Delete(&entities.PrizeTemplate{}, "id = ?", id).Error
 }
 
 func (r *PrizeTemplateRepositoryGORM) FindByName(name string) (*entities.PrizeTemplate, error) {
@@ -59,15 +60,12 @@ func (r *PrizeTemplateRepositoryGORM) FindByName(name string) (*entities.PrizeTe
 	return &template, nil
 }
 
-func (r *PrizeTemplateRepositoryGORM) SetAsDefault(id uint, drawTypeID uint) error {
-	// First, unset all defaults for this draw type
+func (r *PrizeTemplateRepositoryGORM) SetAsDefault(id uuid.UUID, drawTypeID uuid.UUID) error {
 	if err := r.db.Model(&entities.PrizeTemplate{}).
 		Where("draw_type_id = ?", drawTypeID).
 		Update("is_default", false).Error; err != nil {
 		return err
 	}
-	
-	// Then set the specified template as default
 	return r.db.Model(&entities.PrizeTemplate{}).
 		Where("id = ?", id).
 		Update("is_default", true).Error

@@ -48,7 +48,6 @@
     "embla-carousel-react": "^8.0.0",
     "framer-motion": "^11.0.3",
     "input-otp": "^1.2.4",
-    "lovable-tagger": "^1.1.13",
     "lucide-react": "^0.344.0",
     "next-themes": "^0.4.6",
     "react": "^18.2.0",
@@ -65,6 +64,7 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "lovable-tagger": "^1.1.13",
     "@babel/generator": "^7.29.0",
     "@babel/parser": "^7.29.0",
     "@babel/traverse": "^7.29.0",

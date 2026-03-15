@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { subscriptionApi } from '../../lib/api-client';
+import { subscriptionApi } from '../lib/api-client';
 
 interface SubscriptionConfig {
   daily_price: number; // in kobo

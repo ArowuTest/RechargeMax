@@ -5,6 +5,8 @@ import (
 
 	"rechargemax/internal/domain/entities"
 	"rechargemax/internal/infrastructure/persistence"
+
+	"github.com/google/uuid"
 )
 
 type DrawTypeService struct {
@@ -20,7 +22,6 @@ func (s *DrawTypeService) CreateDrawType(name, description string) (*entities.Dr
 		return nil, errors.New("draw type name cannot be empty")
 	}
 
-	// Check if draw type with same name already exists
 	existing, _ := s.repo.FindByName(name)
 	if existing != nil {
 		return nil, errors.New("draw type with this name already exists")
@@ -30,7 +31,7 @@ func (s *DrawTypeService) CreateDrawType(name, description string) (*entities.Dr
 	if description != "" {
 		desc = &description
 	}
-	
+
 	drawType := &entities.DrawType{
 		Name:        name,
 		Description: desc,
@@ -43,7 +44,7 @@ func (s *DrawTypeService) CreateDrawType(name, description string) (*entities.Dr
 	return drawType, nil
 }
 
-func (s *DrawTypeService) GetDrawType(id uint) (*entities.DrawType, error) {
+func (s *DrawTypeService) GetDrawType(id uuid.UUID) (*entities.DrawType, error) {
 	return s.repo.FindByID(id)
 }
 
@@ -51,14 +52,13 @@ func (s *DrawTypeService) GetAllDrawTypes() ([]entities.DrawType, error) {
 	return s.repo.FindAll()
 }
 
-func (s *DrawTypeService) UpdateDrawType(id uint, name, description string) (*entities.DrawType, error) {
+func (s *DrawTypeService) UpdateDrawType(id uuid.UUID, name, description string) (*entities.DrawType, error) {
 	drawType, err := s.repo.FindByID(id)
 	if err != nil {
 		return nil, errors.New("draw type not found")
 	}
 
 	if name != "" {
-		// Check if another draw type with same name exists
 		existing, _ := s.repo.FindByName(name)
 		if existing != nil && existing.ID != id {
 			return nil, errors.New("draw type with this name already exists")
@@ -77,8 +77,7 @@ func (s *DrawTypeService) UpdateDrawType(id uint, name, description string) (*en
 	return drawType, nil
 }
 
-func (s *DrawTypeService) DeleteDrawType(id uint) error {
-	// Check if draw type exists
+func (s *DrawTypeService) DeleteDrawType(id uuid.UUID) error {
 	_, err := s.repo.FindByID(id)
 	if err != nil {
 		return errors.New("draw type not found")

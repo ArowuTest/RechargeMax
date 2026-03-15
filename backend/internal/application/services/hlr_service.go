@@ -47,32 +47,36 @@ type NetworkDetectionResult struct {
 	ErrorMessage string
 }
 
-// DetectNetwork detects the network for a given MSISDN
+// DetectNetwork detects the network for a given MSISDN.
+//
+// Business rule (per product spec):
+//  1. Try HLR API lookup (most accurate — handles ported numbers)
+//  2. If HLR unavailable/fails, check cache — but ONLY accept entries whose
+//     LookupSource is "hlr_api" or "user_selection" (NOT "prefix_fallback")
+//  3. If no trusted cache, accept user's explicit network selection
+//  4. No prefix fallback — ported numbers make prefix unreliable.
+//     Return an error and ask the caller to prompt the user for their network.
 func (s *HLRService) DetectNetwork(ctx context.Context, msisdn string, userSelectedNetwork *string) (*NetworkDetectionResult, error) {
-	// 1. Check cache first
-	cachedResult, err := s.getCachedNetwork(ctx, msisdn)
-	if err == nil && cachedResult != nil {
+	// ── Step 1: HLR API lookup (primary source) ──────────────────────────────
+	hlrResult, hlrErr := s.lookupViaHLR(ctx, msisdn)
+	if hlrErr == nil && hlrResult != nil {
+		return hlrResult, nil
+	}
+
+	// ── Step 2: Trusted cache (hlr_api or user_selection sourced only) ───────
+	cachedResult, cacheErr := s.getTrustedCachedNetwork(ctx, msisdn)
+	if cacheErr == nil && cachedResult != nil {
 		return cachedResult, nil
 	}
 
-	// 2. If user provided network selection, use it
+	// ── Step 3: Explicit user selection (fallback when HLR unavailable) ──────
 	if userSelectedNetwork != nil && *userSelectedNetwork != "" {
 		return s.saveUserSelection(ctx, msisdn, *userSelectedNetwork)
 	}
 
-	// 3. Try HLR API lookup
-	hlrResult, err := s.lookupViaHLR(ctx, msisdn)
-	if err == nil && hlrResult != nil {
-		return hlrResult, nil
-	}
-
-	// 4. Fallback to prefix-based detection
-	prefixResult := s.detectByPrefix(msisdn)
-	if prefixResult != nil {
-		return s.savePrefixDetection(ctx, msisdn, prefixResult.Network)
-	}
-
-	return nil, errors.New("unable to detect network for MSISDN")
+	// ── Step 4: Cannot determine network — no prefix fallback ────────────────
+	// Return structured error so the caller can prompt the user to select their network.
+	return nil, fmt.Errorf("network detection failed (HLR: %v; cache: %v) — user network selection required", hlrErr, cacheErr)
 }
 
 // getCachedNetwork retrieves network from cache if valid
@@ -82,6 +86,30 @@ func (s *HLRService) getCachedNetwork(ctx context.Context, msisdn string) (*Netw
 	cache, err := s.networkCacheRepo.FindValidCache(ctx, normalizedMSISDN)
 	if err != nil {
 		return nil, err
+	}
+
+	return &NetworkDetectionResult{
+		MSISDN:      msisdn,
+		Network:     cache.Network,
+		Source:      "cache",
+		Confidence:  s.getConfidenceLevel(cache.LookupSource),
+		CachedUntil: &cache.CacheExpires,
+	}, nil
+}
+
+// getTrustedCachedNetwork retrieves network from cache ONLY if the entry was
+// sourced from hlr_api or user_selection. prefix_fallback entries are rejected
+// because ported numbers make prefix detection unreliable.
+func (s *HLRService) getTrustedCachedNetwork(ctx context.Context, msisdn string) (*NetworkDetectionResult, error) {
+	normalizedMSISDN := normalizeToInternational(msisdn)
+	cache, err := s.networkCacheRepo.FindValidCache(ctx, normalizedMSISDN)
+	if err != nil {
+		return nil, err
+	}
+
+	// Only trust hlr_api and user_selection sourced entries
+	if cache.LookupSource == "prefix_fallback" {
+		return nil, fmt.Errorf("cache entry is prefix_fallback sourced — not trusted for ported number detection")
 	}
 
 	return &NetworkDetectionResult{

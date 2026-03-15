@@ -19,7 +19,7 @@ type DrawWinners struct {
 	IsRunnerUp     bool       `json:"is_runner_up" gorm:"column:is_runner_up;default:false"`
 	IsForfeited    bool       `json:"is_forfeited" gorm:"column:is_forfeited;default:false"`
 	PromotedFrom     *uuid.UUID `json:"promoted_from" gorm:"column:promoted_from;type:uuid"`
-	PrizeCategoryID  *uint      `json:"prize_category_id" gorm:"column:prize_category_id;index"`
+	PrizeCategoryID  *uuid.UUID `json:"prize_category_id" gorm:"column:prize_category_id;type:uuid;index"`
 	CategoryName     *string    `json:"category_name" gorm:"column:category_name"`
 	CreatedAt      *time.Time `json:"created_at" gorm:"column:created_at"`
 	ExpiresAt      *time.Time `json:"expires_at" gorm:"column:expires_at"`

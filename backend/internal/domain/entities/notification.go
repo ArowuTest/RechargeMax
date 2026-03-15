@@ -29,5 +29,5 @@ type Notification struct {
 
 // TableName specifies the table name for Notification
 func (Notification) TableName() string {
-	return "notifications"
+	return "user_notifications"
 }

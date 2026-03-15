@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+
+	"rechargemax/internal/pkg/safe"
 	"fmt"
 	"log"
 	"net/http"
@@ -77,7 +79,7 @@ func main() {
 	log.Println("✅ Commission release job started (interval: 6h)")
 
 	// Start server in goroutine
-	go func() {
+	safe.Go(func() {
 		log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		log.Println("🎉 RechargeMax Rewards Platform - READY!")
 		log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -85,11 +87,11 @@ func main() {
 		log.Printf("📊 Health: http://localhost:%s/health", config.Port)
 		log.Printf("🔌 API v1: http://localhost:%s/api/v1", config.Port)
 		log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		
+
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("❌ Server failed to start: %v", err)
 		}
-	}()
+	})
 
 	// Wait for interrupt signal
 	quit := make(chan os.Signal, 1)
@@ -366,7 +368,7 @@ func initServices(repos *Repositories, config *Config, db *gorm.DB) *Services {
 	sqlDB, _ := db.DB()
 	telecomServiceIntegrated := services.NewTelecomServiceIntegrated(sqlDB)
 
-	networkConfigService := services.NewNetworkConfigService(repos.Network, repos.DataPlan)
+	networkConfigService := services.NewNetworkConfigService(repos.Network, repos.DataPlan, hlrService)
 
 	userService := services.NewUserService(
 		repos.User,
@@ -593,8 +595,8 @@ func initHandlers(svcs *Services, repos *Repositories, appConfig *Config, db *go
 		Network: handlers.NewNetworkHandler(svcs.NetworkConfig, svcs.HLR),
 		Platform: handlers.NewPlatformHandler(db),
 		Payment: handlers.NewPaymentHandler(svcs.Payment, svcs.Recharge, svcs.Subscription, appConfig.FrontendURL),
-		Commission: handlers.NewCommissionHandler(),
-		ValidationStats: handlers.NewValidationStatsHandler(),
+		Commission: handlers.NewCommissionHandler(db),
+		ValidationStats: handlers.NewValidationStatsHandler(db),
 		Webhook: handlers.NewWebhookHandler(svcs.Webhook),
 		AdminSpinClaims: handlers.NewAdminSpinClaimsHandler(svcs.AdminSpinClaims),
 		Test: handlers.NewTestHandler(svcs.Recharge, svcs.Subscription),
@@ -634,10 +636,10 @@ func setupRouter(hdlrs *Handlers, svcs *Services, db *gorm.DB) *gin.Engine {
 	{
 		// Auth routes (public)
 		auth := v1.Group("/auth")
-		otpLimiter := middleware.NewOTPRateLimiter(5, time.Minute)
+		otpLimiter := middleware.NewOTPRateLimiter(db, 5, time.Minute)
 		// OTP rate limiting is handled within the handler itself
 		{
-			auth.POST("/send-otp", middleware.OTPRateLimitMiddleware(otpLimiter), hdlrs.Auth.SendOTP)
+			auth.POST("/send-otp", middleware.OTPRateLimit(otpLimiter), hdlrs.Auth.SendOTP)
 			auth.POST("/verify-otp", hdlrs.Auth.VerifyOTP)
 		}
 

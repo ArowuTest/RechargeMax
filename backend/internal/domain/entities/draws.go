@@ -28,8 +28,8 @@ type Draws struct {
 	PrizePool        float64 `json:"prize_pool" gorm:"column:prize_pool;type:decimal(12,2);not null" validate:"required,min=0"`
 	WinnersCount     int     `json:"winners_count" gorm:"column:winners_count;default:1"`
 	RunnerUpsCount   int     `json:"runner_ups_count" gorm:"column:runner_ups_count;default:1"`
-	DrawTypeID       *uint   `json:"draw_type_id" gorm:"column:draw_type_id;index"`       // Links to draw_types table
-	PrizeTemplateID  *uint   `json:"prize_template_id" gorm:"column:prize_template_id;index"` // Links to prize_templates table
+	DrawTypeID       *uuid.UUID `json:"draw_type_id" gorm:"column:draw_type_id;type:uuid;index"`       // Links to draw_types table
+	PrizeTemplateID  *uuid.UUID `json:"prize_template_id" gorm:"column:prize_template_id;type:uuid;index"` // Links to prize_templates table
 
 	// Draw statistics
 	TotalEntries  int `json:"total_entries" gorm:"column:total_entries;default:0"`

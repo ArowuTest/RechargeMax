@@ -2,6 +2,8 @@ package persistence
 
 import (
 	"rechargemax/internal/domain/entities"
+
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -17,9 +19,9 @@ func (r *DrawTypeRepositoryGORM) Create(drawType *entities.DrawType) error {
 	return r.db.Create(drawType).Error
 }
 
-func (r *DrawTypeRepositoryGORM) FindByID(id uint) (*entities.DrawType, error) {
+func (r *DrawTypeRepositoryGORM) FindByID(id uuid.UUID) (*entities.DrawType, error) {
 	var drawType entities.DrawType
-	err := r.db.Preload("PrizeTemplates").First(&drawType, id).Error
+	err := r.db.Preload("PrizeTemplates").First(&drawType, "id = ?", id).Error
 	if err != nil {
 		return nil, err
 	}
@@ -36,8 +38,8 @@ func (r *DrawTypeRepositoryGORM) Update(drawType *entities.DrawType) error {
 	return r.db.Save(drawType).Error
 }
 
-func (r *DrawTypeRepositoryGORM) Delete(id uint) error {
-	return r.db.Delete(&entities.DrawType{}, id).Error
+func (r *DrawTypeRepositoryGORM) Delete(id uuid.UUID) error {
+	return r.db.Delete(&entities.DrawType{}, "id = ?", id).Error
 }
 
 func (r *DrawTypeRepositoryGORM) FindByName(name string) (*entities.DrawType, error) {

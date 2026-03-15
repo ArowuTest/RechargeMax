@@ -2,6 +2,8 @@ package jobs
 
 import (
 	"context"
+
+	"rechargemax/internal/pkg/safe"
 	"fmt"
 	"time"
 
@@ -119,7 +121,7 @@ func (j *CommissionReleaseJob) Run(ctx context.Context) error {
 
 // StartScheduled launches the job on a ticker and runs it until ctx is cancelled.
 func (j *CommissionReleaseJob) StartScheduled(ctx context.Context, interval time.Duration) {
-	go func() {
+	safe.Go(func() {
 		// Run immediately on start
 		if err := j.Run(ctx); err != nil {
 			fmt.Printf("[CommissionReleaseJob] Initial run error: %v\n", err)
@@ -137,5 +139,5 @@ func (j *CommissionReleaseJob) StartScheduled(ctx context.Context, interval time
 				}
 			}
 		}
-	}()
+	})
 }

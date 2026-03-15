@@ -12,16 +12,19 @@ import (
 type NetworkConfigService struct {
 	networkRepo  repositories.NetworkRepository
 	dataPlanRepo repositories.DataPlanRepository
+	hlrService   *HLRService // used for HLR-backed network validation
 }
 
 // NewNetworkConfigService creates a new network config service
 func NewNetworkConfigService(
 	networkRepo repositories.NetworkRepository,
 	dataPlanRepo repositories.DataPlanRepository,
+	hlrService *HLRService,
 ) *NetworkConfigService {
 	return &NetworkConfigService{
 		networkRepo:  networkRepo,
 		dataPlanRepo: dataPlanRepo,
+		hlrService:   hlrService,
 	}
 }
 
@@ -366,48 +369,46 @@ func (s *NetworkConfigService) UpdateNetwork(ctx context.Context, networkID stri
 }
 
 
-// ValidatePhoneNetwork validates that a phone number belongs to the expected network
+// ValidatePhoneNetwork validates that a phone number belongs to the expected network.
+// DEPRECATED: Use HLRService.ValidateAndDetectNetwork directly from recharge_service.go.
+// This method is retained for backward compatibility but now routes through HLRService.
+// Prefix-based detection has been removed — ported numbers make it unreliable.
 func (s *NetworkConfigService) ValidatePhoneNetwork(ctx context.Context, phoneNumber string, expectedNetwork string) (map[string]interface{}, error) {
-	// This method integrates with HLRService for network detection
-	// For now, we'll use a simple prefix-based validation
-	// In production, this should use HLRService.DetectNetwork()
-	
-	// Normalize phone number (remove +234 or 234 prefix)
-	normalizedPhone := phoneNumber
-	if len(phoneNumber) > 10 {
-		if phoneNumber[:4] == "+234" {
-			normalizedPhone = "0" + phoneNumber[4:]
-		} else if phoneNumber[:3] == "234" {
-			normalizedPhone = "0" + phoneNumber[3:]
-		}
+	if s.hlrService == nil {
+		return nil, fmt.Errorf("HLR service not configured — cannot validate network")
 	}
-	
-	// Extract prefix (first 4 digits)
-	if len(normalizedPhone) < 4 {
-		return nil, fmt.Errorf("invalid phone number format")
+
+	// Route through HLR service (correct order: HLR → trusted cache → user selection)
+	detection, err := s.hlrService.DetectNetwork(ctx, phoneNumber, &expectedNetwork)
+	if err != nil {
+		// HLR unavailable and no trusted cache — the caller must prompt user selection
+		return map[string]interface{}{
+			"phone_number":       phoneNumber,
+			"expected_network":   expectedNetwork,
+			"detected_network":   "",
+			"is_valid":           false,
+			"validation_method":  "hlr_lookup",
+			"requires_user_input": true,
+			"message":            "Network detection unavailable — please confirm your network",
+		}, nil
 	}
-	prefix := normalizedPhone[:4]
-	
-	// Detect network based on prefix
-	detectedNetwork := detectNetworkByPrefix(prefix)
-	
-	// Validate against expected network
-	isValid := detectedNetwork == expectedNetwork
-	
+
+	isValid := detection.Network == expectedNetwork
 	result := map[string]interface{}{
 		"phone_number":      phoneNumber,
 		"expected_network":  expectedNetwork,
-		"detected_network":  detectedNetwork,
+		"detected_network":  detection.Network,
 		"is_valid":          isValid,
-		"validation_method": "prefix", // In production: "hlr_lookup"
+		"validation_method": detection.Source,
+		"confidence":        detection.Confidence,
 	}
-	
+
 	if !isValid {
-		result["message"] = fmt.Sprintf("Phone number belongs to %s, not %s", detectedNetwork, expectedNetwork)
+		result["message"] = fmt.Sprintf("Phone number belongs to %s, not %s", detection.Network, expectedNetwork)
 	} else {
 		result["message"] = "Phone number validated successfully"
 	}
-	
+
 	return result, nil
 }
 

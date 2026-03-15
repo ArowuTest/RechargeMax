@@ -38,8 +38,8 @@ func (h *DrawHandler) CreateDraw(c *gin.Context) {
 		Name            string    `json:"name" binding:"required"`
 		Description     string    `json:"description"`
 		DrawDate        time.Time `json:"draw_date"`
-		DrawTypeID      uint      `json:"draw_type_id"`
-		PrizeTemplateID *uint     `json:"prize_template_id"`
+		DrawTypeID      *uuid.UUID `json:"draw_type_id"`
+		PrizeTemplateID *uuid.UUID `json:"prize_template_id"`
 		PrizePool       *int64    `json:"prize_pool"`
 		DurationHours   int       `json:"duration_hours"`
 	}
@@ -81,7 +81,7 @@ func (h *DrawHandler) CreateDraw(c *gin.Context) {
 			req.Name,
 			req.Description,
 			req.DrawDate,
-			req.DrawTypeID,
+			func() uuid.UUID { if req.DrawTypeID != nil { return *req.DrawTypeID }; return uuid.Nil }(),
 			*req.PrizeTemplateID,
 		)
 	} else {

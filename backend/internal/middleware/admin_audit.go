@@ -3,6 +3,8 @@ package middleware
 import (
 	"bytes"
 	"encoding/json"
+
+	"rechargemax/internal/pkg/safe"
 	"fmt"
 	"io"
 	"net/http"
@@ -68,7 +70,7 @@ func AdminAuditMiddleware(db *gorm.DB) gin.HandlerFunc {
 				entry.NewValue = bodyBytes
 			}
 		}
-		go func() { db.Create(&entry) }()
+		safe.Go(func() { db.Create(&entry) })
 	}
 }
 

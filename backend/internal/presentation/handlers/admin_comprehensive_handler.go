@@ -2531,7 +2531,7 @@ func (h *AdminComprehensiveHandler) GetPrizeTemplates(c *gin.Context) {
 	var err error
 	
 	if drawTypeIDStr != "" {
-		drawTypeID, parseErr := strconv.ParseUint(drawTypeIDStr, 10, 32)
+		drawTypeID, parseErr := uuid.Parse(drawTypeIDStr)
 		if parseErr != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"success": false,
@@ -2539,7 +2539,7 @@ func (h *AdminComprehensiveHandler) GetPrizeTemplates(c *gin.Context) {
 			})
 			return
 		}
-		templates, err = h.prizeTemplateService.GetTemplatesByDrawType(uint(drawTypeID))
+		templates, err = h.prizeTemplateService.GetTemplatesByDrawType(drawTypeID)
 	} else {
 		templates, err = h.prizeTemplateService.GetAllTemplates()
 	}
@@ -2561,7 +2561,7 @@ func (h *AdminComprehensiveHandler) GetPrizeTemplates(c *gin.Context) {
 // GetPrizeTemplate returns a specific prize template with its categories
 func (h *AdminComprehensiveHandler) GetPrizeTemplate(c *gin.Context) {
 	templateIDStr := c.Param("id")
-	templateID, err := strconv.ParseUint(templateIDStr, 10, 32)
+	templateID, err := uuid.Parse(templateIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
@@ -2570,7 +2570,7 @@ func (h *AdminComprehensiveHandler) GetPrizeTemplate(c *gin.Context) {
 		return
 	}
 
-	template, err := h.prizeTemplateService.GetTemplate(uint(templateID))
+	template, err := h.prizeTemplateService.GetTemplate(templateID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"success": false,
@@ -2594,7 +2594,7 @@ func (h *AdminComprehensiveHandler) CreatePrizeTemplate(c *gin.Context) {
 	var req struct {
 		Name        string                   `json:"name" binding:"required"`
 		Description string                   `json:"description"`
-		DrawTypeID  uint                     `json:"draw_type_id" binding:"required"`
+		DrawTypeID  uuid.UUID                `json:"draw_type_id" binding:"required"`
 		IsDefault   bool                     `json:"is_default"`
 		Categories  []entities.PrizeCategory `json:"categories" binding:"required,min=1"`
 	}
@@ -2632,7 +2632,7 @@ func (h *AdminComprehensiveHandler) CreatePrizeTemplate(c *gin.Context) {
 // UpdatePrizeTemplate updates an existing prize template
 func (h *AdminComprehensiveHandler) UpdatePrizeTemplate(c *gin.Context) {
 	templateIDStr := c.Param("id")
-	templateID, err := strconv.ParseUint(templateIDStr, 10, 32)
+	templateID, err := uuid.Parse(templateIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
@@ -2656,7 +2656,7 @@ func (h *AdminComprehensiveHandler) UpdatePrizeTemplate(c *gin.Context) {
 	}
 
 	template, err := h.prizeTemplateService.UpdateTemplate(
-		uint(templateID),
+		templateID,
 		req.Name,
 		req.Description,
 		req.IsDefault,
@@ -2679,7 +2679,7 @@ func (h *AdminComprehensiveHandler) UpdatePrizeTemplate(c *gin.Context) {
 // DeletePrizeTemplate deletes a prize template
 func (h *AdminComprehensiveHandler) DeletePrizeTemplate(c *gin.Context) {
 	templateIDStr := c.Param("id")
-	templateID, err := strconv.ParseUint(templateIDStr, 10, 32)
+	templateID, err := uuid.Parse(templateIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
@@ -2688,7 +2688,7 @@ func (h *AdminComprehensiveHandler) DeletePrizeTemplate(c *gin.Context) {
 		return
 	}
 
-	if err := h.prizeTemplateService.DeleteTemplate(uint(templateID)); err != nil {
+	if err := h.prizeTemplateService.DeleteTemplate(templateID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
 			"error":   err.Error(),
@@ -2705,7 +2705,7 @@ func (h *AdminComprehensiveHandler) DeletePrizeTemplate(c *gin.Context) {
 // AddPrizeCategory adds a new prize category to a template
 func (h *AdminComprehensiveHandler) AddPrizeCategory(c *gin.Context) {
 	templateIDStr := c.Param("id")
-	templateID, err := strconv.ParseUint(templateIDStr, 10, 32)
+	templateID, err := uuid.Parse(templateIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
@@ -2730,7 +2730,7 @@ func (h *AdminComprehensiveHandler) AddPrizeCategory(c *gin.Context) {
 	}
 
 	category, err := h.prizeTemplateService.AddCategoryToTemplate(
-		uint(templateID),
+		templateID,
 		req.CategoryName,
 		req.PrizeAmount,
 		req.WinnerCount,
@@ -2754,7 +2754,7 @@ func (h *AdminComprehensiveHandler) AddPrizeCategory(c *gin.Context) {
 // UpdatePrizeCategory updates an existing prize category
 func (h *AdminComprehensiveHandler) UpdatePrizeCategory(c *gin.Context) {
 	categoryIDStr := c.Param("id")
-	categoryID, err := strconv.ParseUint(categoryIDStr, 10, 32)
+	categoryID, err := uuid.Parse(categoryIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
@@ -2779,7 +2779,7 @@ func (h *AdminComprehensiveHandler) UpdatePrizeCategory(c *gin.Context) {
 	}
 
 	category, err := h.prizeTemplateService.UpdateCategory(
-		uint(categoryID),
+		categoryID,
 		req.CategoryName,
 		req.PrizeAmount,
 		req.WinnerCount,
@@ -2803,7 +2803,7 @@ func (h *AdminComprehensiveHandler) UpdatePrizeCategory(c *gin.Context) {
 // DeletePrizeCategory deletes a prize category
 func (h *AdminComprehensiveHandler) DeletePrizeCategory(c *gin.Context) {
 	categoryIDStr := c.Param("id")
-	categoryID, err := strconv.ParseUint(categoryIDStr, 10, 32)
+	categoryID, err := uuid.Parse(categoryIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
@@ -2812,7 +2812,7 @@ func (h *AdminComprehensiveHandler) DeletePrizeCategory(c *gin.Context) {
 		return
 	}
 
-	if err := h.prizeTemplateService.DeleteCategory(uint(categoryID)); err != nil {
+	if err := h.prizeTemplateService.DeleteCategory(categoryID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
 			"error":   err.Error(),

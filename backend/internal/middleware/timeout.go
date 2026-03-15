@@ -3,6 +3,8 @@ package middleware
 import (
 	"context"
 	"net/http"
+
+	"rechargemax/internal/pkg/safe"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -21,10 +23,10 @@ func TimeoutMiddleware(timeout time.Duration) gin.HandlerFunc {
 		// Channel to signal when request is done
 		done := make(chan struct{})
 
-		go func() {
+		safe.Go(func() {
 			c.Next()
 			close(done)
-		}()
+		})
 
 		select {
 		case <-done:

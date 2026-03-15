@@ -219,7 +219,7 @@ if err != nil || len(prizes) == 0 {
 			ID:          uuid.New(),
 			SpinCode:    spinCode,
 			UserID:      &user.ID,
-			Msisdn:      msisdn,
+			MSISDN:      msisdn,
 			PrizeID:     &selectedPrize.ID,
 			PrizeName:   selectedPrize.PrizeName,
 			PrizeType:   selectedPrize.PrizeType,
@@ -380,7 +380,7 @@ func (s *SpinService) provisionPrizeWithRetry(ctx context.Context, spin *entitie
 func (s *SpinService) provisionPrize(ctx context.Context, spin *entities.WheelSpin) error {
 	// Detect network
 	networkHint := ""
-	networkResult, err := s.hlrService.DetectNetwork(ctx, spin.Msisdn, &networkHint)
+	networkResult, err := s.hlrService.DetectNetwork(ctx, spin.MSISDN, &networkHint)
 	if err != nil {
 		return fmt.Errorf("failed to detect network: %w", err)
 	}
@@ -407,10 +407,10 @@ func (s *SpinService) provisionAirtime(ctx context.Context, spin *entities.Wheel
 		return fmt.Errorf("telecom service not initialized")
 	}
 	
-	fmt.Printf("📞 Provisioning ₦%d airtime to %s on %s network\n", spin.PrizeValue/100, spin.Msisdn, network)
+	fmt.Printf("📞 Provisioning ₦%d airtime to %s on %s network\n", spin.PrizeValue/100, spin.MSISDN, network)
 	
 	// Call VTPass to purchase airtime (amount in kobo)
-	response, err := s.telecomService.PurchaseAirtime(ctx, network, spin.Msisdn, int(spin.PrizeValue))
+	response, err := s.telecomService.PurchaseAirtime(ctx, network, spin.MSISDN, int(spin.PrizeValue))
 	if err != nil {
 		return fmt.Errorf("VTPass airtime purchase failed: %w", err)
 	}
@@ -437,10 +437,10 @@ func (s *SpinService) provisionData(ctx context.Context, spin *entities.WheelSpi
 		return fmt.Errorf("no data variation code found for value %d on %s", spin.PrizeValue, network)
 	}
 	
-	fmt.Printf("📱 Provisioning data (%s) to %s on %s network\n", variationCode, spin.Msisdn, network)
+	fmt.Printf("📱 Provisioning data (%s) to %s on %s network\n", variationCode, spin.MSISDN, network)
 	
 	// Call VTPass to purchase data (amount in kobo)
-	response, err := s.telecomService.PurchaseData(ctx, network, spin.Msisdn, variationCode, int(spin.PrizeValue))
+	response, err := s.telecomService.PurchaseData(ctx, network, spin.MSISDN, variationCode, int(spin.PrizeValue))
 	if err != nil {
 		return fmt.Errorf("VTPass data purchase failed: %w", err)
 	}
@@ -520,7 +520,7 @@ func (s *SpinService) logFulfillmentAttempt(ctx context.Context, spin *entities.
 	//     ) VALUES ($1, $2, $3, $4, $5, $6, $7)
 	// `
 	// s.db.ExecContext(ctx, query, spin.ID, spin.FulfillmentAttempts,
-	//     spin.FulfillmentMode, status, errorMsg, network, spin.Msisdn)
+	//     spin.FulfillmentMode, status, errorMsg, network, spin.MSISDN)
 }
 
 // GetSpinHistory gets user's spin history

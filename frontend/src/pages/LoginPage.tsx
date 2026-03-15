@@ -35,16 +35,11 @@ export const LoginPage: React.FC = () => {
   const handleVerifyOTP = async () => {
     const success = await verifyOTP(otp);
     if (success) {
-      // Token and user are already stored by authApi.verifyOTP in api-client.ts
-      // Get the stored user data and token
+      // Auth cookie set by backend on verifyOTP - get user profile
       const storedUser = localStorage.getItem('rechargemax_user');
-      const storedToken = localStorage.getItem('rechargemax_token');
-      
-      if (storedUser && storedToken) {
+      if (storedUser) {
         const userData = JSON.parse(storedUser);
-        
-        // Update auth context with user data and token
-        login(userData, storedToken);
+        login(userData);
         resetOTP();
         setPhoneNumber('');
         

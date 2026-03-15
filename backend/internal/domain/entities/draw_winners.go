@@ -11,7 +11,7 @@ type DrawWinner struct {
 	ID             uuid.UUID  `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
 	DrawID         uuid.UUID  `json:"draw_id" gorm:"column:draw_id;not null;index"`
 	UserID         *uuid.UUID `json:"user_id" gorm:"column:user_id;index"`
-	Msisdn         string     `json:"msisdn" gorm:"column:msisdn;not null" validate:"required"`
+	MSISDN         string     `json:"msisdn" gorm:"column:msisdn;not null" validate:"required"`
 	Position       int        `json:"position" gorm:"column:position;not null" validate:"required"`
 	PrizeAmount    int64      `json:"prize_amount" gorm:"column:prize_amount;type:bigint;not null" validate:"required"` // Prize amount in kobo
 	ClaimedAt      *time.Time `json:"claimed_at" gorm:"column:claimed_at"`

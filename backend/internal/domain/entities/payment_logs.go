@@ -18,7 +18,7 @@ type PaymentLog struct {
 	ErrorCode        string         `json:"error_code" gorm:"column:error_code"`
 	IpAddress        string         `json:"ip_address" gorm:"column:ip_address"`
 	UserAgent        string         `json:"user_agent" gorm:"column:user_agent"`
-	RequestId        string         `json:"request_id" gorm:"column:request_id"`
+	RequestID        string         `json:"request_id" gorm:"column:request_id"`
 	ResponseTimeMs   *int           `json:"response_time_ms" gorm:"column:response_time_ms"`
 	Amount           *int64         `json:"amount" gorm:"column:amount;type:bigint"`
 	Currency         string         `json:"currency" gorm:"column:currency"`

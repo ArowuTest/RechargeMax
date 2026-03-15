@@ -8,18 +8,18 @@ import (
 
 // CommissionLedger represents the commission_ledger table
 type CommissionLedger struct {
-	Id                             uuid.UUID                 `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
-	UserId                         uuid.UUID                 `json:"user_id" gorm:"column:user_id;not null"`
-	TransactionId                  *uuid.UUID                `json:"transaction_id" gorm:"column:transaction_id"`
-	VtuTransactionId               *uuid.UUID                `json:"vtu_transaction_id" gorm:"column:vtu_transaction_id"`
+	ID                             uuid.UUID                 `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
+	UserID                         uuid.UUID                 `json:"user_id" gorm:"column:user_id;not null"`
+	TransactionID                  *uuid.UUID                `json:"transaction_id" gorm:"column:transaction_id"`
+	VtuTransactionID               *uuid.UUID                `json:"vtu_transaction_id" gorm:"column:vtu_transaction_id"`
 	CommissionType                 string                    `json:"commission_type" gorm:"column:commission_type;not null"`
 	BaseAmount                     int64                     `json:"base_amount" gorm:"column:base_amount;type:bigint;not null"`
 	CommissionRate                 float64                   `json:"commission_rate" gorm:"column:commission_rate;type:decimal(5,2);not null"`
 	CommissionAmount               int64                     `json:"commission_amount" gorm:"column:commission_amount;type:bigint;not null"`
-	ReferrerId                     *uuid.UUID                `json:"referrer_id" gorm:"column:referrer_id"`
+	ReferrerID                     *uuid.UUID                `json:"referrer_id" gorm:"column:referrer_id"`
 	ReferralLevel                  *int                      `json:"referral_level" gorm:"column:referral_level"`
 	Status                         string                    `json:"status" gorm:"column:status;default:'PENDING'"`
-	WalletTransactionId            *uuid.UUID                `json:"wallet_transaction_id" gorm:"column:wallet_transaction_id"`
+	WalletTransactionID            *uuid.UUID                `json:"wallet_transaction_id" gorm:"column:wallet_transaction_id"`
 	PaidAt                         *time.Time                `json:"paid_at" gorm:"column:paid_at"`
 	ReversedAt                     *time.Time                `json:"reversed_at" gorm:"column:reversed_at"`
 	ReversalReason                 string                    `json:"reversal_reason" gorm:"column:reversal_reason"`

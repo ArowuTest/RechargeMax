@@ -10,7 +10,7 @@ import (
 type AdminActivityLog struct {
 	Action         string         `json:"action" gorm:"column:action;not null" validate:"required"`
 	Resource       string         `json:"resource" gorm:"column:resource"`
-	ResourceId     string         `json:"resource_id" gorm:"column:resource_id"`
+	ResourceID     string         `json:"resource_id" gorm:"column:resource_id"`
 	Method         string         `json:"method" gorm:"column:method"`
 	Endpoint       string         `json:"endpoint" gorm:"column:endpoint"`
 	RequestData    datatypes.JSON `json:"request_data" gorm:"column:request_data"`

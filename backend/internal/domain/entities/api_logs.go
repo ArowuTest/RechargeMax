@@ -8,7 +8,7 @@ import (
 
 // APILog represents the api_logs table
 type APILog struct {
-	Id                             uuid.UUID                 `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
+	ID                             uuid.UUID                 `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
 	ServiceName                    string                    `json:"service_name" gorm:"column:service_name;not null"`
 	Endpoint                       string                    `json:"endpoint" gorm:"column:endpoint;not null"`
 	Method                         string                    `json:"method" gorm:"column:method;not null"`
@@ -22,7 +22,7 @@ type APILog struct {
 	IsError                        *bool                     `json:"is_error" gorm:"column:is_error;default:false"`
 	ErrorMessage                   string                    `json:"error_message" gorm:"column:error_message"`
 	ErrorCode                      string                    `json:"error_code" gorm:"column:error_code"`
-	UserId                         *uuid.UUID                `json:"user_id" gorm:"column:user_id"`
+	UserID                         *uuid.UUID                `json:"user_id" gorm:"column:user_id"`
 	TransactionReference           string                    `json:"transaction_reference" gorm:"column:transaction_reference"`
 	IpAddress                      string                    `json:"ip_address" gorm:"column:ip_address"`
 	CreatedAt                      time.Time                 `json:"created_at" gorm:"column:created_at;autoCreateTime"`

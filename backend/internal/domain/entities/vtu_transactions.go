@@ -8,10 +8,10 @@ import (
 
 // VtuTransaction represents the vtu_transactions table
 type VtuTransaction struct {
-	Id                             uuid.UUID                 `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
+	ID                             uuid.UUID                 `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
 	TransactionReference           string                    `json:"transaction_reference" gorm:"column:transaction_reference;uniqueIndex;not null"`
-	ParentTransactionId            *uuid.UUID                `json:"parent_transaction_id" gorm:"column:parent_transaction_id"`
-	UserId                         *uuid.UUID                `json:"user_id" gorm:"column:user_id"`
+	ParentTransactionID            *uuid.UUID                `json:"parent_transaction_id" gorm:"column:parent_transaction_id"`
+	UserID                         *uuid.UUID                `json:"user_id" gorm:"column:user_id"`
 	PhoneNumber                    string                    `json:"phone_number" gorm:"column:phone_number;not null"`
 	NetworkProvider                string                    `json:"network_provider" gorm:"column:network_provider;not null"`
 	RechargeType                   string                    `json:"recharge_type" gorm:"column:recharge_type;not null"`
@@ -19,7 +19,7 @@ type VtuTransaction struct {
 	DataBundle                     string                    `json:"data_bundle" gorm:"column:data_bundle"`
 	DataBundleCode                 string                    `json:"data_bundle_code" gorm:"column:data_bundle_code"`
 	ProviderUsed                   string                    `json:"provider_used" gorm:"column:provider_used"`
-	ProviderTransactionId          string                    `json:"provider_transaction_id" gorm:"column:provider_transaction_id"`
+	ProviderTransactionID          string                    `json:"provider_transaction_id" gorm:"column:provider_transaction_id"`
 	ProviderReference              string                    `json:"provider_reference" gorm:"column:provider_reference"`
 	ProviderResponse               datatypes.JSON            `json:"provider_response" gorm:"column:provider_response;type:jsonb"`
 	ProviderStatus                 string                    `json:"provider_status" gorm:"column:provider_status"`

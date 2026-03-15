@@ -407,8 +407,8 @@ func (s *UserService) AddBankAccount(ctx context.Context, msisdn string, account
 		return fmt.Errorf("user not found: %w", err)
 	}
 
-	account.UserId = user.ID
-	account.Id = uuid.New()
+	account.UserID = user.ID
+	account.ID = uuid.New()
 	account.CreatedAt = time.Now()
 
 	if err := s.bankAccountRepo.Create(ctx, account); err != nil {
@@ -430,15 +430,15 @@ func (s *UserService) RequestWithdrawal(ctx context.Context, msisdn string, amou
 	if err != nil {
 		return nil, fmt.Errorf("bank account not found: %w", err)
 	}
-	if account.UserId != user.ID {
+	if account.UserID != user.ID {
 		return nil, fmt.Errorf("bank account does not belong to user")
 	}
 
 	// Create withdrawal
 	withdrawal := &entities.Withdrawal{
-		Id:            uuid.New(),
-		UserId:        user.ID,
-		BankAccountId: bankAccountID,
+		ID:            uuid.New(),
+		UserID:        user.ID,
+		BankAccountID: bankAccountID,
 		Amount:        amount,
 		Status:        "pending",
 	}

@@ -11,7 +11,7 @@ type DrawEntry struct {
 	ID           uuid.UUID  `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
 	DrawID       uuid.UUID  `json:"draw_id" gorm:"column:draw_id;not null;index"`
 	UserID       *uuid.UUID `json:"user_id" gorm:"column:user_id;index"`
-	Msisdn       string     `json:"msisdn" gorm:"column:msisdn;not null" validate:"required"`
+	MSISDN       string     `json:"msisdn" gorm:"column:msisdn;not null" validate:"required"`
 	EntriesCount *int       `json:"entries_count" gorm:"column:entries_count"`
 	CreatedAt    *time.Time `json:"created_at" gorm:"column:created_at"`
 }

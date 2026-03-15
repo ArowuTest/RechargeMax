@@ -9,7 +9,7 @@ import (
 
 // AffiliatePayout represents the affiliate_payouts table
 type AffiliatePayout struct {
-	PayoutBatchId   *uuid.UUID     `json:"payout_batch_id" gorm:"column:payout_batch_id"`
+	PayoutBatchID   *uuid.UUID     `json:"payout_batch_id" gorm:"column:payout_batch_id"`
 	CommissionCount int            `json:"commission_count" gorm:"column:commission_count;not null" validate:"required"`
 	CommissionIds   datatypes.JSON `json:"commission_ids" gorm:"column:commission_ids"`
 	PayoutMethod    string         `json:"payout_method" gorm:"column:payout_method"`

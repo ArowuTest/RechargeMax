@@ -143,16 +143,14 @@ export const UserManagementTab: React.FC = () => {
       const statusData = await statusRes.json();
       if (!statusData.success) throw new Error(statusData.message || 'Status update failed');
 
-      // Update tier (via platform_settings or dedicated endpoint if available)
+      // Update loyalty tier via status endpoint (backend accepts loyalty_tier in body)
       if (editTier !== editUser.loyalty_tier) {
-        const tierRes = await fetch(`${API_BASE}/admin/users/${editUser.id}`, {
+        await fetch(`${API_BASE}/admin/users/${editUser.id}/status`, {
           method: 'PUT',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ loyalty_tier: editTier }),
         });
-        const tierData = await tierRes.json();
-        if (!tierData.success) throw new Error(tierData.message || 'Tier update failed');
       }
 
       toast({ title: 'Updated', description: `${userDisplayName(editUser)} updated successfully` });

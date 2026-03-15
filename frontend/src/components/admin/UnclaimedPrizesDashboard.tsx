@@ -13,8 +13,7 @@ import {
   Bell
 } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
-const getAdminToken = () => localStorage.getItem('rechargemax_admin_token') || localStorage.getItem('adminToken') || '';
+const API_BASE = '/api/v1';
 
 interface UnclaimedPrize {
   id: string;
@@ -48,11 +47,7 @@ const UnclaimedPrizesDashboard: React.FC = () => {
   const fetchUnclaimedPrizes = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/admin/prize-fulfillment/unclaimed-prizes`,  {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      const response = await fetch(`${API_BASE}/admin/winners/pending-claims`,  { credentials: 'include' });
       
       if (!response.ok) throw new Error('Failed to fetch unclaimed prizes');
       
@@ -73,9 +68,7 @@ const UnclaimedPrizesDashboard: React.FC = () => {
     try {
       const response = await fetch(`${API_BASE}/admin/prize-fulfillment/send-reminders`,  {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+        credentials: 'include',
       });
       
       if (!response.ok) throw new Error('Failed to send reminders');

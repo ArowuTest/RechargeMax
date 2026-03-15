@@ -44,10 +44,8 @@ const MyPrizesPanel: React.FC = () => {
   const fetchMyPrizes = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/v1/user/my-prizes', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+      const response = await fetch('/api/v1/user/prizes', {
+        credentials: 'include'
       });
       
       if (!response.ok) throw new Error('Failed to fetch prizes');
@@ -75,10 +73,11 @@ const MyPrizesPanel: React.FC = () => {
     setShowClaimModal(false);
     
     try {
-      const response = await fetch(`/api/v1/user/claim-prize/${selectedPrize.id}`, {
+      const response = await fetch(`/api/v1/winner/${selectedPrize.id}/claim`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Content-Type': 'application/json'
         }
       });
       
@@ -114,16 +113,16 @@ const MyPrizesPanel: React.FC = () => {
   };
 
   const getStatusBadge = (prize: Prize) => {
-    if (prize.claimStatus === 'claimed' || prize.provisionStatus === 'completed') {
+    if (prize.claimStatus === 'CLAIMED' || prize.provisionStatus === 'COMPLETED') {
       return <Badge className="bg-green-500">Claimed</Badge>;
     }
-    if (prize.claimStatus === 'processing') {
+    if (prize.claimStatus === 'PENDING_ADMIN_REVIEW') {
       return <Badge className="bg-blue-500">Processing</Badge>;
     }
     if (prize.provisionStatus === 'failed') {
       return <Badge className="bg-red-500">Failed</Badge>;
     }
-    if (prize.claimStatus === 'unclaimed') {
+    if (prize.claimStatus === 'PENDING') {
       return <Badge className="bg-orange-500">Unclaimed</Badge>;
     }
     return <Badge variant="outline">{prize.claimStatus}</Badge>;
@@ -136,10 +135,10 @@ const MyPrizesPanel: React.FC = () => {
   };
 
   const unclaimedPrizes = prizes.filter(p => 
-    p.claimStatus === 'unclaimed' && p.fulfillmentMode === 'manual_claim'
+    p.claimStatus === 'PENDING' && p.fulfillmentMode === 'manual_claim'
   );
   const claimedPrizes = prizes.filter(p => 
-    p.claimStatus === 'claimed' || p.provisionStatus === 'completed'
+    p.claimStatus === 'CLAIMED' || p.provisionStatus === 'COMPLETED'
   );
 
   return (

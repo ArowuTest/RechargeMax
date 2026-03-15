@@ -195,14 +195,39 @@ func LoggingMiddleware() gin.HandlerFunc {
 }
 
 // CORSMiddleware handles CORS
+// buildAllowedOrigins returns a list of trusted origins from env + hardcoded dev origins.
+func buildAllowedOrigins() []string {
+	origins := []string{
+		"http://localhost:3000", "http://localhost:5173",
+		"http://127.0.0.1:3000", "http://127.0.0.1:5173",
+	}
+	if extra := os.Getenv("ALLOWED_ORIGINS"); extra != "" {
+		for _, o := range strings.Split(extra, ",") {
+			if o = strings.TrimSpace(o); o != "" {
+				origins = append(origins, o)
+			}
+		}
+	}
+	return origins
+}
+
+// isAllowedOrigin checks if origin matches one of the allowed origins (exact or suffix match).
+func isAllowedOrigin(origin string, allowed []string) bool {
+	for _, a := range allowed {
+		if origin == a || strings.HasSuffix(origin, strings.TrimPrefix(a, "https://")) {
+			return true
+		}
+	}
+	return false
+}
+
 func CORSMiddleware() gin.HandlerFunc {
+	allowedOrigins := buildAllowedOrigins()
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
-		if origin != "" && (strings.Contains(origin, "localhost") || strings.Contains(origin, "manus.computer") || strings.Contains(origin, "127.0.0.1")) {
+		if origin != "" && isAllowedOrigin(origin, allowedOrigins) {
 			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
 			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		} else if origin == "" {
-			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		}
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Request-ID")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")

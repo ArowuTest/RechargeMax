@@ -15,7 +15,7 @@ type Transaction struct {
 	UserID          *uuid.UUID `json:"user_id" gorm:"column:user_id;index"`
 
 	// Transaction details
-	Msisdn          string     `json:"msisdn" gorm:"column:msisdn;not null;index" validate:"required"`
+	MSISDN          string     `json:"msisdn" gorm:"column:msisdn;not null;index" validate:"required"`
 	NetworkProvider string     `json:"network_provider" gorm:"column:network_provider;not null" validate:"required"`
 	RechargeType    string     `json:"recharge_type" gorm:"column:recharge_type;not null;check:recharge_type IN ('AIRTIME','DATA')" validate:"required,oneof=AIRTIME DATA"`
 	Amount          int64      `json:"amount" gorm:"column:amount;type:bigint;not null" validate:"required,gt=0"` // Amount in kobo (1 Naira = 100 kobo)

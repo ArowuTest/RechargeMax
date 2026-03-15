@@ -8,7 +8,7 @@ import (
 
 // WebhookLog represents the webhook_logs table
 type WebhookLog struct {
-	Id                             uuid.UUID                 `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
+	ID                             uuid.UUID                 `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
 	Source                         string                    `json:"source" gorm:"column:source;not null"`
 	EventType                      string                    `json:"event_type" gorm:"column:event_type;not null"`
 	Payload                        datatypes.JSON            `json:"payload" gorm:"column:payload;type:jsonb;not null"`
@@ -22,7 +22,7 @@ type WebhookLog struct {
 	ProcessingAttempts             *int                      `json:"processing_attempts" gorm:"column:processing_attempts;default:0"`
 	MaxProcessingAttempts          *int                      `json:"max_processing_attempts" gorm:"column:max_processing_attempts;default:3"`
 	TransactionReference           string                    `json:"transaction_reference" gorm:"column:transaction_reference"`
-	RelatedTransactionId           *uuid.UUID                `json:"related_transaction_id" gorm:"column:related_transaction_id"`
+	RelatedTransactionID           *uuid.UUID                `json:"related_transaction_id" gorm:"column:related_transaction_id"`
 	ReceivedAt                     time.Time                 `json:"received_at" gorm:"column:received_at;autoCreateTime"`
 	VerifiedAt                     *time.Time                `json:"verified_at" gorm:"column:verified_at"`
 	ProcessedAt                    *time.Time                `json:"processed_at" gorm:"column:processed_at"`

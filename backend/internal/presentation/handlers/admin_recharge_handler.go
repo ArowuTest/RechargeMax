@@ -41,7 +41,7 @@ func (h *AdminComprehensiveHandler) GetRechargeTransactions(c *gin.Context) {
 	for _, r := range transactions {
 		response = append(response, map[string]interface{}{
 			"id":         r.ID,
-			"msisdn":     r.Msisdn,
+			"msisdn":     r.MSISDN,
 			"amount":     r.Amount,
 			"network":    r.NetworkProvider,
 			"status":     r.Status,

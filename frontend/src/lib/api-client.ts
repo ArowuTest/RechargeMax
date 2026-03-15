@@ -144,7 +144,7 @@ export const authApi = {
 export const adminAuthApi = {
   // Admin login
   login: async (email: string, password: string) => {
-    const response = await apiClient.post<ApiResponse<{ token: string; admin: any }>>('/admin/login', {
+    const response = await apiClient.post<ApiResponse<{ token: string; admin: any }>>('/admin/auth/login', {
       email,
       password,
     });
@@ -161,7 +161,7 @@ export const adminAuthApi = {
   logout: async () => {
     try {
       // Backend clears the httpOnly admin cookie
-      await apiClient.post('/admin/logout');
+      await apiClient.post('/admin/auth/logout');
     } finally {
       // Clear non-sensitive admin profile cache
       localStorage.removeItem('rechargemax_admin_user');
@@ -596,11 +596,11 @@ export const adminApi: any = {
       const params = new URLSearchParams();
       if (startDate) params.append('start_date', startDate);
       if (endDate) params.append('end_date', endDate);
-      const response = await apiClient.get<ApiResponse>(`/admin/analytics/revenue?${params}`);
+      const response = await apiClient.get<ApiResponse>(`/admin/dashboard?${params}`);
       return response.data;
     },
     getUsers: async () => {
-      const response = await apiClient.get<ApiResponse>('/admin/analytics/users');
+      const response = await apiClient.get<ApiResponse>('/admin/users');
       return response.data;
     },
   },
@@ -608,19 +608,19 @@ export const adminApi: any = {
   // Configuration
   config: {
     get: async (key: string) => {
-      const response = await apiClient.get<ApiResponse>(`/admin/config/${key}`);
+      const response = await apiClient.get<ApiResponse>(`/admin/settings/${key}`);
       return response.data;
     },
     set: async (key: string, value: any) => {
-      const response = await apiClient.post<ApiResponse>('/admin/config', { key, value });
+      const response = await apiClient.put<ApiResponse>('/admin/settings', { [key]: value });
       return response.data;
     },
     getCommissionRates: async () => {
-      const response = await apiClient.get<ApiResponse>('/admin/config/commission-rates');
+      const response = await apiClient.get<ApiResponse>('/admin/settings');
       return response.data;
     },
     setCommissionRates: async (rates: any) => {
-      const response = await apiClient.put<ApiResponse>('/admin/config/commission-rates', rates);
+      const response = await apiClient.put<ApiResponse>('/admin/settings', rates);
       return response.data;
     },
   },

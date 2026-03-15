@@ -169,7 +169,7 @@ func (s *DrawService) ExportDrawEntries(ctx context.Context, startDate, endDate 
 	// for _, r := range recharges {
 	//     if r.Status == "completed" {
 	//         points := r.Amount / 20000 // ₦200 = 1 point
-	//         pointsByMSISDN[r.Msisdn] += points
+	//         pointsByMSISDN[r.MSISDN] += points
 	//     }
 	// }
 	// 
@@ -177,14 +177,14 @@ func (s *DrawService) ExportDrawEntries(ctx context.Context, startDate, endDate 
 	// subscriptions, _ := s.subscriptionRepo.FindActiveInPeriod(ctx, startDate, endDate)
 	// for _, sub := range subscriptions {
 	//     days := calculateDaysInPeriod(sub, startDate, endDate)
-	//     pointsByMSISDN[sub.Msisdn] += days // 1 point per day
+	//     pointsByMSISDN[sub.MSISDN] += days // 1 point per day
 	// }
 	// 
 	// // From wheel spins (bonus points)
 	// spins, _ := s.spinRepo.FindByDateRange(ctx, startDate, endDate)
 	// for _, spin := range spins {
 	//     if spin.PrizeType == "points" && spin.Status == "claimed" {
-	//         pointsByMSISDN[spin.Msisdn] += spin.PointsEarned
+	//         pointsByMSISDN[spin.MSISDN] += spin.PointsEarned
 	//     }
 	// }
 	
@@ -437,11 +437,11 @@ func (s *DrawService) GetDrawWinners(ctx context.Context, drawID uuid.UUID) ([]D
 	// 
 	// var response []DrawWinnerResponse
 	// for _, winner := range winners {
-	//     user, _ := s.userRepo.FindByMSISDN(ctx, winner.Msisdn)
+	//     user, _ := s.userRepo.FindByMSISDN(ctx, winner.MSISDN)
 	//     response = append(response, DrawWinnerResponse{
 	//         ID:          winner.ID,
 	//         DrawID:      winner.DrawID,
-	//         MSISDN:      winner.Msisdn,
+	//         MSISDN:      winner.MSISDN,
 	//         UserName:    user.FullName,
 	//         PrizeName:   winner.PrizeName,
 	//         PrizeValue:  winner.PrizeValue,
@@ -668,7 +668,7 @@ func (s *DrawService) ExecuteDraw(ctx context.Context, drawID string) error {
 				winner := entities.DrawWinners{
 					ID:              uuid.New(),
 					DrawID:          did,
-					Msisdn:          msisdn,
+					MSISDN:          msisdn,
 					Position:        position,
 					PrizeAmount:     int64(category.PrizeAmount),
 					IsRunnerUp:      false,
@@ -690,7 +690,7 @@ func (s *DrawService) ExecuteDraw(ctx context.Context, drawID string) error {
 				runnerUp := entities.DrawWinners{
 					ID:              uuid.New(),
 					DrawID:          did,
-					Msisdn:          msisdn,
+					MSISDN:          msisdn,
 					Position:        position,
 					PrizeAmount:     int64(category.PrizeAmount),
 				IsRunnerUp:      true,
@@ -766,7 +766,7 @@ func (s *DrawService) ProcessCSVEntries(ctx context.Context, drawID uuid.UUID, c
 			entry := &entities.DrawEntries{
 				ID:        uuid.New(),
 				DrawID:    drawID,
-				Msisdn:    msisdn,
+				MSISDN:    msisdn,
 				CreatedAt: &now,
 			}
 			

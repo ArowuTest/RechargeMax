@@ -677,6 +677,8 @@ func setupRouter(hdlrs *Handlers, svcs *Services, db *gorm.DB) *gin.Engine {
 			// Payment routes (public)
 			payment := v1.Group("/payment")
 			{
+				payment.POST("/initialize", hdlrs.Payment.InitializePayment)
+				payment.GET("/verify/:reference", hdlrs.Payment.VerifyPayment)
 				payment.POST("/webhook", hdlrs.Payment.HandleWebhook)
 				payment.GET("/callback", hdlrs.Payment.HandleCallback)
 				payment.GET("/callback/success", hdlrs.Payment.HandleSuccess)
@@ -711,6 +713,7 @@ func setupRouter(hdlrs *Handlers, svcs *Services, db *gorm.DB) *gin.Engine {
 				draws.GET("/active", hdlrs.Draw.GetActiveDraws)
 				draws.GET("/:id", hdlrs.Draw.GetDrawByID)
 				draws.GET("/:id/winners", hdlrs.Draw.GetDrawWinners)
+				draws.GET("/my-entries", hdlrs.Draw.GetMyEntries)
 			}
 
 			// Spin routes (public - supports both guest and authenticated users)
@@ -761,6 +764,7 @@ func setupRouter(hdlrs *Handlers, svcs *Services, db *gorm.DB) *gin.Engine {
 				subscription.POST("/create", hdlrs.Subscription.CreateSubscription)
 				subscription.GET("/status", hdlrs.Subscription.GetSubscription)
 				subscription.POST("/cancel", hdlrs.Subscription.CancelSubscription)
+				subscription.GET("/history", hdlrs.Subscription.GetHistory)
 				// Note: Subscription history available via user transactions endpoint
 			}
 
@@ -799,10 +803,13 @@ func setupRouter(hdlrs *Handlers, svcs *Services, db *gorm.DB) *gin.Engine {
 		}
 
 			// Admin authentication routes (public)
-			adminAuth := v1.Group("/admin")
+			adminAuth := v1.Group("/admin/auth")
 			{
 				adminAuth.POST("/login", hdlrs.AdminAuth.Login)
+				adminAuth.POST("/logout", hdlrs.AdminAuth.Logout)
 			}
+			// Legacy /admin/login alias for backward compat
+			v1.POST("/admin/login", hdlrs.AdminAuth.Login)
 
 			// Admin routes (require admin authentication)
 			admin := v1.Group("/admin")
@@ -867,6 +874,10 @@ func setupRouter(hdlrs *Handlers, svcs *Services, db *gorm.DB) *gin.Engine {
 			admin.POST("/winners/:id/approve-claim", hdlrs.AdminComprehensive.ApproveWinnerClaim)
 			admin.POST("/winners/:id/reject-claim", hdlrs.AdminComprehensive.RejectWinnerClaim)
 			admin.GET("/winners/claim-statistics", hdlrs.AdminComprehensive.GetClaimStatistics)
+			// Prize fulfillment routes (alias of spin claims for backward compat)
+			admin.GET("/prize-fulfillment/failed-provisions", hdlrs.AdminSpinClaims.GetPendingClaims)
+			admin.POST("/prize-fulfillment/retry/:id", hdlrs.AdminSpinClaims.ApproveClaim)
+			admin.POST("/prize-fulfillment/retry-all", hdlrs.AdminSpinClaims.GetPendingClaims)
 
 			// Spin Wheel Prize Management
 			admin.GET("/spin/config", hdlrs.AdminComprehensive.GetSpinConfig)
@@ -898,6 +909,7 @@ func setupRouter(hdlrs *Handlers, svcs *Services, db *gorm.DB) *gin.Engine {
 			
 			// Validation Statistics
 			admin.POST("/validation/stats", hdlrs.ValidationStats.GetValidationStats)
+			admin.GET("/validation/stats", hdlrs.ValidationStats.GetValidationStats)
 			
 			// Recharge Monitoring APIs
 			admin.GET("/recharge/transactions", hdlrs.AdminComprehensive.GetRechargeTransactions)

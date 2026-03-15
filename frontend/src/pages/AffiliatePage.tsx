@@ -91,7 +91,6 @@ export const AffiliatePage: React.FC = () => {
 
   // Fetch affiliate data for authenticated users
   useEffect(() => {
-    console.log('[AffiliatePage] useEffect: isAuthenticated=', isAuthenticated, 'user?.msisdn=', user?.msisdn);
     if (isAuthenticated && user?.msisdn) {
       fetchAffiliateData();
     } else {
@@ -117,7 +116,7 @@ export const AffiliatePage: React.FC = () => {
           setStatistics(response.data.statistics);
           setBankAccounts(response.data.bank_accounts || []);
           setReferralLink(response.data.referral_link || '');
-          setAffiliateStatus(response.data.affiliate?.status?.toUpperCase() || 'APPROVED');
+          setAffiliateStatus(response.data.affiliate?.status?.toUpperCase() || 'PENDING');
         } else {
           // Response has is_affiliate:true but no affiliate object - treat as not found
           setAffiliateStatus('NOT_FOUND');
@@ -733,7 +732,7 @@ export const AffiliatePage: React.FC = () => {
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Affiliate Dashboard</h1>
             <p className="text-gray-600">Track your referrals and earnings</p>
-            <Badge className="mt-2" variant={affiliateData.status === 'APPROVED' ? 'default' : 'secondary'}>
+            <Badge className="mt-2" variant={affiliateData.status === 'ACTIVE' ? 'default' : 'secondary'}>
               {affiliateData.status} • {affiliateData.commission_tier} ({affiliateData.commission_rate}%)
             </Badge>
           </div>

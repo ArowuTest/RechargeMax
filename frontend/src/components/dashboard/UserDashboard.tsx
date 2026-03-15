@@ -167,12 +167,8 @@ export const UserDashboard: React.FC = () => {
 
     try {
       setCheckingSpins(true);
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/spin/eligibility`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('rechargemax_token')}`
-        }
+      const response = await fetch('/api/v1/spin/eligibility', {
+        credentials: 'include'
       });
 
       const data = await response.json();
@@ -270,15 +266,11 @@ export const UserDashboard: React.FC = () => {
 
     try {
       setUpdatingEmail(true);
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/user/profile`, {
+      const response = await fetch('/api/v1/user/profile', {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('rechargemax_token')}`
-        },
-        body: JSON.stringify({
-          email: newEmail
-        })
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: newEmail })
       });
 
       const data = await response.json();
@@ -692,7 +684,7 @@ export const UserDashboard: React.FC = () => {
                             <TableCell>{sub.entries}</TableCell>
                             <TableCell className="text-green-600">+{sub.points_earned}</TableCell>
                             <TableCell>
-                              <Badge variant={sub.status === 'ACTIVE' ? 'default' : 'secondary'}>
+                              <Badge variant={sub.status === 'active' ? 'default' : 'secondary'}>
                                 {sub.status}
                               </Badge>
                             </TableCell>

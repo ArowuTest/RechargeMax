@@ -70,7 +70,7 @@ export const AdminProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     try {
       setIsLoading(true);
 
-      const response = await fetch(`${API_BASE_URL}/admin/login`, {
+      const response = await fetch(`${API_BASE_URL}/admin/auth/login`, {
         method: 'POST',
         credentials: 'include', // receive + store httpOnly cookie
         headers: { 'Content-Type': 'application/json' },
@@ -110,7 +110,7 @@ export const AdminProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const adminLogout = async () => {
     try {
       // Ask the backend to clear the httpOnly cookie
-      await fetch(`${API_BASE_URL}/admin/logout`, {
+      await fetch(`${API_BASE_URL}/admin/auth/logout`, {
         method: 'POST',
         credentials: 'include',
       });

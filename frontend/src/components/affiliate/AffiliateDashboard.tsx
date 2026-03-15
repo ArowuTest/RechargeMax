@@ -674,7 +674,7 @@ export const AffiliateDashboard: React.FC = () => {
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Affiliate Dashboard</h1>
             <p className="text-gray-600">Track your referrals and earnings</p>
-            <Badge className="mt-2" variant={affiliateData.status === 'APPROVED' ? 'default' : 'secondary'}>
+            <Badge className="mt-2" variant={affiliateData.status === 'ACTIVE' ? 'default' : 'secondary'}>
               {affiliateData.status} • {affiliateData.commission_tier} ({affiliateData.commission_rate}%)
             </Badge>
           </div>

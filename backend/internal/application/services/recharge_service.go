@@ -134,7 +134,7 @@ func (s *RechargeService) CreateRecharge(ctx context.Context, req CreateRecharge
 		ID:              uuid.New(),
 		UserID:          &user.ID, // Link transaction to user
 		TransactionCode: transactionCode,
-		Msisdn:          normalizedMSISDN, // Use normalized format for database
+		MSISDN:          normalizedMSISDN, // Use normalized format for database
 		Amount:          req.Amount,
 		NetworkProvider: network,
 		RechargeType:    strings.ToUpper(req.RechargeType), // DB constraint requires uppercase (AIRTIME/DATA)
@@ -166,7 +166,7 @@ func (s *RechargeService) CreateRecharge(ctx context.Context, req CreateRecharge
 
 	return &RechargeResponse{
 		ID:              recharge.ID,
-		MSISDN:          recharge.Msisdn,
+		MSISDN:          recharge.MSISDN,
 		Amount:          recharge.Amount,
 		Network:         recharge.NetworkProvider,
 		RechargeType:    recharge.RechargeType,
@@ -218,7 +218,7 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 	// Calculate draw entries with loyalty tier multiplier
 	// Get user's current total points to determine their tier
 	var userForTier entities.Users
-	_ = s.db.Where("msisdn = ?", recharge.Msisdn).First(&userForTier).Error
+	_ = s.db.Where("msisdn = ?", recharge.MSISDN).First(&userForTier).Error
 	multiplier := getTierMultiplier(s.db, ctx, userForTier.TotalPoints)
 	drawEntries := int64(float64(pointsEarned) * multiplier)
 	if drawEntries < pointsEarned {
@@ -247,17 +247,17 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 		// Find or create user account (auto-create for guest transactions)
 		// Query within transaction to see committed data
 		var user entities.Users
-		err := tx.Where("msisdn = ?", recharge.Msisdn).First(&user).Error
+		err := tx.Where("msisdn = ?", recharge.MSISDN).First(&user).Error
 		if err != nil {
 			// User doesn't exist - auto-create for guest transaction
-			fmt.Printf("Auto-creating user account for guest transaction: %s\n", recharge.Msisdn)
+			fmt.Printf("Auto-creating user account for guest transaction: %s\n", recharge.MSISDN)
 			
 			// Generate unique codes
 			userCode := fmt.Sprintf("USR%s", uuid.New().String()[:8])
 			referralCode := fmt.Sprintf("RCH%s", uuid.New().String()[:8])
 			
 			newUser := &entities.Users{
-				MSISDN:              recharge.Msisdn,
+				MSISDN:              recharge.MSISDN,
 				Email:               recharge.CustomerEmail,
 				FullName:            recharge.CustomerName,
 				UserCode:            userCode,
@@ -289,7 +289,7 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 
 		// Process affiliate commission if applicable
 		if s.affiliateService != nil {
-			if err := s.affiliateService.ProcessCommission(ctx, recharge.Msisdn, recharge.Amount, recharge.ID); err != nil {
+			if err := s.affiliateService.ProcessCommission(ctx, recharge.MSISDN, recharge.Amount, recharge.ID); err != nil {
 				// Log error but don't fail the recharge
 				fmt.Printf("Failed to process affiliate commission: %v\n", err)
 				// Don't return error - commission failure shouldn't rollback recharge
@@ -306,7 +306,7 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 		}
 
 		// Create draw_entries rows for the active draw
-		s.createRechargeDrawEntries(ctx, tx, &user, int(drawEntries), recharge.Msisdn)
+		s.createRechargeDrawEntries(ctx, tx, &user, int(drawEntries), recharge.MSISDN)
 
 		return nil // Commit transaction
 	})
@@ -320,16 +320,16 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 	// rolls back the recharge.
 	safe.Go(func() {
 		var updatedUser entities.Users
-		if dbErr := s.db.Where("msisdn = ?", recharge.Msisdn).First(&updatedUser).Error; dbErr == nil {
+		if dbErr := s.db.Where("msisdn = ?", recharge.MSISDN).First(&updatedUser).Error; dbErr == nil {
 			newTier := computeLoyaltyTier(s.db, context.Background(), int64(updatedUser.TotalPoints))
 			if newTier != updatedUser.LoyaltyTier {
 				if dbErr2 := s.db.Model(&entities.Users{}).
 					Where("id = ?", updatedUser.ID).
 					Update("loyalty_tier", newTier).Error; dbErr2 != nil {
-					fmt.Printf("[Recharge] Loyalty tier update failed for %s: %v\n", recharge.Msisdn, dbErr2)
+					fmt.Printf("[Recharge] Loyalty tier update failed for %s: %v\n", recharge.MSISDN, dbErr2)
 				} else {
 					fmt.Printf("[Recharge] Loyalty tier updated %s: %s -> %s\n",
-						recharge.Msisdn, updatedUser.LoyaltyTier, newTier)
+						recharge.MSISDN, updatedUser.LoyaltyTier, newTier)
 				}
 			}
 		}
@@ -574,7 +574,7 @@ func (s *RechargeService) ProcessTelecomConfirmation(ctx context.Context, refere
 		recharge.Status = "FAILED"
 		
 		// Invalidate network cache if recharge failed
-		s.hlrService.InvalidateCache(ctx, recharge.Msisdn, "telecom_confirmation_failed")
+		s.hlrService.InvalidateCache(ctx, recharge.MSISDN, "telecom_confirmation_failed")
 		
 	case "pending", "processing":
 		recharge.Status = "PROCESSING"
@@ -591,7 +591,7 @@ func (s *RechargeService) ProcessTelecomConfirmation(ctx context.Context, refere
 	// Send notification to user about recharge status
 	if recharge.Status == "completed" {
 		// Get user details for notification
-		user, err := s.userRepo.FindByMSISDN(ctx, recharge.Msisdn)
+		user, err := s.userRepo.FindByMSISDN(ctx, recharge.MSISDN)
 		if err == nil && user != nil {
 			// Send SMS notification
 			notificationMsg := fmt.Sprintf("Your ₦%.2f %s recharge was successful! You earned %d points. Ref: %s",
@@ -608,7 +608,7 @@ func (s *RechargeService) ProcessTelecomConfirmation(ctx context.Context, refere
 	
 	// Process affiliate commission if applicable
 	// Get user to check if they were referred
-	user, err := s.userRepo.FindByMSISDN(ctx, recharge.Msisdn)
+	user, err := s.userRepo.FindByMSISDN(ctx, recharge.MSISDN)
 	if err == nil && user.ReferredBy != nil {
 		// Calculate commission (1% default, configurable by admin)
 		commissionRate := 0.01 // 1% - should be fetched from config
@@ -630,7 +630,7 @@ func (s *RechargeService) ProcessTelecomConfirmation(ctx context.Context, refere
 	auditLog := map[string]interface{}{
 		"event":              "telecom_confirmation",
 		"recharge_id":        recharge.ID.String(),
-		"msisdn":             recharge.Msisdn,
+		"msisdn":             recharge.MSISDN,
 		"reference":          reference,
 		"status":             status,
 		"provider":           provider,
@@ -783,7 +783,7 @@ func (s *RechargeService) attemptVTUWithRetry(ctx context.Context, recharge *ent
 			vtuResponse, err = s.telecomServiceIntegrated.PurchaseAirtime(
 				ctx,
 				recharge.NetworkProvider,
-				recharge.Msisdn,
+				recharge.MSISDN,
 				int(recharge.Amount),
 			)
 		} else if recharge.RechargeType == "DATA" {
@@ -793,7 +793,7 @@ func (s *RechargeService) attemptVTUWithRetry(ctx context.Context, recharge *ent
 			vtuResponse, err = s.telecomServiceIntegrated.PurchaseData(
 				ctx,
 				recharge.NetworkProvider,
-				recharge.Msisdn,
+				recharge.MSISDN,
 				variationCode,
 				int(recharge.Amount),
 			)
@@ -832,7 +832,7 @@ func (s *RechargeService) handleFailedRechargeWithRefund(ctx context.Context, re
 	s.rechargeRepo.Update(ctx, recharge)
 	
 	// Invalidate network cache if recharge failed due to wrong network
-	s.hlrService.InvalidateCache(ctx, recharge.Msisdn, "recharge_failed")
+	s.hlrService.InvalidateCache(ctx, recharge.MSISDN, "recharge_failed")
 	
 	// ✅ Initiate automatic refund after retries exhausted
 	if s.paymentService != nil && recharge.PaymentReference != "" {
@@ -862,7 +862,7 @@ func (s *RechargeService) handleFailedRechargeWithRefund(ctx context.Context, re
 			// TODO: Notify customer via SMS when notification service is available
 			// amountNaira := recharge.Amount / 100
 			// message := fmt.Sprintf("Your ₦%d recharge could not be completed after multiple attempts. A refund of ₦%d has been initiated and will be processed within 5-7 business days. We apologize for the inconvenience.", amountNaira, amountNaira)
-			// s.notificationService.SendSMS(ctx, recharge.Msisdn, message)
+			// s.notificationService.SendSMS(ctx, recharge.MSISDN, message)
 		}
 	}
 	
@@ -881,7 +881,7 @@ func (s *RechargeService) handlePendingRecharge(ctx context.Context, recharge *e
 	// TODO: Notify customer that recharge is being processed when notification service is available
 	// amountNaira := recharge.Amount / 100
 	// message := fmt.Sprintf("Your ₦%d recharge is being processed. You'll be notified once it's complete.", amountNaira)
-	// s.notificationService.SendSMS(ctx, recharge.Msisdn, message)
+	// s.notificationService.SendSMS(ctx, recharge.MSISDN, message)
 	
 	// TODO: Schedule background job to requery VTPass after 2 minutes
 	// For now, return success - background job will handle requery
@@ -949,7 +949,7 @@ func (s *RechargeService) createRechargeDrawEntries(ctx context.Context, tx *gor
 		ID:           uuid.New(),
 		DrawID:       activeDraw.ID,
 		UserID:       &user.ID,
-		Msisdn:       msisdn,
+		MSISDN:       msisdn,
 		EntriesCount: &count,
 		CreatedAt:    &now,
 	}

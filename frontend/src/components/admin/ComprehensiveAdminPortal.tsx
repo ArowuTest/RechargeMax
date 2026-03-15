@@ -174,13 +174,11 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
 
   // Log tab state for debugging
   useEffect(() => {
-    console.log('🔍 Active Tab State:', activeTab);
   }, [activeTab]);
 
   // Monitor and protect dailySubscription state from corruption
   useEffect(() => {
     if (dailySubscription) {
-      console.log('🔍 State Monitor - dailySubscription changed:', dailySubscription);
       
       // Check for suspicious values that indicate corruption
       if (dailySubscription?.amount === 80 && dailySubscription?.draw_entries_earned === 4) {
@@ -267,23 +265,15 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
         }
       
       case 'get_networks':
-        console.log('🟢 callAdminAPI: get_networks called');
         const networks = await adminApi.getNetworks();
-        console.log('🟢 adminApi.getNetworks() response:', networks);
         const networksData = networks.success ? networks.data : [];
-        console.log('🟢 networks.data:', networksData);
         const networksResult = { success: true, networks: networksData };
-        console.log('🟢 Returning:', networksResult);
         return networksResult;
       
       case 'get_data_plans':
-        console.log('🟢 callAdminAPI: get_data_plans called');
         const plans = await adminApi.getDataPlans();
-        console.log('🟢 adminApi.getDataPlans() response:', plans);
         const plansData = plans.success ? plans.data : [];
-        console.log('🟢 plans.data:', plansData);
         const plansResult = { success: true, data_plans: plansData };
-        console.log('🟢 Returning:', plansResult);
         return plansResult;
       
       case 'get_wheel_prizes':
@@ -291,13 +281,9 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
         return { success: true, wheel_prizes: prizes.success ? prizes.data : [] };
       
       case 'get_users':
-        console.log('🟢 callAdminAPI: get_users called');
         const users = await adminApi.users.getAll();
-        console.log('🟢 adminApi.users.getAll() response:', users);
         const usersData = users.success ? users.data : [];
-        console.log('🟢 users.data:', usersData);
         const result = { success: true, users: usersData || [] };
-        console.log('🟢 Returning:', result);
         return result;
       
       case 'get_admins': {
@@ -484,12 +470,9 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
 
   const fetchNetworks = async () => {
     try {
-      console.log('🟢 fetchNetworks: Starting...');
       const data = await callAdminAPI('get_networks');
-      console.log('🟢 fetchNetworks: callAdminAPI returned:', data);
-      console.log('🟢 fetchNetworks: data.networks:', data?.networks);
+
       setNetworks(data?.networks || []);
-      console.log('🟢 fetchNetworks: setNetworks called with:', data?.networks || []);
     } catch (error) {
       console.error('❌ Failed to fetch networks:', error);
     }
@@ -497,12 +480,9 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
 
   const fetchDataPlans = async () => {
     try {
-      console.log('🟢 fetchDataPlans: Starting...');
       const data = await callAdminAPI('get_data_plans');
-      console.log('🟢 fetchDataPlans: data received:', data);
-      console.log('🟢 fetchDataPlans: data.data_plans:', data?.data_plans);
+
       setDataPlans(data?.data_plans || []);
-      console.log('🟢 fetchDataPlans: dataPlans state updated');
     } catch (error) {
       console.error('❌ Failed to fetch data plans:', error);
     }
@@ -519,13 +499,10 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
 
   const fetchDailySubscription = async () => {
     try {
-      console.log('🔍 Fetching updated admin configuration...');
       const data = await callAdminAPI('get_daily_subscription');
-      console.log('🔍 Raw API Response:', JSON.stringify(data, null, 2));
       
         if (data?.daily_subscription) {
         const config = data.daily_subscription;
-        console.log('🔍 Extracted config:', JSON.stringify(config, null, 2));
         
         // Map backend fields: daily_price (kobo) -> amount (naira), daily_spins -> draw_entries_earned
         const cleanConfig = {
@@ -534,8 +511,6 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
           draw_entries_earned: Number(config.daily_spins) || Number(config.draw_entries_earned) || 1,
           is_paid: config.daily_subscription_enabled !== false && config.is_paid !== false
         };
-        
-        console.log('🔍 Clean config being set:', JSON.stringify(cleanConfig, null, 2));
         setDailySubscription(cleanConfig);
       } else {
         console.log('❌ No daily_subscription in response');
@@ -581,14 +556,11 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
   };
 
   const fetchUsers = async () => {
-    console.log('🔵 fetchUsers called');
     try {
       const data = await callAdminAPI('get_users');
-      console.log('🔵 fetchUsers response:', data);
-      console.log('🔵 data.users:', data?.users);
-      console.log('🔵 Array.isArray(data?.users):', Array.isArray(data?.users));
+
+
       setUsers(data?.users || []);
-      console.log('🔵 Users state set to:', data?.users || []);
     } catch (error) {
       console.error('❌ Failed to fetch users:', error);
     }
@@ -1672,8 +1644,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
                           step="0.01"
                           value={(() => {
                             const amount = dailySubscription?.amount || 30;
-                            console.log('🔍 UI Display - dailySubscription state:', dailySubscription);
-                            console.log('🔍 UI Display - amount being shown:', amount);
+
                             // Force correct minimum value
                             return amount >= 20 ? amount : 30;
                           })()}
@@ -1693,7 +1664,6 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
                           min="1"
                           value={(() => {
                             const entries = dailySubscription?.draw_entries_earned || 1;
-                            console.log('🔍 UI Display - entries being shown:', entries);
                             return entries >= 1 ? entries : 1;
                           })()}
                           onChange={(e) => setDailySubscription(prev => prev ? ({

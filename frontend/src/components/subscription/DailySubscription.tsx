@@ -60,25 +60,15 @@ export function DailySubscription() {
         setConfigLoading(true)
         
         // Use Go backend API instead of Supabase
-        console.log('🔍 Fetching subscription config from Go backend')
         
-        const apiUrl = `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1'}/subscription/config`
-        console.log('🔍 API URL:', apiUrl)
-        
-        const response = await fetch(apiUrl, {
+        const response = await fetch('/api/v1/subscription/config', {
           method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          }
+          credentials: 'include'
         })
         
-        console.log('🔍 Response status:', response.status)
-        
         const result = await response.json()
-        console.log('🔍 API Response:', result)
         
         if (result.success && result.config) {
-          console.log('✅ SUCCESS: Setting config to:', result.config)
           setSubscriptionConfig(result.config)
           // Update form data with new pricing
           setFormData(prev => ({
@@ -86,7 +76,6 @@ export function DailySubscription() {
             amount: prev.entries * result.config.amount
           }))
         } else {
-          console.error('❌ FAILED to fetch subscription config:', result.error || result)
         }
       } catch (error) {
         console.error('Error fetching subscription config:', error)
@@ -232,7 +221,6 @@ export function DailySubscription() {
 
       // Show diagnostic data in console and alert
       if (response.diagnostic) {
-        console.log('🔍 DIAGNOSTIC DATA:', response)
         alert('DIAGNOSTIC DATA: ' + JSON.stringify(response, null, 2))
         return
       }

@@ -446,7 +446,7 @@ export interface Winner {
   prize_name: string;
   prize_type: 'airtime' | 'data' | 'points' | 'cash' | 'physical_goods';
   prize_value: number;
-  claim_status: 'unclaimed' | 'claim_submitted' | 'processing' | 'paid' | 'shipped' | 'rejected' | 'pending' | 'approved';
+  claim_status: 'PENDING' | 'CLAIMED' | 'EXPIRED' | 'PENDING_ADMIN_REVIEW' | 'APPROVED' | 'REJECTED' | string;
   claim_submitted_at?: string;
   bank_name?: string;
   bank_code?: string;

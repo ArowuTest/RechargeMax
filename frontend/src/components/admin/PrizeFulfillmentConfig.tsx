@@ -8,8 +8,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { CheckCircle2, AlertCircle, Settings, Save } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
-const getAdminToken = () => localStorage.getItem('rechargemax_admin_token') || localStorage.getItem('adminToken') || '';
+const API_BASE = '/api/v1';
 
 
 interface PrizeFulfillmentConfig {
@@ -46,11 +45,7 @@ const PrizeFulfillmentConfigPanel: React.FC = () => {
   const fetchConfigs = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/admin/prize-fulfillment/configs`,  {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      const response = await fetch(`${API_BASE}/admin/spin/claims`,  { credentials: 'include' });
       
       if (!response.ok) throw new Error('Failed to fetch configurations');
       
@@ -76,12 +71,10 @@ const PrizeFulfillmentConfigPanel: React.FC = () => {
     setError(null);
     
     try {
-      const response = await fetch(`${API_BASE}/admin/prize-fulfillment/configs/${selectedConfig.id}`, {
+      const response = await fetch(`${API_BASE}/admin/spin/claims/${selectedConfig.id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(selectedConfig)
       });
       

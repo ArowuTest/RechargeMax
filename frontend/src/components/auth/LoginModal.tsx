@@ -42,28 +42,20 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSucce
     const success = await verifyOTP(otp);
     if (success) {
       try {
-        // Fetch real user data from database
-        const response = await fetch('getUserDashboard', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            msisdn: phone
-          })
-        });
-
-        const result = await response.json();
+        // Fetch user profile (auth cookie set by verifyOTP)
+        const profileRes = await fetch('/api/v1/user/profile', { credentials: 'include' });
+        const result = await profileRes.json();
         
-        if (result.success && result.data.user) {
+        if (result.success && result.data) {
+          const u = result.data;
           const userData = {
-            id: String(result.data.user.id),
-            msisdn: String(result.data.user.msisdn),
-            full_name: String(result.data.user.full_name || ''),
-            email: String(result.data.user.email || ''),
-            loyalty_tier: String(result.data.user.loyalty_tier),
-            total_points: Number(result.data.user.total_points || 0),
-            total_recharges: Number(result.data.user.total_recharges || 0)
+            id: String(u.id),
+            msisdn: String(u.msisdn),
+            full_name: String(u.full_name || ''),
+            email: String(u.email || ''),
+            loyalty_tier: String(u.loyalty_tier || 'BRONZE'),
+            total_points: Number(u.total_points || 0),
+            total_recharges: Number(u.total_recharges || 0)
           };
           
           login(userData);

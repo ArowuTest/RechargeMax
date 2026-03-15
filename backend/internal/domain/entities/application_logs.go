@@ -12,7 +12,7 @@ type ApplicationLog struct {
 	Context    datatypes.JSON `json:"context" gorm:"column:context"`
 	IpAddress  string         `json:"ip_address" gorm:"column:ip_address"`
 	UserAgent  string         `json:"user_agent" gorm:"column:user_agent"`
-	RequestId  string         `json:"request_id" gorm:"column:request_id"`
+	RequestID  string         `json:"request_id" gorm:"column:request_id"`
 	ErrorCode  string         `json:"error_code" gorm:"column:error_code"`
 	StackTrace string         `json:"stack_trace" gorm:"column:stack_trace"`
 	CreatedAt  *time.Time     `json:"created_at" gorm:"column:created_at"`

@@ -11,7 +11,7 @@ type NotificationDeliveryLog struct {
 	Channel           string         `json:"channel" gorm:"column:channel;not null" validate:"required"`
 	DeliveryStatus    string         `json:"delivery_status" gorm:"column:delivery_status;not null" validate:"required"`
 	ProviderName      string         `json:"provider_name" gorm:"column:provider_name"`
-	ProviderMessageId string         `json:"provider_message_id" gorm:"column:provider_message_id"`
+	ProviderMessageID string         `json:"provider_message_id" gorm:"column:provider_message_id"`
 	ProviderResponse  datatypes.JSON `json:"provider_response" gorm:"column:provider_response"`
 	ErrorCode         string         `json:"error_code" gorm:"column:error_code"`
 	ErrorMessage      string         `json:"error_message" gorm:"column:error_message"`

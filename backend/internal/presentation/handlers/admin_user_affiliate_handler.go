@@ -99,8 +99,9 @@ func (h *AdminComprehensiveHandler) UpdateUserStatus(c *gin.Context) {
 	}
 
 	var req struct {
-		Status string `json:"status" binding:"required"`
-		Reason string `json:"reason"`
+		Status      string `json:"status"`
+		LoyaltyTier string `json:"loyalty_tier"`
+		Reason      string `json:"reason"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -111,8 +112,8 @@ func (h *AdminComprehensiveHandler) UpdateUserStatus(c *gin.Context) {
 		return
 	}
 
-	// Validate status
-	if req.Status != "active" && req.Status != "suspended" && req.Status != "banned" {
+	// Validate status (optional if only tier is being updated)
+	if req.Status != "" && req.Status != "active" && req.Status != "suspended" && req.Status != "banned" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
 			"error":   "Invalid status. Must be 'active', 'suspended', or 'banned'",
@@ -129,8 +130,8 @@ func (h *AdminComprehensiveHandler) UpdateUserStatus(c *gin.Context) {
 		return
 	}
 
-	// Update user status
-	if req.Status == "active" {
+	// Update user status (skip if not provided)
+	if req.Status != "" && req.Status == "active" {
 		if err := h.userService.ReactivateUser(ctx, user.MSISDN); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"success": false,
@@ -138,7 +139,7 @@ func (h *AdminComprehensiveHandler) UpdateUserStatus(c *gin.Context) {
 			})
 			return
 		}
-	} else {
+	} else if req.Status != "" {
 		if err := h.userService.DeactivateUser(ctx, user.MSISDN); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"success": false,
@@ -148,9 +149,23 @@ func (h *AdminComprehensiveHandler) UpdateUserStatus(c *gin.Context) {
 		}
 	}
 
+	// Update loyalty tier if provided
+	if req.LoyaltyTier != "" {
+		if err := h.db.Exec(
+			`UPDATE users SET loyalty_tier = ? WHERE id = ?`,
+			req.LoyaltyTier, userID,
+		).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"success": false,
+				"error":   "Failed to update loyalty tier",
+			})
+			return
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"message": "User status updated successfully",
+		"message": "User updated successfully",
 	})
 }
 

@@ -173,7 +173,7 @@ func (s *USSDRechargeService) createDrawEntries(ctx context.Context, ussdRecharg
 			ID:        uuid.New(),
 			DrawID:    draw.ID,
 			UserID:    &userID,
-			Msisdn:    ussdRecharge.MSISDN,
+			MSISDN:    ussdRecharge.MSISDN,
 			CreatedAt: &now,
 		}
 		if err := s.drawRepo.CreateEntry(ctx, entry); err != nil {

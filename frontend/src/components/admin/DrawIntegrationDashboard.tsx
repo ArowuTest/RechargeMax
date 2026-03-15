@@ -354,7 +354,7 @@ const DrawIntegrationDashboard: React.FC = () => {
         return 'bg-green-100 text-green-800';
       case 'UPCOMING':
         return 'bg-blue-100 text-blue-800';
-      case 'DRAWING':
+      case 'DRAWING': // falls through
         return 'bg-purple-100 text-purple-800';
       case 'COMPLETED':
         return 'bg-gray-100 text-gray-800';
@@ -371,7 +371,7 @@ const DrawIntegrationDashboard: React.FC = () => {
         return <CheckCircle className="w-4 h-4" />;
       case 'UPCOMING':
         return <Clock className="w-4 h-4" />;
-      case 'DRAWING':
+      case 'DRAWING': // falls through
         return <Target className="w-4 h-4" />;
       case 'COMPLETED':
         return <Trophy className="w-4 h-4" />;

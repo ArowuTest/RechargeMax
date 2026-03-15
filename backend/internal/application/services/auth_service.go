@@ -94,7 +94,7 @@ func (s *AuthService) SendOTP(ctx context.Context, msisdn string, purpose string
 	// Create OTP record — always stored with normalised international MSISDN
 	otp := &entities.OTP{
 		ID:        uuid.New(),
-		Msisdn:    normalizedMSISDN,
+		MSISDN:    normalizedMSISDN,
 		Code:      string(otpHash), // bcrypt hash — NOT plaintext
 		Purpose:   purpose,
 		ExpiresAt: time.Now().Add(10 * time.Minute), // 10 minutes expiry

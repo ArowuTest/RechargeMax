@@ -117,15 +117,10 @@ export const EnterpriseHomePage: React.FC = () => {
       window.history.replaceState({}, document.title, window.location.pathname + window.location.hash.split('?')[0]);
       
       // Trigger backend callback to process VTU
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
-      fetch(`${API_BASE_URL.replace('/api/v1', '')}/api/v1/payment/callback?reference=${reference}&gateway=paystack`, {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
+      fetch(`/api/v1/payment/callback?reference=${reference}&gateway=paystack`, {
+        credentials: 'include'
       })
         .then(res => res.json())
-        .then(data => console.log('Backend callback triggered:', data))
         .catch(err => console.error('Backend callback failed:', err));
       
       // Poll transaction status with retry mechanism
@@ -138,7 +133,7 @@ export const EnterpriseHomePage: React.FC = () => {
         }
         
         setTimeout(() => {
-          fetch(`${API_BASE_URL}/recharge/reference/${reference}`)
+          fetch(`/api/v1/recharge/reference/${reference}`, { credentials: 'include' })
             .then(res => res.json())
             .then(response => {
               // Extract transaction data from nested response
@@ -215,7 +210,7 @@ export const EnterpriseHomePage: React.FC = () => {
       window.history.replaceState({}, document.title, window.location.pathname);
       
       // Trigger backend callback to process subscription
-      fetch(`/api/v1/payment/callback?reference=${reference}&gateway=paystack`)
+      fetch(`/api/v1/payment/callback?reference=${reference}&gateway=paystack`, { credentials: 'include' })
         .then(res => res.json())
         .then(data => console.log('Backend callback triggered:', data))
         .catch(err => console.error('Backend callback failed:', err));
@@ -320,7 +315,7 @@ export const EnterpriseHomePage: React.FC = () => {
         
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
           try {
-            const response = await fetch(`/api/v1/recharge/reference/${ref}`);
+            const response = await fetch(`/api/v1/recharge/reference/${ref}`, { credentials: 'include' });
             if (!response.ok) {
               throw new Error('Failed to fetch transaction details');
             }

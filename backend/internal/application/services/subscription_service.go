@@ -100,7 +100,7 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 		Amount:           20.00, // ₦20 daily
 		Status:           "pending",
 	}
-	// Set UserId if user was found
+	// Set UserID if user was found
 	if user != nil {
 		subscription.UserID = &user.ID
 	}

@@ -91,7 +91,7 @@ interface WinnerDetails extends Winner {
   runner_ups?: Winner[];
 }
 
-type ClaimStatusFilter = 'all' | 'pending' | 'approved' | 'rejected' | 'processing' | 'completed';
+type ClaimStatusFilter = 'all' | 'PENDING' | 'CLAIMED' | 'EXPIRED' | 'PENDING_ADMIN_REVIEW' | 'APPROVED' | 'REJECTED';
 type PrizeTypeFilter = 'all' | 'airtime' | 'data' | 'points' | 'cash' | 'physical_goods';
 
 export default function WinnerClaimProcessing() {
@@ -223,7 +223,7 @@ export default function WinnerClaimProcessing() {
       if (response.success) {
         toast({
           title: 'Success',
-          description: `Claim ${approvalForm.action === 'approve' ? 'approved' : 'rejected'} successfully`,
+          description: `Claim ${approvalForm.action === 'approve' ? 'APPROVED' : 'REJECTED'} successfully`,
         });
 
         setShowApprovalDialog(false);
@@ -433,15 +433,16 @@ export default function WinnerClaimProcessing() {
   };
 
   const getClaimStatusBadge = (status: string) => {
-    const statusConfig = {
-      pending: { variant: 'secondary' as const, icon: Clock, label: 'Pending' },
-      approved: { variant: 'default' as const, icon: CheckCircle2, label: 'Approved' },
-      rejected: { variant: 'destructive' as const, icon: XCircle, label: 'Rejected' },
-      processing: { variant: 'default' as const, icon: RefreshCw, label: 'Processing' },
-      completed: { variant: 'default' as const, icon: CheckCircle2, label: 'Completed' },
+    const statusConfig: Record<string, { variant: 'secondary'|'default'|'destructive'|'outline'; icon: React.ElementType; label: string }> = {
+      PENDING:              { variant: 'secondary',    icon: Clock,         label: 'Pending' },
+      APPROVED:             { variant: 'default',      icon: CheckCircle2,  label: 'Approved' },
+      REJECTED:             { variant: 'destructive',  icon: XCircle,       label: 'Rejected' },
+      CLAIMED:              { variant: 'default',      icon: CheckCircle2,  label: 'Claimed' },
+      EXPIRED:              { variant: 'outline',      icon: Clock,         label: 'Expired' },
+      PENDING_ADMIN_REVIEW: { variant: 'secondary',    icon: RefreshCw,     label: 'Under Review' },
     };
 
-    const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.pending;
+    const config = statusConfig[status?.toUpperCase?.() ?? ''] ?? statusConfig['PENDING']!;
     const Icon = config.icon;
 
     return (
@@ -663,7 +664,7 @@ export default function WinnerClaimProcessing() {
                             : winner.prize_value}
                         </TableCell>
                         <TableCell>
-                          {getClaimStatusBadge(winner.claim_status || 'pending')}
+                          {getClaimStatusBadge(winner.claim_status || 'PENDING')}
                         </TableCell>
                         <TableCell>
                           {winner.draw_date ? new Date(winner.draw_date).toLocaleDateString() : 'N/A'}
@@ -677,7 +678,7 @@ export default function WinnerClaimProcessing() {
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
-                            {winner.claim_status === 'pending' && (
+                            {winner.claim_status === 'PENDING' && (
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -686,7 +687,7 @@ export default function WinnerClaimProcessing() {
                                 <CheckCircle2 className="h-4 w-4" />
                               </Button>
                             )}
-                            {winner.claim_status === 'approved' &&
+                            {winner.claim_status === 'APPROVED' &&
                               winner.prize_type === 'cash' && (
                                 <Button
                                   variant="ghost"
@@ -696,7 +697,7 @@ export default function WinnerClaimProcessing() {
                                   <DollarSign className="h-4 w-4" />
                                 </Button>
                               )}
-                            {winner.claim_status === 'approved' &&
+                            {winner.claim_status === 'APPROVED' &&
                               winner.prize_type === 'physical_goods' && (
                                 <Button
                                   variant="ghost"
@@ -762,7 +763,7 @@ export default function WinnerClaimProcessing() {
                 <div>
                   <Label className="text-muted-foreground">Claim Status</Label>
                   <div className="mt-1">
-                    {getClaimStatusBadge(selectedWinner.claim_status || 'pending')}
+                    {getClaimStatusBadge(selectedWinner.claim_status || 'PENDING')}
                   </div>
                 </div>
                 <div>
@@ -843,7 +844,7 @@ export default function WinnerClaimProcessing() {
                           <Badge variant="secondary">{index + 1}</Badge>
                           <span className="font-mono">{maskMSISDN(runnerUp.msisdn)}</span>
                         </div>
-                        <Badge variant="outline">{runnerUp.claim_status || 'standby'}</Badge>
+                        <Badge variant="outline">{runnerUp.claim_status || 'PENDING'}</Badge>
                       </div>
                     ))}
                   </div>

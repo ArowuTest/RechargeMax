@@ -8,8 +8,8 @@ import (
 
 // BankAccount represents the bank_accounts table
 type BankAccount struct {
-	Id                             uuid.UUID                 `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
-	UserId                         uuid.UUID                 `json:"user_id" gorm:"column:user_id;not null"`
+	ID                             uuid.UUID                 `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
+	UserID                         uuid.UUID                 `json:"user_id" gorm:"column:user_id;not null"`
 	AccountName                    string                    `json:"account_name" gorm:"column:account_name;not null"`
 	AccountNumber                  string                    `json:"account_number" gorm:"column:account_number;not null"`
 	BankName                       string                    `json:"bank_name" gorm:"column:bank_name;not null"`

@@ -233,7 +233,7 @@ const StrategicAffiliateAdminDashboard: React.FC<StrategicAffiliateAdminDashboar
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'APPROVED':
+      case 'ACTIVE':
         return 'bg-green-100 text-green-800';
       case 'PENDING':
         return 'bg-yellow-100 text-yellow-800';

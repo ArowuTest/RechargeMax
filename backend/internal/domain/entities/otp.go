@@ -9,7 +9,7 @@ import (
 // OTP represents an OTP (One-Time Password) record
 type OTP struct {
 	ID        uuid.UUID  `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
-	Msisdn    string     `gorm:"type:varchar(15);not null;index" json:"msisdn"`
+	MSISDN    string     `gorm:"type:varchar(15);not null;index" json:"msisdn"`
 	Code      string     `gorm:"type:varchar(10);not null" json:"code"`
 	Purpose   string     `gorm:"type:varchar(50);default:'login'" json:"purpose"` // login, verification, password_reset
 	ExpiresAt time.Time  `gorm:"not null;index" json:"expires_at"`

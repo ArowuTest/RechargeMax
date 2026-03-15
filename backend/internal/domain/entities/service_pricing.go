@@ -7,7 +7,7 @@ import (
 
 // ServicePrice represents the service_pricing table
 type ServicePrice struct {
-	Id                             uuid.UUID                 `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
+	ID                             uuid.UUID                 `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
 	NetworkProvider                string                    `json:"network_provider" gorm:"column:network_provider;not null"`
 	ServiceType                    string                    `json:"service_type" gorm:"column:service_type;not null"`
 	DataBundleCode                 string                    `json:"data_bundle_code" gorm:"column:data_bundle_code"`

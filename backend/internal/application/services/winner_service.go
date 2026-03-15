@@ -1083,7 +1083,7 @@ func (s *WinnerService) ClaimSpinPrize(ctx context.Context, prizeID uuid.UUID, m
 	}
 	
 	// 2. Verify ownership
-	if spinPrize.Msisdn != msisdn {
+	if spinPrize.MSISDN != msisdn {
 		return fmt.Errorf("unauthorized: prize does not belong to this user")
 	}
 	
@@ -1157,7 +1157,7 @@ func (s *WinnerService) triggerManualFulfillment(ctx context.Context, spinPrize 
 	
 	// Detect network
 	networkHint := ""
-	networkResult, err := s.hlrService.DetectNetwork(ctx, spinPrize.Msisdn, &networkHint)
+	networkResult, err := s.hlrService.DetectNetwork(ctx, spinPrize.MSISDN, &networkHint)
 	if err != nil {
 		return fmt.Errorf("failed to detect network: %w", err)
 	}
@@ -1209,10 +1209,10 @@ func (s *WinnerService) provisionAirtimeManual(ctx context.Context, spinPrize *e
 	}
 	
 	fmt.Printf("📞 [Manual] Provisioning ₦%d airtime to %s on %s network\n", 
-		spinPrize.PrizeValue/100, spinPrize.Msisdn, network)
+		spinPrize.PrizeValue/100, spinPrize.MSISDN, network)
 	
 	// Call VTPass (amount in kobo)
-	response, err := s.telecomService.PurchaseAirtime(ctx, network, spinPrize.Msisdn, int(spinPrize.PrizeValue))
+	response, err := s.telecomService.PurchaseAirtime(ctx, network, spinPrize.MSISDN, int(spinPrize.PrizeValue))
 	if err != nil {
 		return fmt.Errorf("VTPass airtime purchase failed: %w", err)
 	}
@@ -1239,10 +1239,10 @@ func (s *WinnerService) provisionDataManual(ctx context.Context, spinPrize *enti
 		return fmt.Errorf("no data variation code found for value %d on %s", spinPrize.PrizeValue, network)
 	}
 	
-	fmt.Printf("📱 [Manual] Provisioning data (%s) to %s on %s network\n", variationCode, spinPrize.Msisdn, network)
+	fmt.Printf("📱 [Manual] Provisioning data (%s) to %s on %s network\n", variationCode, spinPrize.MSISDN, network)
 	
 	// Call VTPass (amount in kobo)
-	response, err := s.telecomService.PurchaseData(ctx, network, spinPrize.Msisdn, variationCode, int(spinPrize.PrizeValue))
+	response, err := s.telecomService.PurchaseData(ctx, network, spinPrize.MSISDN, variationCode, int(spinPrize.PrizeValue))
 	if err != nil {
 		return fmt.Errorf("VTPass data purchase failed: %w", err)
 	}

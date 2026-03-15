@@ -27,8 +27,7 @@ interface PrizeTemplate {
   categories?: PrizeCategory[];
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
-const getAdminToken = () => localStorage.getItem('rechargemax_admin_token') || localStorage.getItem('adminToken') || '';
+const API_BASE = '/api/v1';
 
 const PrizeTemplateManagement: React.FC = () => {
   const [drawTypes, setDrawTypes] = useState<DrawType[]>([]);
@@ -66,11 +65,7 @@ const PrizeTemplateManagement: React.FC = () => {
 
   const fetchDrawTypes = async () => {
     try {
-      const response = await fetch(`${API_BASE}/admin/draw-types`, {
-        headers: {
-          'Authorization': `Bearer ${getAdminToken()}`
-        }
-      });
+      const response = await fetch(`${API_BASE}/admin/draw-types`, { credentials: 'include' });
       const data = await response.json();
       if (data.success) {
         setDrawTypes(data.data || []);
@@ -83,11 +78,7 @@ const PrizeTemplateManagement: React.FC = () => {
   const fetchTemplates = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/admin/prize-templates`, {
-        headers: {
-          'Authorization': `Bearer ${getAdminToken()}`
-        }
-      });
+      const response = await fetch(`${API_BASE}/admin/prize-templates`, { credentials: 'include' });
       const data = await response.json();
       if (data.success) {
         setTemplates(data.data || []);
@@ -101,11 +92,7 @@ const PrizeTemplateManagement: React.FC = () => {
 
   const fetchTemplateDetails = async (templateId: number) => {
     try {
-      const response = await fetch(`${API_BASE}/admin/prize-templates/${templateId}`, {
-        headers: {
-          'Authorization': `Bearer ${getAdminToken()}`
-        }
-      });
+      const response = await fetch(`${API_BASE}/admin/prize-templates/${templateId}`, { credentials: 'include' });
       const data = await response.json();
       if (data.success) {
         setSelectedTemplate(data.data);
@@ -127,10 +114,8 @@ const PrizeTemplateManagement: React.FC = () => {
     try {
       const response = await fetch(`${API_BASE}/admin/prize-templates`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${getAdminToken()}`
-        },
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
       });
 
@@ -159,10 +144,8 @@ const PrizeTemplateManagement: React.FC = () => {
     try {
       const response = await fetch(`${API_BASE}/admin/prize-templates/${selectedTemplate.id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${getAdminToken()}`
-        },
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
       });
 
@@ -194,9 +177,7 @@ const PrizeTemplateManagement: React.FC = () => {
     try {
       const response = await fetch(`${API_BASE}/admin/prize-templates/${templateId}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${getAdminToken()}`
-        }
+        credentials: 'include',
       });
 
       const data = await response.json();

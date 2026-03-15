@@ -252,7 +252,7 @@ func (s *AdminSpinClaimService) ListClaims(ctx context.Context, filters ClaimFil
 		claims[i] = ClaimListItem{
 			ID:          result.ID,
 			SpinCode:    result.SpinCode,
-			MSISDN:      result.Msisdn,
+			MSISDN:      result.MSISDN,
 			UserID:      result.UserID,
 			UserName:    result.UserName,
 			PrizeType:   result.PrizeType,
@@ -329,7 +329,7 @@ func (s *AdminSpinClaimService) GetClaimDetails(ctx context.Context, claimID str
 	response := &ClaimDetailsResponse{
 		ID:               claim.ID,
 		SpinCode:         claim.SpinCode,
-		MSISDN:           claim.Msisdn,
+		MSISDN:           claim.MSISDN,
 		UserID:           claim.UserID,
 		PrizeType:        claim.PrizeType,
 		PrizeName:        claim.PrizeName,

@@ -15,7 +15,7 @@ type SpinResult struct {
 	TransactionID *uuid.UUID `json:"transaction_id" gorm:"column:transaction_id"`
 
 	// Spin details
-	Msisdn     string     `json:"msisdn" gorm:"column:msisdn;not null;index" validate:"required"`
+	MSISDN     string     `json:"msisdn" gorm:"column:msisdn;not null;index" validate:"required"`
 	PrizeID    *uuid.UUID `json:"prize_id" gorm:"column:prize_id"` // Reference to wheel_prizes
 	PrizeName  string     `json:"prize_name" gorm:"column:prize_name;not null" validate:"required"`
 	PrizeType  string     `json:"prize_type" gorm:"column:prize_type;not null" validate:"required"`

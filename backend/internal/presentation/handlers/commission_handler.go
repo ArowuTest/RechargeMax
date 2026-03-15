@@ -228,7 +228,7 @@ func (h *CommissionHandler) GetCommissionReconciliation(c *gin.Context) {
 	// ── Recent Transactions (last 20) ─────────────────────────────────────────
 	type txnRow struct {
 		ID             string
-		Msisdn         string
+		MSISDN         string
 		Network        string
 		Provider       string
 		Amount         int64
@@ -249,7 +249,7 @@ func (h *CommissionHandler) GetCommissionReconciliation(c *gin.Context) {
 		if t.Amount > 0 {
 			rate = float64(t.CommissionAmt) / float64(t.Amount) * 100
 		}
-		msisdn := t.Msisdn
+		msisdn := t.MSISDN
 		if len(msisdn) > 7 {
 			msisdn = msisdn[:4] + "****" + msisdn[len(msisdn)-3:]
 		}
@@ -296,7 +296,7 @@ func (h *CommissionHandler) ExportCommissionReport(c *gin.Context) {
 	type txnRow struct {
 		CreatedAt     time.Time
 		ID            string
-		Msisdn        string
+		MSISDN        string
 		Network       string
 		Provider      string
 		Amount        int64
@@ -321,7 +321,7 @@ func (h *CommissionHandler) ExportCommissionReport(c *gin.Context) {
 		sb.WriteString(fmt.Sprintf("%s,%s,%s,%s,%s,%.2f,%.2f,%.2f,%s\n",
 			t.CreatedAt.Format("2006-01-02"),
 			t.ID,
-			t.Msisdn,
+			t.MSISDN,
 			t.Network,
 			t.Provider,
 			float64(t.Amount)/100,

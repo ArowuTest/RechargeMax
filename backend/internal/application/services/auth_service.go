@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+
+	"golang.org/x/crypto/bcrypt"
 	"math/big"
 	"time"
 
@@ -83,11 +85,17 @@ func (s *AuthService) SendOTP(ctx context.Context, msisdn string, purpose string
 		return fmt.Errorf("failed to generate OTP: %w", err)
 	}
 
+	// Hash the OTP with bcrypt before storage (plaintext sent only via SMS)
+	otpHash, err := bcrypt.GenerateFromPassword([]byte(otpCode), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("failed to hash OTP: %w", err)
+	}
+
 	// Create OTP record — always stored with normalised international MSISDN
 	otp := &entities.OTP{
 		ID:        uuid.New(),
 		Msisdn:    normalizedMSISDN,
-		Code:      otpCode,
+		Code:      string(otpHash), // bcrypt hash — NOT plaintext
 		Purpose:   purpose,
 		ExpiresAt: time.Now().Add(10 * time.Minute), // 10 minutes expiry
 		IsUsed:    false,

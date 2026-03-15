@@ -99,7 +99,11 @@ func AdminAuthMiddleware(authService interface{}) gin.HandlerFunc {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 			}
-			return []byte(os.Getenv("JWT_SECRET")), nil
+			secret := os.Getenv("ADMIN_JWT_SECRET")
+			if secret == "" {
+				secret = os.Getenv("JWT_SECRET") // backward-compat fallback
+			}
+			return []byte(secret), nil
 		})
 		if err != nil || !parsedToken.Valid {
 			c.JSON(http.StatusUnauthorized, gin.H{
@@ -211,13 +215,26 @@ func CORSMiddleware() gin.HandlerFunc {
 	}
 }
 
-// SecurityHeadersMiddleware adds security headers
+// SecurityHeadersMiddleware adds defensive HTTP security headers to every response.
 func SecurityHeadersMiddleware() gin.HandlerFunc {
+	isProd := os.Getenv("ENVIRONMENT") == "production"
 	return func(c *gin.Context) {
-		c.Writer.Header().Set("X-Content-Type-Options", "nosniff")
-		c.Writer.Header().Set("X-Frame-Options", "DENY")
-		c.Writer.Header().Set("X-XSS-Protection", "1; mode=block")
-		c.Writer.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'")
+		// Clickjacking prevention
+		c.Header("X-Frame-Options", "DENY")
+		// MIME-type sniffing prevention
+		c.Header("X-Content-Type-Options", "nosniff")
+		// Legacy XSS filter
+		c.Header("X-XSS-Protection", "1; mode=block")
+		// Referrer leakage control
+		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
+		// Disable unneeded browser APIs
+		c.Header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
+		// CSP: API is JSON-only — deny all framing and embedding
+		c.Header("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+		// HSTS: production only — enforce HTTPS for 1 year
+		if isProd {
+			c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
+		}
 		c.Next()
 	}
 }

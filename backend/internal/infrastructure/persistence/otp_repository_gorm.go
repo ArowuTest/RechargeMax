@@ -2,6 +2,8 @@ package persistence
 
 import (
 	"context"
+
+	"golang.org/x/crypto/bcrypt"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,32 +38,45 @@ func (r *OTPRepositoryGORM) FindByID(ctx context.Context, id uuid.UUID) (*entiti
 	return &otp, nil
 }
 
-// FindValidOTP finds a valid (not used, not expired) OTP for a given MSISDN and code
+// FindValidOTP finds a valid (not used, not expired) OTP for a given MSISDN and code.
+// OTPs are stored as bcrypt hashes; we fetch all unexpired records and verify each.
 func (r *OTPRepositoryGORM) FindValidOTP(ctx context.Context, msisdn, code string) (*entities.OTP, error) {
-	var otp entities.OTP
+	var otps []entities.OTP
 	err := r.db.WithContext(ctx).
-		Where("msisdn = ? AND code = ? AND is_used = ? AND expires_at > ?",
-			msisdn, code, false, time.Now()).
+		Where("msisdn = ? AND is_used = ? AND expires_at > ?", msisdn, false, time.Now()).
 		Order("created_at DESC").
-		First(&otp).Error
+		Limit(10).
+		Find(&otps).Error
 	if err != nil {
 		return nil, err
 	}
-	return &otp, nil
+	for i := range otps {
+		if bcrypt.CompareHashAndPassword([]byte(otps[i].Code), []byte(code)) == nil {
+			return &otps[i], nil
+		}
+	}
+	return nil, gorm.ErrRecordNotFound
 }
 
-// FindValidOTPWithPurpose finds a valid OTP with matching purpose
+// FindValidOTPWithPurpose finds a valid OTP with matching purpose.
+// OTPs are stored as bcrypt hashes; we fetch recent unexpired records and verify each.
 func (r *OTPRepositoryGORM) FindValidOTPWithPurpose(ctx context.Context, msisdn, code, purpose string) (*entities.OTP, error) {
-	var otp entities.OTP
+	var otps []entities.OTP
 	err := r.db.WithContext(ctx).
-		Where("msisdn = ? AND code = ? AND purpose = ? AND is_used = ? AND expires_at > ?",
-			msisdn, code, purpose, false, time.Now()).
+		Where("msisdn = ? AND purpose = ? AND is_used = ? AND expires_at > ?",
+			msisdn, purpose, false, time.Now()).
 		Order("created_at DESC").
-		First(&otp).Error
+		Limit(10).
+		Find(&otps).Error
 	if err != nil {
 		return nil, err
 	}
-	return &otp, nil
+	for i := range otps {
+		if bcrypt.CompareHashAndPassword([]byte(otps[i].Code), []byte(code)) == nil {
+			return &otps[i], nil
+		}
+	}
+	return nil, gorm.ErrRecordNotFound
 }
 
 // FindRecentOTPs finds OTPs created after a given time for rate limiting

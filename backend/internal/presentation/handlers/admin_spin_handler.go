@@ -1,0 +1,236 @@
+package handlers
+
+import (
+	"fmt"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+)
+
+// SPIN WHEEL PRIZE MANAGEMENT
+// ============================================================================
+
+// GetSpinConfig returns the current spin wheel configuration
+func (h *AdminComprehensiveHandler) GetSpinConfig(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	config, err := h.spinService.GetConfig(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to get spin configuration",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    config,
+	})
+}
+
+// UpdateSpinConfig updates the spin wheel configuration
+func (h *AdminComprehensiveHandler) UpdateSpinConfig(c *gin.Context) {
+	var config map[string]interface{}
+	if err := c.ShouldBindJSON(&config); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	// Persist each config field to platform_settings with "spin." prefix
+	for field, val := range config {
+		key := "spin." + field
+		strVal := fmt.Sprintf("%v", val)
+		err := h.db.Exec(
+			`INSERT INTO platform_settings (setting_key, setting_value, description)
+			 VALUES (?, ?, 'Spin wheel configuration')
+			 ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = now()`,
+			key, strVal,
+		).Error
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"success": false,
+				"error":   "Failed to save spin config key: " + key,
+			})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Spin configuration updated successfully",
+		"data":    config,
+	})
+}
+
+// GetAllPrizes returns all wheel prizes
+func (h *AdminComprehensiveHandler) GetAllPrizes(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	prizes, err := h.spinService.GetAllPrizes(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to get prizes",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    prizes,
+	})
+}
+
+// CreatePrize creates a new wheel prize
+func (h *AdminComprehensiveHandler) CreatePrize(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	var prizeData struct {
+		Name            string   `json:"name" binding:"required"`
+		Type            string   `json:"type" binding:"required"`
+		Value           float64  `json:"value" binding:"required"`
+		Probability     float64  `json:"probability" binding:"required"`
+		IsActive        bool     `json:"is_active"`
+		MinimumRecharge *float64 `json:"minimum_recharge"`
+		ColorScheme     string   `json:"color_scheme"`
+		Color           string   `json:"color"`
+		SortOrder       *float64 `json:"sort_order"`
+	}
+
+	if err := c.ShouldBindJSON(&prizeData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	prizeMap := map[string]interface{}{
+		"name":        prizeData.Name,
+		"type":        prizeData.Type,
+		"value":       prizeData.Value,
+		"probability": prizeData.Probability,
+		"is_active":   prizeData.IsActive,
+	}
+	if prizeData.MinimumRecharge != nil {
+		prizeMap["minimum_recharge"] = *prizeData.MinimumRecharge
+	}
+	if prizeData.ColorScheme != "" {
+		prizeMap["color_scheme"] = prizeData.ColorScheme
+	} else if prizeData.Color != "" {
+		prizeMap["color"] = prizeData.Color
+	}
+	if prizeData.SortOrder != nil {
+		prizeMap["sort_order"] = *prizeData.SortOrder
+	}
+	prize, err := h.spinService.CreatePrize(ctx, prizeMap)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"success": true,
+		"message": "Prize created successfully",
+		"data":    prize,
+	})
+}
+
+// UpdatePrize updates an existing wheel prize
+func (h *AdminComprehensiveHandler) UpdatePrize(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	prizeIDStr := c.Param("id")
+	prizeID, err := uuid.Parse(prizeIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Invalid prize ID",
+		})
+		return
+	}
+
+	var updateData struct {
+		Name        *string  `json:"name"`
+		Type        *string  `json:"type"`
+		Value       *float64 `json:"value"`
+		Probability *float64 `json:"probability"`
+		IsActive    *bool    `json:"is_active"`
+	}
+
+	if err := c.ShouldBindJSON(&updateData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	updateMap := make(map[string]interface{})
+	if updateData.Name != nil {
+		updateMap["name"] = *updateData.Name
+	}
+	if updateData.Type != nil {
+		updateMap["type"] = *updateData.Type
+	}
+	if updateData.Value != nil {
+		updateMap["value"] = *updateData.Value
+	}
+	if updateData.Probability != nil {
+		updateMap["probability"] = *updateData.Probability
+	}
+	if updateData.IsActive != nil {
+		updateMap["is_active"] = *updateData.IsActive
+	}
+
+	updatedPrize, err := h.spinService.UpdatePrize(ctx, prizeID.String(), updateMap)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to update prize",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Prize updated successfully",
+		"data":    updatedPrize,
+	})
+}
+
+// DeletePrize deletes a wheel prize
+func (h *AdminComprehensiveHandler) DeletePrize(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	prizeIDStr := c.Param("id")
+	prizeID, err := uuid.Parse(prizeIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Invalid prize ID",
+		})
+		return
+	}
+
+	if err := h.spinService.DeletePrize(ctx, prizeID.String()); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to delete prize",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Prize deleted successfully",
+	})
+}

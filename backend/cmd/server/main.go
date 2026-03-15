@@ -123,6 +123,7 @@ type Config struct {
 	SendgridKey       string
 	FCMKey            string
 	JWTSecret         string
+	AdminJWTSecret    string // separate secret for admin tokens
 	Environment       string
 	FrontendURL       string
 	BackendURL        string
@@ -137,7 +138,8 @@ func loadConfig() *Config {
 		TermiiKey:      getEnv("TERMII_API_KEY", ""),
 		SendgridKey:    getEnv("SENDGRID_API_KEY", ""),
 		FCMKey:         getEnv("FCM_SERVER_KEY", ""),
-		JWTSecret:      getEnv("JWT_SECRET", ""), // NO DEFAULT - MUST BE SET!
+		JWTSecret:         getEnv("JWT_SECRET", ""),      // NO DEFAULT - MUST BE SET!
+		AdminJWTSecret:    getEnv("ADMIN_JWT_SECRET", ""),  // Falls back to JWT_SECRET if not set
 		Environment:    getEnv("ENVIRONMENT", "development"),
 		FrontendURL:    getEnv("FRONTEND_URL", "http://localhost:5173"),
 		BackendURL:     getEnv("BACKEND_URL", "http://localhost:8080"),
@@ -170,6 +172,18 @@ func validateConfig(config *Config) error {
 	
 	// JWT secret strength validation
 	if len(config.JWTSecret) < 32 {
+		return fmt.Errorf("JWT_SECRET must be at least 32 characters long (current: %d chars) - use: openssl rand -hex 32", len(config.JWTSecret))
+	}
+	// Admin JWT secret: if explicitly set, enforce minimum length
+	if config.AdminJWTSecret != "" && len(config.AdminJWTSecret) < 32 {
+		return fmt.Errorf("ADMIN_JWT_SECRET must be at least 32 characters long - use: openssl rand -hex 32")
+	}
+	// Warn if admin uses same secret as user
+	if config.AdminJWTSecret == "" {
+		log.Println("WARNING: ADMIN_JWT_SECRET not set — admin tokens share JWT_SECRET; set a separate secret in production")
+		config.AdminJWTSecret = config.JWTSecret
+	}
+	if false { // placeholder to avoid duplicate return below
 		return fmt.Errorf("JWT_SECRET must be at least 32 characters long (current: %d chars) - use: openssl rand -hex 32", len(config.JWTSecret))
 	}
 	
@@ -569,7 +583,7 @@ func initHandlers(svcs *Services, repos *Repositories, appConfig *Config, db *go
 		Winner:       handlers.NewWinnerHandler(svcs.Winner),
 		Notification: handlers.NewNotificationHandler(svcs.Notification),
 		Admin:        handlers.NewAdminHandler(svcs.Draw, svcs.Winner, svcs.User),
-		AdminAuth:    handlers.NewAdminAuthHandler(repos.Admin, appConfig.JWTSecret),
+		AdminAuth:    handlers.NewAdminAuthHandler(repos.Admin, appConfig.AdminJWTSecret),
 			AdminComprehensive: handlers.NewAdminComprehensiveHandler(
 				svcs.SubscriptionTier,
 				svcs.USSDRecharge,

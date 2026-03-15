@@ -119,7 +119,7 @@ func (h *AdminAuthHandler) generateToken(adminID, email, role string) (string, e
 		"email":    email,
 		"role":     role,
 		"type":     "admin",
-		"exp":      time.Now().Add(24 * time.Hour).Unix(),
+		"exp":      time.Now().Add(8 * time.Hour).Unix(), // Admin tokens expire in 8h (shorter than user 24h)
 		"iat":      time.Now().Unix(),
 	}
 

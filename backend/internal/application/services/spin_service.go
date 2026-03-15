@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 
 	"rechargemax/internal/pkg/safe"
@@ -474,10 +475,20 @@ func (s *SpinService) provisionData(ctx context.Context, spin *entities.WheelSpi
 	return nil
 }
 
-// getDataVariationCode maps prize value to VTPass variation code
+// getDataVariationCode returns the VTPass variation code for a data prize.
+// First tries wheel_prizes.variation_code from the DB; falls back to hardcoded mappings.
 func (s *SpinService) getDataVariationCode(prizeValue int64, network string) string {
-	// TODO: This should be stored in database (wheel_prizes.variation_code)
-	// For now, hardcode common mappings
+	if s.db != nil {
+		var code string
+		err := s.db.Table("wheel_prizes").
+			Where("network_provider = ? AND prize_value = ? AND variation_code IS NOT NULL", network, prizeValue).
+			Limit(1).
+			Pluck("variation_code", &code).Error
+		if err == nil && code != "" {
+			return code
+		}
+	}
+	// Fallback hardcoded mappings
 	
 	// Map based on network and common data sizes
 	// Prize value is in kobo, so 50000 = 500MB, 100000 = 1GB, etc.
@@ -524,22 +535,23 @@ func (s *SpinService) getDataVariationCode(prizeValue int64, network string) str
 	return "" // No matching variation code
 }
 
-// logFulfillmentAttempt logs a fulfillment attempt to the audit trail
+// logFulfillmentAttempt writes a row to prize_fulfillment_logs.
+// Runs in a fire-and-forget goroutine — failures are logged but never block the caller.
 func (s *SpinService) logFulfillmentAttempt(ctx context.Context, spin *entities.WheelSpin, status string, errorMsg string) {
-	// This would insert into prize_fulfillment_logs table
-	// For now, just log to console
-	log.Printf("📝 Fulfillment log: spin=%s, attempt=%d, status=%s, error=%s\n",
+	log.Printf("📝 Fulfillment log: spin=%s attempt=%d status=%s error=%s",
 		spin.ID, spin.FulfillmentAttempts, status, errorMsg)
-	
-	// TODO: Insert into database
-	// query := `
-	//     INSERT INTO prize_fulfillment_logs (
-	//         spin_result_id, attempt_number, fulfillment_mode, status,
-	//         error_message, detected_network, msisdn
-	//     ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-	// `
-	// s.db.ExecContext(ctx, query, spin.ID, spin.FulfillmentAttempts,
-	//     spin.FulfillmentMode, status, errorMsg, network, spin.MSISDN)
+
+	go func() {
+		dbCtx := context.Background() // decouple from request context
+		err := s.db.WithContext(dbCtx).Exec(`
+			INSERT INTO prize_fulfillment_logs
+				(spin_result_id, attempt_number, fulfillment_mode, status, error_message, msisdn)
+			VALUES (?, ?, ?, ?, ?, ?)
+		`, spin.ID, spin.FulfillmentAttempts, spin.FulfillmentMode, status, errorMsg, spin.MSISDN).Error
+		if err != nil {
+			log.Printf("[spin] logFulfillmentAttempt: %v", err)
+		}
+	}()
 }
 
 // GetSpinHistory gets user's spin history
@@ -698,9 +710,23 @@ func (s *SpinService) UpdateConfig(ctx context.Context, config map[string]interf
 	//     return fmt.Errorf("failed to save config: %w", err)
 	// }
 	
-	// For now, configuration is validated but stored in memory
-	// When ConfigurationRepository is implemented, uncomment the above code
-	
+	// Persist configuration to platform_settings via JSON blob
+	if s.db != nil {
+		configJSON, err := json.Marshal(config)
+		if err != nil {
+			return fmt.Errorf("failed to serialize spin config: %w", err)
+		}
+		if err := s.db.Exec(`
+			INSERT INTO platform_settings (id, setting_key, setting_value, description, updated_at)
+			VALUES (gen_random_uuid(), 'spin.wheel_config', ?, 'Spin wheel configuration blob', NOW())
+			ON CONFLICT (setting_key) DO UPDATE
+			  SET setting_value = EXCLUDED.setting_value, updated_at = NOW()
+		`, string(configJSON)).Error; err != nil {
+			return fmt.Errorf("failed to save spin config: %w", err)
+		}
+		log.Printf("[spin] wheel config updated and persisted to platform_settings")
+	}
+
 	return nil
 }
 
@@ -949,25 +975,29 @@ func (s *SpinService) DeletePrize(ctx context.Context, prizeID string) error {
 	return nil
 }
 
-// CreateSpinOpportunity creates a spin opportunity for a user after a qualifying recharge
+// CreateSpinOpportunity creates a spin opportunity for a user after a qualifying recharge.
+// Idempotent: a second call for the same rechargeID is a no-op.
 func (s *SpinService) CreateSpinOpportunity(ctx context.Context, userID uuid.UUID, rechargeID uuid.UUID) error {
-	// Check if user already has a pending spin for this recharge
-	// This prevents duplicate spin opportunities
-	
-	// For now, we'll rely on CheckEligibility to determine if user can spin
-	// The spin opportunity is implicit - if they made a ₦1000+ recharge today, they can spin
-	
-	// In a more sophisticated implementation, you could:
-	// 1. Create a spin_opportunities table
-	// 2. Track which recharges have granted spins
-	// 3. Allow multiple spins per day if multiple qualifying recharges
-	
-	// For this implementation, the spin opportunity is determined by:
-	// - Recent recharge of ₦1000+
-	// - CheckEligibility validates this
-	// - User can spin once per qualifying recharge
-	
-	return nil // Spin opportunity is implicit based on recharge history
+	if s.db == nil {
+		return nil
+	}
+	// Use platform_settings-style upsert to record grant; wheel_spins tracks actual spins.
+	// We record into transactions metadata via update — no separate table needed;
+	// CheckEligibility enforces the one-spin-per-qualifying-recharge rule by checking
+	// whether a WheelSpin row already exists for this rechargeID.
+	var existing entities.WheelSpin
+	err := s.db.WithContext(ctx).
+		Where("recharge_id = ?", rechargeID).
+		First(&existing).Error
+	if err == nil {
+		// Already granted for this recharge
+		return nil
+	}
+	// Mark the transaction as spin_eligible so CheckEligibility finds it
+	return s.db.WithContext(ctx).
+		Model(&entities.Transaction{}).
+		Where("id = ?", rechargeID).
+		Update("spin_eligible", true).Error
 }
 
 // acquireLock acquires a PostgreSQL advisory lock to prevent race conditions

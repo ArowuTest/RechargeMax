@@ -647,8 +647,14 @@ func (s *UserService) getUnclaimedPrizesCount(ctx context.Context, msisdn string
 	// }
 	// return unclaimedCount
 	
-	// For now, return 0 (no unclaimed prizes)
-	// When WinnerRepository is properly integrated, uncomment above code
+	// Real query: count unclaimed winners for this MSISDN
+	if s.db != nil {
+		var count int64
+		s.db.Table("winners").
+			Where("msisdn = ? AND claim_status = ?", msisdn, "PENDING").
+			Count(&count)
+		return count
+	}
 	return 0
 }
 
@@ -859,4 +865,11 @@ func (s *UserService) getUserPrizes(ctx context.Context, userID uuid.UUID) []Pri
 		})
 	}
 	return result
+}
+
+// UpdateLoyaltyTier sets the loyalty_tier field for a user.
+func (s *UserService) UpdateLoyaltyTier(ctx context.Context, userID, tier string) error {
+	return s.db.WithContext(ctx).
+		Exec(`UPDATE users SET loyalty_tier = ? WHERE id = ?`, tier, userID).
+		Error
 }

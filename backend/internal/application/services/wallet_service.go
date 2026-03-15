@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"log"
 	"fmt"
 	"time"
 
@@ -204,8 +205,27 @@ func (s *WalletService) RequestPayout(ctx context.Context, msisdn string, amount
 		return fmt.Errorf("minimum payout amount is ₦%.2f", float64(wallet.MinPayoutAmount)/100)
 	}
 
+	// Calculate and deduct withdrawal fee (default 1.5%, configurable via platform_settings)
+	feePercent := 1.5
+	var feeSetting struct{ SettingValue string }
+	if err := s.db.WithContext(ctx).
+		Table("platform_settings").
+		Where("setting_key = ?", "affiliate.withdrawal_fee_percent").
+		First(&feeSetting).Error; err == nil {
+		var parsed float64
+		if _, scanErr := fmt.Sscanf(feeSetting.SettingValue, "%f", &parsed); scanErr == nil && parsed >= 0 {
+			feePercent = parsed
+		}
+	}
+	feeKobo := int64(float64(amount) * feePercent / 100.0)
+	netAmount := amount - feeKobo
+
+	if netAmount <= 0 {
+		return fmt.Errorf("payout amount too small after %.1f%% withdrawal fee", feePercent)
+	}
+
 	// Process payout immediately
-	return s.processPayout(ctx, wallet, amount, payoutMethod, bankCode, accountNumber, accountName)
+	return s.processPayout(ctx, wallet, netAmount, payoutMethod, bankCode, accountNumber, accountName)
 }
 
 // processPayout processes a payout with full atomicity (SEC-005):
@@ -360,14 +380,28 @@ func (s *WalletService) processBankTransfer(ctx context.Context, wallet *entitie
 	return "", errors.New("failed to get payment reference")
 }
 
-// processMobileMoney handles mobile money payouts
+// processMobileMoney handles mobile money payouts via Paystack mobile money transfer
 func (s *WalletService) processMobileMoney(ctx context.Context, wallet *entities.Wallet, amount int64) (string, error) {
-	// For mobile money, we use the MSISDN
-	// This would integrate with mobile money APIs (MTN MoMo, Airtel Money, etc.)
-	// For now, return error as not implemented
-	_ = wallet // Suppress unused variable warning
-	_ = amount
-	return "", errors.New("mobile money payouts not yet implemented")
+	if s.paymentService == nil {
+		return "", errors.New("payment service not configured for mobile money payouts")
+	}
+	ref := fmt.Sprintf("MOMO_%s_%d", wallet.MSISDN, time.Now().UnixNano())
+	transferReq := map[string]interface{}{
+		"type":           "mobile_money",
+		"amount":         amount,
+		"account_number": wallet.MSISDN,
+		"bank_code":      "MPS", // Paystack mobile money provider code
+		"narration":      "RechargeMax mobile money payout",
+		"reference":      ref,
+	}
+	resp, err := s.paymentService.ProcessTransfer(ctx, transferReq)
+	if err != nil {
+		return "", fmt.Errorf("mobile money transfer failed: %w", err)
+	}
+	if ref2, ok := resp["reference"].(string); ok && ref2 != "" {
+		return ref2, nil
+	}
+	return ref, nil
 }
 
 // GetWalletTransactions retrieves wallet transaction history
@@ -390,52 +424,62 @@ func (s *WalletService) GetWalletTransactions(ctx context.Context, msisdn string
 	return transactions, total, nil
 }
 
-// ProcessPendingReleases processes pending earnings that are ready to be released
+// ProcessPendingReleases releases wallet_transactions with status='pending' that are older
+// than the configured holding period (default 7 days). This runs via a background job.
 func (s *WalletService) ProcessPendingReleases(ctx context.Context) error {
-	// Find all pending earnings older than 7 days (holding period)
-	// In production, this would:
-	// 1. Query wallet_transactions where status='pending' and created_at < NOW() - 7 days
-	// 2. For each transaction, move from pending_balance to available_balance
-	// 3. Update transaction status to 'completed'
-	// 4. Send notification to user about released earnings
-	//
-	// Example implementation:
-	// sevenDaysAgo := time.Now().AddDate(0, 0, -7)
-	// 
-	// // This would require a new repository method:
-	// // pendingTransactions, err := s.walletTransactionRepo.FindPendingForRelease(ctx, sevenDaysAgo)
-	// // if err != nil {
-	// //     return fmt.Errorf("failed to find pending transactions: %w", err)
-	// // }
-	// 
-	// // for _, txn := range pendingTransactions {
-	// //     // Get wallet
-	// //     wallet, err := s.walletRepo.FindByID(ctx, txn.WalletID)
-	// //     if err != nil {
-	// //         continue // Log error and skip
-	// //     }
-	// //     
-	// //     // Move from pending to available
-	// //     wallet.PendingBalance -= txn.Amount
-	// //     wallet.AvailableBalance += txn.Amount
-	// //     
-	// //     // Update wallet
-	// //     err = s.walletRepo.Update(ctx, wallet)
-	// //     if err != nil {
-	// //         continue // Log error and skip
-	// //     }
-	// //     
-	// //     // Update transaction status
-	// //     txn.Status = "completed"
-	// //     err = s.walletTransactionRepo.Update(ctx, txn)
-	// //     
-	// //     // Send notification
-	// //     // s.notificationService.SendSMS(ctx, wallet.MSISDN, "Your earnings are now available!")
-	// // }
-	
-	// Returns wallet analytics - enhance with more metrics as needed
-	// When FindPendingForRelease repository method is implemented, uncomment above
-	_ = ctx
+	holdDays := 7
+	var holdSetting struct{ SettingValue string }
+	if s.db.WithContext(ctx).
+		Table("platform_settings").
+		Where("setting_key = ?", "wallet.holding_period_days").
+		First(&holdSetting).Error == nil {
+		var parsed int
+		if _, err := fmt.Sscanf(holdSetting.SettingValue, "%d", &parsed); err == nil && parsed > 0 {
+			holdDays = parsed
+		}
+	}
+	cutoff := time.Now().AddDate(0, 0, -holdDays)
+
+	// Load all pending wallet transactions older than the holding period
+	var pending []entities.WalletTransaction
+	if err := s.db.WithContext(ctx).
+		Where("status = ? AND created_at < ?", "pending", cutoff).
+		Find(&pending).Error; err != nil {
+		return fmt.Errorf("ProcessPendingReleases query: %w", err)
+	}
+
+	released := 0
+	for _, txn := range pending {
+		txnCopy := txn
+		txErr := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			var wallet entities.Wallet
+			if err := tx.Set("gorm:query_option", "FOR UPDATE").
+				Where("id = ?", txnCopy.WalletID).First(&wallet).Error; err != nil {
+				return err
+			}
+			// Move pending → available
+			wallet.Balance += txnCopy.Amount
+			if err := tx.Save(&wallet).Error; err != nil {
+				return err
+			}
+			txnCopy.Status = "completed"
+			return tx.Save(&txnCopy).Error
+		})
+		if txErr != nil {
+			log.Printf("[wallet] release txn %s: %v", txnCopy.ID, txErr)
+			continue
+		}
+		released++
+		// Non-blocking notification
+		go func(msisdn string, amount int64) {
+			if s.db == nil {
+				return
+			}
+			// Best-effort: just log — NotificationService not available here
+			log.Printf("[wallet] released ₦%d for %s", amount/100, msisdn)
+		}(txn.Description, txn.Amount)
+	}
+	log.Printf("[wallet] ProcessPendingReleases: released %d of %d pending transactions", released, len(pending))
 	return nil
 }
 

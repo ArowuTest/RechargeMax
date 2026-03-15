@@ -1,10 +1,13 @@
 package services
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,6 +17,21 @@ import (
 	"gorm.io/gorm"
 	"rechargemax/internal/domain/repositories"
 )
+
+// ─── minimal http helper aliases so we avoid direct package-level calls ────
+type httpClient = http.Client
+
+func newRequestWithContext(ctx context.Context, method, url string, body []byte) (*http.Request, error) {
+	return http.NewRequestWithContext(ctx, method, url, bytes.NewBuffer(body))
+}
+
+// discardBody reads and closes a response body to free the connection.
+func discardBody(r *http.Response) {
+	if r != nil && r.Body != nil {
+		io.Copy(io.Discard, r.Body) //nolint:errcheck
+		r.Body.Close()
+	}
+}
 
 // NotificationService handles multi-channel notifications
 type NotificationService struct {
@@ -72,52 +90,47 @@ func (s *NotificationService) logDelivery(channel, status, provider, errorMsg st
 	}()
 }
 
-// SendSMS sends SMS notification via Termii or similar service
+// SendSMS sends an SMS via Termii. Falls back to stdout logging when no API key is set.
 func (s *NotificationService) SendSMS(ctx context.Context, msisdn, message string) error {
-	// Integrate with Termii SMS API
-	// In production, this would:
-	// 1. Make HTTP POST request to Termii API
-	// 2. Include API key in headers
-	// 3. Send SMS to Nigerian number
-	// 4. Handle response and errors
-	//
-	// Example implementation:
-	// import "bytes"
-	// import "net/http"
-	// 
-	// payload := map[string]interface{}{
-	//     "to":      msisdn,
-	//     "from":    "RechargeMax",
-	//     "sms":     message,
-	//     "type":    "plain",
-	//     "channel": "generic",
-	//     "api_key": s.smsAPIKey,
-	// }
-	// 
-	// jsonData, _ := json.Marshal(payload)
-	// req, _ := http.NewRequestWithContext(ctx, "POST", "https://api.ng.termii.com/api/sms/send", bytes.NewBuffer(jsonData))
-	// req.Header.Set("Content-Type", "application/json")
-	// 
-	// client := &http.Client{Timeout: 10 * time.Second}
-	// resp, err := client.Do(req)
-	// if err != nil {
-	//     return fmt.Errorf("failed to send SMS: %w", err)
-	// }
-	// defer resp.Body.Close()
-	// 
-	// if resp.StatusCode != 200 {
-	//     return fmt.Errorf("SMS API returned status %d", resp.StatusCode)
-	// }
-	
-	// For now, log the SMS (when Termii API key is configured, uncomment above)
-	if s.smsAPIKey != "" {
-		log.Printf("[SMS] To: %s, Message: %s\n", msisdn, message)
-		// Actual API call would go here
-		s.logDelivery("sms", "sent", "termii", "")
-	} else {
-		log.Printf("[SMS-MOCK] To: %s, Message: %s\n", msisdn, message)
-		s.logDelivery("sms", "sent", "mock", "")
+	if s.smsAPIKey == "" {
+		log.Printf("[SMS-DEV] To: %s | %s", msisdn, message)
+		s.logDelivery("sms", "dev_log", "mock", "")
+		return nil
 	}
+
+	payload := map[string]interface{}{
+		"to":      msisdn,
+		"from":    "RechargeMax",
+		"sms":     message,
+		"type":    "plain",
+		"channel": "generic",
+		"api_key": s.smsAPIKey,
+	}
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal SMS payload: %w", err)
+	}
+
+	req, err := newRequestWithContext(ctx, "POST", "https://api.ng.termii.com/api/sms/send", jsonData)
+	if err != nil {
+		return fmt.Errorf("build Termii request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &httpClient{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		s.logDelivery("sms", "failed", "termii", err.Error())
+		return fmt.Errorf("Termii API call: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		msg := fmt.Sprintf("Termii HTTP %d", resp.StatusCode)
+		s.logDelivery("sms", "failed", "termii", msg)
+		return fmt.Errorf("send SMS: %s", msg)
+	}
+	s.logDelivery("sms", "sent", "termii", "")
 	return nil
 }
 
@@ -159,73 +172,67 @@ func (s *NotificationService) SendEmail(ctx context.Context, email, subject, bod
 }
 
 // SendPushNotification sends push notification via FCM
+// SendPushNotification sends a push notification via FCM to all registered devices for the MSISDN.
 func (s *NotificationService) SendPushNotification(ctx context.Context, msisdn, title, body string) error {
-	// Get user's devices
 	devices, err := s.deviceRepo.FindByMSISDN(ctx, msisdn)
 	if err != nil || len(devices) == 0 {
-		return nil // No devices registered, skip push notification
+		return nil // No registered devices — not an error
 	}
 
-	// Integrate with FCM (Firebase Cloud Messaging)
-	// In production, this would:
-	// 1. Use Firebase Admin SDK or HTTP API
-	// 2. Send push notification to each device token
-	// 3. Handle invalid tokens (remove from database)
-	// 4. Track delivery status
-	//
-	// Example implementation using FCM HTTP API:
-	// import "bytes"
-	// import "net/http"
-	// 
-	// for _, device := range devices {
-	//     if device.FCMToken == nil || *device.FCMToken == "" {
-	//         continue
-	//     }
-	//     
-	//     payload := map[string]interface{}{
-	//         "to": *device.FCMToken,
-	//         "notification": map[string]string{
-	//             "title": title,
-	//             "body":  body,
-	//         },
-	//         "data": map[string]string{
-	//             "msisdn": msisdn,
-	//         },
-	//     }
-	//     
-	//     jsonData, _ := json.Marshal(payload)
-	//     req, _ := http.NewRequestWithContext(ctx, "POST", "https://fcm.googleapis.com/fcm/send", bytes.NewBuffer(jsonData))
-	//     req.Header.Set("Content-Type", "application/json")
-	//     req.Header.Set("Authorization", "key="+s.fcmServerKey)
-	//     
-	//     client := &http.Client{Timeout: 10 * time.Second}
-	//     resp, err := client.Do(req)
-	//     if err != nil {
-	//         log.Printf("Failed to send push to %s: %v\n", *device.FCMToken, err)
-	//         continue
-	//     }
-	//     defer resp.Body.Close()
-	//     
-	//     if resp.StatusCode != 200 {
-	//         log.Printf("FCM API returned status %d for token %s\n", resp.StatusCode, *device.FCMToken)
-	//     }
-	// }
-	
-	// For now, log the push notifications (when FCM server key is configured, uncomment above)
+	if s.fcmServerKey == "" {
+		log.Printf("[PUSH-DEV] To: %s | %s: %s", msisdn, title, body)
+		s.logDelivery("push", "dev_log", "mock", "")
+		return nil
+	}
+
+	var lastErr error
 	for _, device := range devices {
-		token := "(no token)"
-		if device.FCMToken != nil {
-			token = *device.FCMToken
+		if device.FCMToken == nil || *device.FCMToken == "" {
+			continue
 		}
-		if s.fcmServerKey != "" {
-			log.Printf("[PUSH] To: %s (Device: %s), Title: %s, Body: %s\n", msisdn, token, title, body)
-			// Actual API call would go here
+		payload := map[string]interface{}{
+			"to": *device.FCMToken,
+			"notification": map[string]string{
+				"title": title,
+				"body":  body,
+			},
+			"data": map[string]string{
+				"msisdn": msisdn,
+			},
+			"priority": "high",
+		}
+		jsonData, err := json.Marshal(payload)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		req, err := newRequestWithContext(ctx, "POST", "https://fcm.googleapis.com/fcm/send", jsonData)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "key="+s.fcmServerKey)
+
+		client := &httpClient{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			s.logDelivery("push", "failed", "fcm", err.Error())
+			lastErr = err
+			continue
+		}
+		discardBody(resp)
+
+		if resp.StatusCode != 200 {
+			msg := fmt.Sprintf("FCM HTTP %d for token %s", resp.StatusCode, *device.FCMToken)
+			s.logDelivery("push", "failed", "fcm", msg)
+			lastErr = fmt.Errorf("%s", msg)
 		} else {
-			log.Printf("[PUSH-MOCK] To: %s (Device: %s), Title: %s, Body: %s\n", msisdn, token, title, body)
+			s.logDelivery("push", "sent", "fcm", "")
 		}
 	}
 
-	return nil
+	return lastErr
 }
 
 // CreateNotification creates an in-platform notification

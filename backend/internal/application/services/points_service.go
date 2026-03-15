@@ -463,14 +463,17 @@ func (s *PointsService) AdjustUserPoints(ctx context.Context, userID uuid.UUID, 
 		return fmt.Errorf("failed to create adjustment record: %w", err)
 	}
 
-	// TODO: Implement SendPointsAdjustmentNotification in NotificationService
-	// adjustmentType := "added"
-	// absPoints := points
-	// if points < 0 {
-	// 	adjustmentType = "deducted"
-	// 	absPoints = -points
-	// }
-	// s.notificationService.SendPointsAdjustmentNotification(ctx, user.MSISDN, absPoints, adjustmentType, reason)
+	// Notify user of points adjustment
+	if s.notificationService != nil {
+		adjustmentType := "added"
+		absPoints := points
+		if points < 0 {
+			adjustmentType = "deducted"
+			absPoints = -points
+		}
+		msg := fmt.Sprintf("%d loyalty points have been %s to your RechargeMax account. Reason: %s", absPoints, adjustmentType, reason)
+		go s.notificationService.SendSMS(ctx, user.MSISDN, msg)
+	}
 
 	return nil
 }

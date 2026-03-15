@@ -378,9 +378,10 @@ func (s *SubscriptionTierService) processSingleBilling(ctx context.Context, sub 
 		}
 	}
 
-	// Send notification
-	// TODO: Fix SendSubscriptionRenewalNotification signature
-	// s.notificationService.SendSubscriptionRenewalNotification(ctx, sub.MSISDN, sub.DailyAmount)
+	// Notify subscriber of renewal
+	if s.notificationService != nil {
+		go s.notificationService.SendSubscriptionRenewalNotification(ctx, sub.MSISDN, int64(sub.DailyAmount))
+	}
 
 	return nil
 }

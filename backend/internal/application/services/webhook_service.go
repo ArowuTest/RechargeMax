@@ -201,9 +201,16 @@ func (s *WebhookService) processChargeFailed(ctx context.Context, payload *Payst
 
 	log.Printf("[Webhook] Processing failed charge: Reference=%s, Message=%s", reference, payload.Data.Message)
 
-	// Update transaction status to FAILED
-	// This would be handled by the respective service (recharge/subscription)
-	// For now, just log it
+	// Mark the transaction as FAILED in the database
+	if s.rechargeService != nil && reference != "" {
+		recharge, err := s.rechargeService.GetRechargeByPaymentRef(ctx, reference)
+		if err == nil && recharge != nil && recharge.Status == "PENDING" {
+			recharge.Status = "FAILED"
+			recharge.FailureReason = fmt.Sprintf("Paystack charge.failed: %s", payload.Data.Message)
+			s.rechargeService.UpdateRecharge(ctx, recharge)
+			log.Printf("[Webhook] Marked recharge %s as FAILED (ref=%s)", recharge.ID, reference)
+		}
+	}
 
 	return nil
 }

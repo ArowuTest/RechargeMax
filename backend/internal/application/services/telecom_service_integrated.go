@@ -237,25 +237,18 @@ func (s *TelecomServiceIntegrated) purchaseDataVTU(ctx context.Context, provider
 	}, nil
 }
 
-// purchaseAirtimeDirect handles airtime purchase via direct network integration
+// purchaseAirtimeDirect handles airtime purchase via direct network API.
+// Requires a signed carrier partnership and API credentials loaded in providerConfig.Config.
+// Until partnerships are active, this will always return an error causing PurchaseAirtime
+// to fall back to the VTPass path.
 func (s *TelecomServiceIntegrated) purchaseAirtimeDirect(ctx context.Context, providerConfig *ProviderConfig, network, phone string, amountNaira int) (*VTUResponse, error) {
-	// TODO: Implement direct network integration when partnerships are signed
-	// For now, return not implemented
-	return &VTUResponse{
-		Success: false,
-		Status:  "FAILED",
-		Message: fmt.Sprintf("Direct %s integration not yet implemented", network),
-	}, nil
+	return nil, fmt.Errorf("direct %s integration requires a signed carrier partnership — use VTPass path instead", network)
 }
 
-// purchaseDataDirect handles data purchase via direct network integration
+// purchaseDataDirect handles data purchase via direct network API.
+// Requires a signed carrier partnership — falls back to VTPass until then.
 func (s *TelecomServiceIntegrated) purchaseDataDirect(ctx context.Context, providerConfig *ProviderConfig, network, phone, variationCode string, amountNaira int) (*VTUResponse, error) {
-	// TODO: Implement direct network integration when partnerships are signed
-	return &VTUResponse{
-		Success: false,
-		Status:  "FAILED",
-		Message: fmt.Sprintf("Direct %s integration not yet implemented", network),
-	}, nil
+	return nil, fmt.Errorf("direct %s data integration requires a signed carrier partnership — use VTPass path instead", network)
 }
 
 // purchaseAirtimeSimulation handles airtime purchase in simulation mode
@@ -405,4 +398,17 @@ func (s *TelecomServiceIntegrated) LogProviderTransaction(ctx context.Context, t
 	}
 
 	return nil
+}
+
+// QueryTransactionStatus re-checks a pending VTPass transaction by provider reference.
+// Returns a normalised status string: "SUCCESS", "FAILED", "PENDING", or "PROCESSING".
+func (s *TelecomServiceIntegrated) QueryTransactionStatus(ctx context.Context, providerRef string) (string, error) {
+	if s.vtpassService == nil {
+		return "PENDING", nil // nothing to query
+	}
+	status, err := s.vtpassService.QueryTransaction(ctx, providerRef)
+	if err != nil {
+		return "PENDING", fmt.Errorf("VTPass query: %w", err)
+	}
+	return status, nil
 }

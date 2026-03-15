@@ -30,6 +30,7 @@ type RechargeService struct {
 	affiliateService        *AffiliateService
 	spinService             *SpinService
 	fraudService            *FraudDetectionService
+	notificationService     *NotificationService
 	db                      *gorm.DB
 	backendURL              string
 	frontendURL             string
@@ -74,6 +75,7 @@ func NewRechargeService(
 	affiliateService *AffiliateService,
 	spinService *SpinService,
 	fraudService *FraudDetectionService,
+	notificationService *NotificationService,
 	db *gorm.DB,
 	backendURL string,
 	frontendURL string,
@@ -90,6 +92,7 @@ func NewRechargeService(
 		affiliateService:        affiliateService,
 		spinService:             spinService,
 		fraudService:            fraudService,
+		notificationService:     notificationService,
 		db:                      db,
 		backendURL:              backendURL,
 		frontendURL:             frontendURL,
@@ -653,9 +656,10 @@ func (s *RechargeService) ProcessTelecomConfirmation(ctx context.Context, refere
 				recharge.Amount/20000, // ₦200 = 1 point
 				recharge.PaymentReference,
 			)
-			// Note: Actual SMS sending would be handled by NotificationService
-			// For now, we log it (in production, call notificationService.SendSMS)
-			_ = notificationMsg
+			// Send real SMS via NotificationService
+			if s.notificationService != nil {
+				go s.notificationService.SendSMS(ctx, recharge.MSISDN, notificationMsg)
+			}
 		}
 	}
 	
@@ -664,7 +668,17 @@ func (s *RechargeService) ProcessTelecomConfirmation(ctx context.Context, refere
 	user, err := s.userRepo.FindByMSISDN(ctx, recharge.MSISDN)
 	if err == nil && user.ReferredBy != nil {
 		// Calculate commission (1% default, configurable by admin)
-		commissionRate := 0.01 // 1% - should be fetched from config
+		commissionRate := 0.01 // default 1%
+		var rateSetting struct{ SettingValue string }
+		if s.db.WithContext(ctx).
+			Table("platform_settings").
+			Where("setting_key = ?", "affiliate.commission_rate_percent").
+			First(&rateSetting).Error == nil {
+			var parsed float64
+			if _, scanErr := fmt.Sscanf(rateSetting.SettingValue, "%f", &parsed); scanErr == nil && parsed > 0 {
+				commissionRate = parsed / 100.0
+			}
+		}
 		commissionAmount := int64(float64(recharge.Amount) * commissionRate)
 		
 		// Process commission via AffiliateService
@@ -678,25 +692,15 @@ func (s *RechargeService) ProcessTelecomConfirmation(ctx context.Context, refere
 		}
 	}
 	
-	// Log telecom confirmation for audit trail
-	// Create audit log entry
-	auditLog := map[string]interface{}{
-		"event":              "telecom_confirmation",
-		"recharge_id":        recharge.ID.String(),
-		"msisdn":             recharge.MSISDN,
-		"reference":          reference,
-		"status":             status,
-		"provider":           provider,
-		"payload":            payload,
-		"timestamp":          time.Now(),
-		"previous_status":    recharge.Status,
-		"new_status":         status,
-	}
-	
-	// In production, this would be logged to a proper audit system
-	// For now, we just acknowledge it
-	_ = auditLog
-	
+	// Write to audit_logs table for compliance trail
+	s.db.WithContext(ctx).Exec(`
+		INSERT INTO audit_logs (id, entity_type, entity_id, action, description, created_at)
+		VALUES (gen_random_uuid(), 'recharge', ?, ?, ?, NOW())`,
+		recharge.ID,
+		"telecom_confirmation",
+		fmt.Sprintf("status=%s provider=%s ref=%s", status, provider, reference),
+	)
+
 	return nil
 }
 
@@ -840,9 +844,12 @@ func (s *RechargeService) attemptVTUWithRetry(ctx context.Context, recharge *ent
 				int(recharge.Amount),
 			)
 		} else if recharge.RechargeType == "DATA" {
-			// For data, we need the variation code (data bundle ID)
-			// TODO: Store variation_code in transactions table
-			variationCode := "" // Placeholder
+			// For data, use the DataPlanID as the variation code.
+			// DataPlanID is the UUID of the selected data plan which maps to a VTPass variation code.
+			variationCode := ""
+			if recharge.DataPlanID != nil {
+				variationCode = recharge.DataPlanID.String()
+			}
 			vtuResponse, err = s.telecomServiceIntegrated.PurchaseData(
 				ctx,
 				recharge.NetworkProvider,
@@ -905,17 +912,25 @@ func (s *RechargeService) handleFailedRechargeWithRefund(ctx context.Context, re
 				recharge.ID, recharge.Amount/100, refundErr)
 			log.Printf("⚠️  MANUAL ACTION REQUIRED: Admin must manually refund payment reference: %s\\n", 
 				recharge.PaymentReference)
-			// TODO: Queue for manual review/alert admin
+			// Write audit log for admin review queue
+			s.db.WithContext(ctx).Exec(`
+				INSERT INTO audit_logs (id, entity_type, entity_id, action, description, created_at)
+				VALUES (gen_random_uuid(), 'recharge', ?, 'REFUND_FAILED_MANUAL_REQUIRED', ?, NOW())`,
+				recharge.ID,
+				"CRITICAL: Auto-refund failed. Manual refund required for payment ref: "+recharge.PaymentReference,
+			)
 		} else {
 			// Refund successful - update transaction
 			log.Printf("✅ Refund initiated successfully for transaction %s\\n", recharge.ID)
 			recharge.Status = "REFUNDED"
 			s.rechargeRepo.Update(ctx, recharge)
 			
-			// TODO: Notify customer via SMS when notification service is available
-			// amountNaira := recharge.Amount / 100
-			// message := fmt.Sprintf("Your ₦%d recharge could not be completed after multiple attempts. A refund of ₦%d has been initiated and will be processed within 5-7 business days. We apologize for the inconvenience.", amountNaira, amountNaira)
-			// s.notificationService.SendSMS(ctx, recharge.MSISDN, message)
+			// Notify customer of refund
+			if s.notificationService != nil {
+				amountNaira := recharge.Amount / 100
+				msg := fmt.Sprintf("Your ₦%d recharge could not be completed. A refund has been initiated and will be processed within 5-7 business days. Sorry for the inconvenience.", amountNaira)
+				go s.notificationService.SendSMS(ctx, recharge.MSISDN, msg)
+			}
 		}
 	}
 	
@@ -931,13 +946,25 @@ func (s *RechargeService) handlePendingRecharge(ctx context.Context, recharge *e
 	
 	log.Printf("⏳ Transaction %s is PENDING with VTPass - will requery for status\\n", recharge.ID)
 	
-	// TODO: Notify customer that recharge is being processed when notification service is available
-	// amountNaira := recharge.Amount / 100
-	// message := fmt.Sprintf("Your ₦%d recharge is being processed. You'll be notified once it's complete.", amountNaira)
-	// s.notificationService.SendSMS(ctx, recharge.MSISDN, message)
+	// Notify customer that recharge is being processed
+	if s.notificationService != nil {
+		amountNaira := recharge.Amount / 100
+		msg := fmt.Sprintf("Your ₦%d recharge is being processed. You will be notified once it is complete.", amountNaira)
+		go s.notificationService.SendSMS(ctx, recharge.MSISDN, msg)
+	}
 	
-	// TODO: Schedule background job to requery VTPass after 2 minutes
-	// For now, return success - background job will handle requery
+	// Schedule a background requery of VTPass after 2 minutes.
+	// The reconciliation job covers transactions still PROCESSING after 1 hour;
+	// this provides an earlier check for fast recovery.
+	go func() {
+		bgCtx := context.Background()
+		timer := time.NewTimer(2 * time.Minute)
+		defer timer.Stop()
+		<-timer.C
+		if reqErr := s.requeryVTPassTransaction(bgCtx, recharge); reqErr != nil {
+			log.Printf("[recharge] requery %s: %v", recharge.ID, reqErr)
+		}
+	}()
 	return nil
 }
 
@@ -991,4 +1018,34 @@ func (s *RechargeService) createRechargeDrawEntries(ctx context.Context, tx *gor
 	// Increment total_entries counter on the draw
 	tx.WithContext(ctx).Model(&activeDraw).
 		Update("total_entries", gorm.Expr("total_entries + ?", entryCount))
+}
+
+// requeryVTPassTransaction re-checks a PROCESSING transaction with VTPass
+// and finalises its status. Called from a background goroutine.
+func (s *RechargeService) requeryVTPassTransaction(ctx context.Context, recharge *entities.Recharge) error {
+	if recharge.ProviderReference == "" {
+		return nil // nothing to requery
+	}
+	status, err := s.telecomServiceIntegrated.QueryTransactionStatus(ctx, recharge.ProviderReference)
+	if err != nil {
+		return fmt.Errorf("QueryTransactionStatus: %w", err)
+	}
+	switch status {
+	case "SUCCESS", "DELIVERED":
+		recharge.Status = "SUCCESS"
+		s.rechargeRepo.Update(ctx, recharge)
+		if s.notificationService != nil {
+			msg := fmt.Sprintf("Your ₦%d recharge has been processed successfully. Thank you!", recharge.Amount/100)
+			go s.notificationService.SendSMS(ctx, recharge.MSISDN, msg)
+		}
+	case "FAILED":
+		return s.handleFailedRechargeWithRefund(ctx, recharge, "VTPass requery returned FAILED")
+	// PENDING / PROCESSING → do nothing; reconciliation job will retry later
+	}
+	return nil
+}
+
+// UpdateRecharge persists changes to a recharge/transaction record.
+func (s *RechargeService) UpdateRecharge(ctx context.Context, recharge *entities.Recharge) error {
+	return s.rechargeRepo.Update(ctx, recharge)
 }

@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
+	"time"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -210,13 +212,25 @@ func (h *AdminComprehensiveHandler) GetCurrentPricing(c *gin.Context) {
 	})
 }
 
-// GetPricingHistory returns subscription pricing history
+// GetPricingHistory returns subscription pricing history from audit_logs
 func (h *AdminComprehensiveHandler) GetPricingHistory(c *gin.Context) {
-	// TODO: Implement pricing history in service
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    []interface{}{},
-	})
+	ctx := c.Request.Context()
+
+	type pricingEntry struct {
+		ID          string    `json:"id"          gorm:"column:id"`
+		Description string    `json:"description" gorm:"column:description"`
+		CreatedAt   time.Time `json:"changed_at"  gorm:"column:created_at"`
+		AdminID     string    `json:"admin_id"    gorm:"column:admin_id"`
+	}
+	var entries []pricingEntry
+	h.db.WithContext(ctx).
+		Table("audit_logs").
+		Where("entity_type = ? AND action IN (?,?)", "subscription_pricing", "UPDATE", "CREATE").
+		Order("created_at DESC").
+		Limit(100).
+		Scan(&entries)
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": entries})
 }
 
 // UpdatePricing updates subscription pricing
@@ -293,13 +307,23 @@ func (h *AdminComprehensiveHandler) GetDailySubscriptionDetails(c *gin.Context) 
 		return
 	}
 
-	// Get subscription from repository (service doesn't have GetByID, so we'd need to add it)
-	// For now, return a placeholder response
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "Subscription details endpoint - implementation pending",
-		"id":      subscriptionID,
-	})
+	// Load subscription directly from DB
+	type subRow struct {
+		ID          string  `json:"id"           gorm:"column:id"`
+		MSISDN      string  `json:"msisdn"       gorm:"column:msisdn"`
+		Status      string  `json:"status"       gorm:"column:status"`
+		DailyAmount float64 `json:"daily_amount" gorm:"column:daily_amount"`
+		CreatedAt   string  `json:"created_at"   gorm:"column:created_at"`
+	}
+	var sub subRow
+	if err := h.db.WithContext(c.Request.Context()).
+		Table("daily_subscriptions").
+		Where("id = ?", subscriptionID).
+		First(&sub).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Subscription not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": sub})
 }
 
 // CancelDailySubscription cancels a daily subscription
@@ -341,11 +365,39 @@ func (h *AdminComprehensiveHandler) CancelDailySubscription(c *gin.Context) {
 	})
 }
 
-// GetSubscriptionBillings returns billing history
+// GetSubscriptionBillings returns billing history from transactions table
 func (h *AdminComprehensiveHandler) GetSubscriptionBillings(c *gin.Context) {
-	// TODO: Implement GetBillings in service
+	ctx := c.Request.Context()
+
+	page := 1
+	limit := 20
+	if p := c.Query("page"); p != "" {
+		fmt.Sscanf(p, "%d", &page)
+	}
+	if l := c.Query("limit"); l != "" {
+		fmt.Sscanf(l, "%d", &limit)
+	}
+	if page < 1 { page = 1 }
+	if limit < 1 || limit > 100 { limit = 20 }
+	offset := (page - 1) * limit
+
+	type billing struct {
+		ID          string    `json:"id"          gorm:"column:id"`
+		MSISDN      string    `json:"msisdn"      gorm:"column:msisdn"`
+		Amount      int64     `json:"amount"      gorm:"column:amount"`
+		Status      string    `json:"status"      gorm:"column:status"`
+		CreatedAt   time.Time `json:"created_at"  gorm:"column:created_at"`
+	}
+	var billings []billing
+	var total int64
+	q := h.db.WithContext(ctx).Table("transactions").
+		Where("payment_method = ? OR recharge_type = ?", "subscription", "SUBSCRIPTION")
+	q.Count(&total)
+	q.Order("created_at DESC").Offset(offset).Limit(limit).Scan(&billings)
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"data":    []interface{}{},
+		"data":    billings,
+		"meta": gin.H{"page": page, "limit": limit, "total": total},
 	})
 }

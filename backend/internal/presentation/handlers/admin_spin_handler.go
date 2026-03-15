@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -41,23 +40,13 @@ func (h *AdminComprehensiveHandler) UpdateSpinConfig(c *gin.Context) {
 		return
 	}
 
-	// Persist each config field to platform_settings with "spin." prefix
-	for field, val := range config {
-		key := "spin." + field
-		strVal := fmt.Sprintf("%v", val)
-		err := h.db.Exec(
-			`INSERT INTO platform_settings (setting_key, setting_value, description)
-			 VALUES (?, ?, 'Spin wheel configuration')
-			 ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = now()`,
-			key, strVal,
-		).Error
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"success": false,
-				"error":   "Failed to save spin config key: " + key,
-			})
-			return
-		}
+	// Persist each config field via PlatformSettingsService ("spin.<field>" keys)
+	if err := h.settingsSvc.UpsertCategory(c.Request.Context(), "spin", config); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{

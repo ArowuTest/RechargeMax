@@ -110,16 +110,45 @@ func (h *AdminComprehensiveHandler) RejectWinnerClaim(c *gin.Context) {
 	})
 }
 
-// GetClaimStatistics returns claim statistics
+// GetClaimStatistics returns claim statistics aggregated from the winners table
 func (h *AdminComprehensiveHandler) GetClaimStatistics(c *gin.Context) {
-	// TODO: Implement claim statistics aggregation
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data": gin.H{
-			"total_claims":    0,
-			"pending_claims":  0,
-			"approved_claims": 0,
-			"rejected_claims": 0,
-		},
-	})
+	ctx := c.Request.Context()
+
+	type claimStat struct {
+		ClaimStatus string `gorm:"column:claim_status"`
+		Count       int64  `gorm:"column:count"`
+	}
+	var stats []claimStat
+	if err := h.db.WithContext(ctx).
+		Table("winners").
+		Select("claim_status, COUNT(*) as count").
+		Group("claim_status").
+		Scan(&stats).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to load claim statistics"})
+		return
+	}
+
+	result := gin.H{
+		"total_claims":    int64(0),
+		"pending_claims":  int64(0),
+		"approved_claims": int64(0),
+		"rejected_claims": int64(0),
+	}
+	var total int64
+	for _, s := range stats {
+		total += s.Count
+		switch s.ClaimStatus {
+		case "PENDING":
+			result["pending_claims"] = s.Count
+		case "CLAIMED":
+			result["approved_claims"] = s.Count
+		case "REJECTED":
+			result["rejected_claims"] = s.Count
+		case "EXPIRED":
+			result["expired_claims"] = s.Count
+		}
+	}
+	result["total_claims"] = total
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": result})
 }

@@ -210,6 +210,33 @@ export default defineConfig(({ mode }) => {
     build: {
       target: 'esnext',
       minify: 'esbuild',
+      chunkSizeWarningLimit: 600, // kB
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('react-dom') || id.includes('react-router-dom') || id.includes('/react/')) {
+                return 'vendor-react';
+              }
+              if (id.includes('recharts') || id.includes('d3-') || id.includes('victory-')) {
+                return 'charts';
+              }
+              if (id.includes('lucide-react')) {
+                return 'icons';
+              }
+              if (id.includes('@radix-ui')) {
+                return 'ui-radix';
+              }
+              if (id.includes('@tanstack')) {
+                return 'query';
+              }
+              if (id.includes('date-fns') || id.includes('dayjs') || id.includes('moment')) {
+                return 'datetime';
+              }
+            }
+          },
+        },
+      },
     },
     server: {
       host: '0.0.0.0',

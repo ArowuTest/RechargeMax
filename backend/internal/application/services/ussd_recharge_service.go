@@ -150,8 +150,12 @@ func (s *USSDRechargeService) createUSSDRecharge(ctx context.Context, payload US
 		s.createDrawEntries(ctx, ussdRecharge, *userID)
 	}
 
-	// TODO: Implement SendUSSDRechargeNotification
-	// s.notificationService.SendUSSDRechargeNotification(ctx, payload.MSISDN, amountInKobo, pointsEarned)
+	// Notify customer of successful USSD recharge
+	if s.notificationService != nil {
+		amountNaira := amountInKobo / 100
+		msg := fmt.Sprintf("Your USSD recharge of ₦%d has been processed successfully. You earned %d points.", amountNaira, pointsEarned)
+		go s.notificationService.SendSMS(ctx, payload.MSISDN, msg)
+	}
 
 	return ussdRecharge, nil
 }

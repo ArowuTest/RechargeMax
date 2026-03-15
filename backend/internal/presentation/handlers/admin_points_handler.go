@@ -1,7 +1,10 @@
 package handlers
 
 import (
+	"bufio"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -191,20 +194,32 @@ func (h *AdminComprehensiveHandler) ExportDrawToCSV(c *gin.Context) {
 		return
 	}
 
-	// TODO: Implement ExportEntriesToCSV in draw service
-	csv := "" // Placeholder
-	_ = drawID
-	if csv == "" {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"error":   "Failed to export draw entries",
-		})
+	// Query draw entries directly from DB and stream as CSV
+	type entryRow struct {
+		ID        string `gorm:"column:id"`
+		MSISDN    string `gorm:"column:msisdn"`
+		Source    string `gorm:"column:entry_source"`
+		CreatedAt string `gorm:"column:created_at"`
+	}
+	var entries []entryRow
+	if err := h.db.WithContext(c.Request.Context()).
+		Table("draw_entries").
+		Where("draw_id = ?", drawID).
+		Order("created_at ASC").
+		Scan(&entries).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to export draw entries"})
 		return
+	}
+
+	var buf strings.Builder
+	buf.WriteString("id,msisdn,source,created_at\n")
+	for _, e := range entries {
+		buf.WriteString(fmt.Sprintf("%s,%s,%s,%s\n", e.ID, e.MSISDN, e.Source, e.CreatedAt))
 	}
 
 	c.Header("Content-Type", "text/csv")
 	c.Header("Content-Disposition", "attachment; filename=draw_entries.csv")
-	c.String(http.StatusOK, csv)
+	c.String(http.StatusOK, buf.String())
 }
 
 // ImportWinnersFromCSV imports winners from CSV
@@ -238,11 +253,48 @@ func (h *AdminComprehensiveHandler) ImportWinnersFromCSV(c *gin.Context) {
 	}
 	defer f.Close()
 
-	// TODO: Implement CSV parsing and winner import
-	_ = drawID
+	// Parse CSV and create winner records
+	scanner := bufio.NewScanner(f)
+	imported := 0
+	skipped := 0
+	lineNum := 0
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		lineNum++
+		if lineNum == 1 {
+			continue // skip header row
+		}
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, ",")
+		if len(parts) < 3 {
+			skipped++
+			continue
+		}
+		msisdn := strings.TrimSpace(parts[0])
+		position := 0
+		fmt.Sscanf(strings.TrimSpace(parts[1]), "%d", &position)
+		prizeType := strings.TrimSpace(parts[2])
+		if msisdn == "" || position < 1 {
+			skipped++
+			continue
+		}
+		_, createErr := h.winnerService.CreateWinner(
+			c.Request.Context(), drawID, msisdn, position,
+			prizeType, "", 0, "", 0, "",
+		)
+		if createErr != nil {
+			skipped++
+			continue
+		}
+		imported++
+	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "Winners imported successfully",
+		"success":  true,
+		"message":  fmt.Sprintf("Import complete: %d imported, %d skipped", imported, skipped),
+		"imported": imported,
+		"skipped":  skipped,
 	})
 }

@@ -473,3 +473,18 @@ func (s *VTPassService) formatPhoneForVTPass(phone string) string {
 	// Return as is if we can't determine format
 	return phone
 }
+
+// QueryTransaction re-queries a transaction by request ID and returns a normalised status string.
+func (s *VTPassService) QueryTransaction(ctx context.Context, requestID string) (string, error) {
+	resp, err := s.RequeryTransaction(ctx, requestID)
+	if err != nil {
+		return "PENDING", err
+	}
+	if resp.IsSuccessful() {
+		return "SUCCESS", nil
+	}
+	if resp.IsFailed() || resp.IsReversed() {
+		return "FAILED", nil
+	}
+	return "PENDING", nil
+}

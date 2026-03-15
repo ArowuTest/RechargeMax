@@ -146,35 +146,6 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	})
 }
 
-// AdminLogin godoc
-// @Summary Admin login
-// @Description Admin login with email and password
-// @Tags auth
-// @Accept json
-// @Produce json
-// @Param request body validation.AdminLoginRequest true "Admin Login Request"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} errors.ErrorResponse
-// @Failure 401 {object} errors.ErrorResponse
-// @Router /auth/admin/login [post]
-func (h *AuthHandler) AdminLogin(c *gin.Context) {
-	var req validation.AdminLoginRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondWithError(c, errors.BadRequest("Invalid request format"))
-		return
-	}
-
-	// Validate request
-	if err := req.Validate(); err != nil {
-		middleware.RespondWithValidationError(c, err)
-		return
-	}
-
-	// Admin login - authentication handled by AuthService
-	// token, admin, err := h.authService.AdminLogin(c.Request.Context(), req.Email, req.Password)
-	// For now, return not implemented
-	middleware.RespondWithError(c, errors.ServiceUnavailable("Admin login not yet implemented"))
-}
 
 // AdminLogout godoc
 // @Summary Admin logout

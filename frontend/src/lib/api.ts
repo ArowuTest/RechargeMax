@@ -1,9 +1,16 @@
 /**
- * API Functions - Updated to use Go backend
- * Replaces Supabase database calls with REST API calls
+ * api.ts — compatibility shim
+ *
+ * All API functions have been consolidated into api-client.ts.
+ * This file re-exports named functions so that existing component imports
+ * (`from '@/lib/api'`) continue to work without modification.
+ *
+ * @deprecated For new code, import directly from '@/lib/api-client'.
  */
 
 import apiClient, {
+  authApi,
+  adminAuthApi,
   userApi,
   rechargeApi,
   spinApi,
@@ -13,395 +20,151 @@ import apiClient, {
   paymentApi,
 } from './api-client';
 
-// ============================================================================
-// USER MANAGEMENT
-// ============================================================================
+// ─── User ──────────────────────────────────────────────────────────────────
+export const createUser = async (userData: any) => userApi.updateProfile(userData);
+export const getUser = async (_userId: string) => userApi.getProfile();
+export const updateUser = async (_userId: string, updates: any) => userApi.updateProfile(updates);
+export const getUserDashboard = async (_msisdn: string) => userApi.getDashboard();
 
-export const createUser = async (userData: any) => {
-  // User creation is handled by OTP verification in Go backend
-  // This function is kept for compatibility but may not be needed
-  const response = await userApi.updateProfile(userData);
-  return response;
-};
-
-export const getUser = async (userId: string) => {
-  const response = await userApi.getProfile();
-  return response;
-};
-
-export const updateUser = async (userId: string, updates: any) => {
-  const response = await userApi.updateProfile(updates);
-  return response;
-};
-
-export const getUserDashboard = async (msisdn: string) => {
-  const response = await userApi.getDashboard();
-  return response;
-};
-
-// ============================================================================
-// RECHARGE OPERATIONS
-// ============================================================================
-
-export const createRecharge = async (rechargeData: any) => {
-  const { phone_number, network, amount, bundle_id } = rechargeData;
-  
-  if (bundle_id) {
-    // Data recharge
-    const response = await rechargeApi.initiateDataRecharge({
-      phone_number,
-      network,
-      bundle_id,
-    });
-    return response;
-  } else {
-    // Airtime recharge
-    const response = await rechargeApi.initiateAirtimeRecharge({
-      phone_number,
-      network,
-      amount,
-    });
-    return response;
+// ─── Recharge ──────────────────────────────────────────────────────────────
+export const createRecharge = async (d: any) => {
+  if (d.bundle_id) {
+    return rechargeApi.initiateDataRecharge({ phone_number: d.phone_number, network: d.network, bundle_id: d.bundle_id });
   }
+  return rechargeApi.initiateAirtimeRecharge({ phone_number: d.phone_number, network: d.network, amount: d.amount });
+};
+export const getUserRecharges = async (_userId: string) => {
+  const r = await userApi.getTransactions();
+  const data = (r as any)?.data || [];
+  return data.filter((t: any) => t.transaction_type === 'airtime' || t.transaction_type === 'data');
 };
 
-export const getUserRecharges = async (userId: string) => {
-  const response = await userApi.getTransactions();
-  // Filter for recharge transactions
-  const data = (response as any)?.data || [];
-  return data.filter((t: any) => 
-    t.transaction_type === 'airtime' || t.transaction_type === 'data'
-  );
-};
+// ─── Spin ───────────────────────────────────────────────────────────────────
+export const createSpin = async (_d: any) => spinApi.spin();
+export const getUserSpins = async (_userId: string) => spinApi.getHistory();
 
-// ============================================================================
-// SPIN OPERATIONS
-// ============================================================================
+// ─── Draw ───────────────────────────────────────────────────────────────────
+export const createDrawEntry = async (entryData: any) => entryData;
+export const getUserDrawEntries = async (_userId: string) => drawApi.getMyEntries();
 
-export const createSpin = async (spinData: any) => {
-  const response = await spinApi.spin();
-  return response;
-};
+// ─── Networks ───────────────────────────────────────────────────────────────
+export const getNetworks = async () => rechargeApi.getNetworks();
+export const getDataPlans = async (networkId: string) => rechargeApi.getDataBundles(networkId);
+export const validatePhoneNetwork = async (phone: string, net: string) =>
+  rechargeApi.validatePhoneNetwork(phone, net);
 
-export const getUserSpins = async (userId: string) => {
-  const response = await spinApi.getHistory();
-  return response || [];
-};
+// ─── Transactions ───────────────────────────────────────────────────────────
+export const createTransaction = async (d: any) => d;
+export const getUserTransactions = async (_userId: string) => userApi.getTransactions();
 
-// ============================================================================
-// DRAW OPERATIONS
-// ============================================================================
+// ─── Affiliate ──────────────────────────────────────────────────────────────
+export const createAffiliate = async (d: any) => affiliateApi.register(d);
+export const getAffiliateStats = async (_userId: string) => affiliateApi.getDashboard();
+export const getAffiliateDashboard = async (_msisdn: string) => affiliateApi.getDashboard();
+export const registerAffiliate = async (d: any) => affiliateApi.register(d);
+export const refreshAffiliateLink = async () => affiliateApi.getReferralLink();
+export const trackAffiliateClick = async () => affiliateApi.trackClick();
 
-export const createDrawEntry = async (entryData: any) => {
-  // Draw entries are created automatically by the backend when user subscribes
-  // This function is kept for compatibility
-  return entryData;
-};
-
-export const getUserDrawEntries = async (userId: string) => {
-  const response = await drawApi.getMyEntries();
-  return response || [];
-};
-
-// ============================================================================
-// NETWORK OPERATIONS
-// ============================================================================
-
-export const getNetworks = async () => {
-  const response = await rechargeApi.getNetworks();
-  return response || [];
-};
-
-export const getDataPlans = async (networkId: string) => {
-  const response = await rechargeApi.getDataBundles(networkId);
-  return response || [];
-};
-
-export const validatePhoneNetwork = async (phoneNumber: string, expectedNetwork: string) => {
-  const response = await rechargeApi.validatePhoneNetwork(phoneNumber, expectedNetwork);
-  return response;
-};
-
-// ============================================================================
-// TRANSACTION OPERATIONS
-// ============================================================================
-
-export const createTransaction = async (transactionData: any) => {
-  // Transactions are created automatically by the backend
-  // This function is kept for compatibility
-  return transactionData;
-};
-
-export const getUserTransactions = async (userId: string) => {
-  const response = await userApi.getTransactions();
-  return response || [];
-};
-
-// ============================================================================
-// AFFILIATE OPERATIONS
-// ============================================================================
-
-export const createAffiliate = async (affiliateData: any) => {
-  const response = await affiliateApi.register(affiliateData);
-  return response;
-};
-
-export const getAffiliateStats = async (userId: string) => {
-  const response = await affiliateApi.getDashboard();
-  return response;
-};
-
-// ============================================================================
-// ADMIN OPERATIONS
-// ============================================================================
-
+// ─── Admin ───────────────────────────────────────────────────────────────────
 export const getAllUsers = async () => {
-  const response = await adminApi.users.getAll();
-  return response?.data || [];
+  const r = await adminApi.users.getAll();
+  return r?.data || [];
 };
-
 export const getAllTransactions = async () => {
-  // Admin analytics endpoint
-  const response = await adminApi.analytics.getOverview();
-  return response?.transactions || [];
+  const r = await adminApi.analytics.getOverview();
+  return r?.transactions || [];
 };
+export const getSystemStats = async () => adminApi.getStats();
 
-export const getSystemStats = async () => {
-  const response = await adminApi.getStats();
-  return response;
-};
+// ─── Prizes ──────────────────────────────────────────────────────────────────
+export const getWheelPrizes = async () => adminApi.spin.getPrizes();
+export const createWheelPrize = async (d: any) => adminApi.spin.createPrize(d);
+export const updateWheelPrize = async (id: string, d: any) => adminApi.spin.updatePrize(id, d);
+export const deleteWheelPrize = async (id: string) => adminApi.spin.deletePrize(id);
 
-// ============================================================================
-// PRIZE OPERATIONS
-// ============================================================================
+// ─── Payment ─────────────────────────────────────────────────────────────────
+export const initializePayment = async (d: any) => paymentApi.initializePayment(d);
+export const verifyPayment = async (ref: string) => paymentApi.verifyPayment(ref);
 
-export const getWheelPrizes = async () => {
-  const response = await adminApi.spin.getPrizes();
-  return response || [];
-};
+// ─── Prize claims ────────────────────────────────────────────────────────────
+export const claimPrize = async (prizeId: string, d: any) => userApi.claimPrize(prizeId, d);
 
-export const createWheelPrize = async (prizeData: any) => {
-  const response = await adminApi.spin.createPrize(prizeData);
-  return response;
-};
+// ─── Platform stats ──────────────────────────────────────────────────────────
+export const getPlatformStatistics = async () => apiClient.get('/platform/statistics');
+export const getRecentWinners = async (limit = 4) => apiClient.get(`/winners/recent?limit=${limit}`);
 
-export const updateWheelPrize = async (prizeId: string, updates: any) => {
-  const response = await adminApi.spin.updatePrize(prizeId, updates);
-  return response;
-};
-
-export const deleteWheelPrize = async (prizeId: string) => {
-  const response = await adminApi.spin.deletePrize(prizeId);
-  return response;
-};
-
-// ============================================================================
-// PAYMENT OPERATIONS
-// ============================================================================
-
-export const initializePayment = async (paymentData: any) => {
-  const response = await paymentApi.initializePayment(paymentData);
-  return response;
-};
-
-export const verifyPayment = async (reference: string) => {
-  const response = await paymentApi.verifyPayment(reference);
-  return response;
-};
-
-// ============================================================================
-// PRIZE CLAIM OPERATIONS
-// ============================================================================
-
-export const claimPrize = async (prizeId: string, claimData: any) => {
-  const response = await userApi.claimPrize(prizeId, claimData);
-  return response;
-};
-
-// ============================================================================
-// AFFILIATE OPERATIONS
-// ============================================================================
-
-export const getAffiliateDashboard = async (msisdn: string) => {
-  const response = await affiliateApi.getDashboard();
-  return response;
-};
-
-export const registerAffiliate = async (affiliateData: any) => {
-  const response = await affiliateApi.register(affiliateData);
-  return response;
-};
-
-export const refreshAffiliateLink = async () => {
-  const response = await affiliateApi.getReferralLink();
-  return response;
-};
-
-export const trackAffiliateClick = async () => {
-  const response = await affiliateApi.trackClick();
-  return response;
-};
-
-// ============================================================================
-// LOGGING OPERATIONS
-// ============================================================================
-
-export const logError = async (errorData: any) => {
-  try {
-    // Log to console in development
-    console.error('Error logged:', errorData);
-    // In production, send to logging service
-    // await apiClient.post('/logs/error', errorData);
-  } catch (err) {
-    console.error('Failed to log error:', err);
-  }
-};
-
-export const logPerformance = async (performanceData: any) => {
-  try {
-    // Log to console in development
-    // In production, send to logging service
-    // await apiClient.post('/logs/performance', performanceData);
-  } catch (err) {
-    console.error('Failed to log performance:', err);
-  }
-};
-
-// ============================================================================
-// PLATFORM STATISTICS
-// ============================================================================
-
-export const getPlatformStatistics = async () => {
-  const response = await apiClient.get('/platform/statistics');
-  return response;
-};
-
-export const getRecentWinners = async (limit: number = 4) => {
-  const response = await apiClient.get(`/winners/recent?limit=${limit}`);
-  return response;
-};
-
-// ============================================================================
-// SPIN MANAGEMENT
-// ============================================================================
-
+// ─── Spins (legacy endpoints) ─────────────────────────────────────────────────
 export const getAvailableSpins = async (msisdn: string) => {
   try {
-    const response = await apiClient.get(`/spins/available?msisdn=${msisdn}`);
-    return response;
-  } catch (err) {
-    console.error('Failed to get available spins:', err);
+    return await apiClient.get(`/spins/available?msisdn=${msisdn}`);
+  } catch {
     return { success: false, data: { availableSpins: 0 } };
   }
 };
-
 export const consumeSpin = async (msisdn: string, transactionReference?: string) => {
   try {
-    const response = await apiClient.post('/spins/consume', {
-      msisdn,
-      transactionReference
-    });
-    return response;
-  } catch (err) {
-    console.error('Failed to consume spin:', err);
+    return await apiClient.post('/spins/consume', { msisdn, transactionReference });
+  } catch {
     return { success: false, error: 'Failed to consume spin' };
   }
 };
-
-export const recordTransactionPrize = async (data: {
-  transactionReference: string;
-  msisdn: string;
-  prizeType: string;
-  prizeValue: number;
-  prizeDescription: string;
+export const recordTransactionPrize = async (d: {
+  transactionReference: string; msisdn: string; prizeType: string;
+  prizeValue: number; prizeDescription: string;
 }) => {
   try {
-    const response = await apiClient.post('/prizes/record', data);
-    return response;
-  } catch (err) {
-    console.error('Failed to record transaction prize:', err);
+    return await apiClient.post('/prizes/record', d);
+  } catch {
     return { success: false, error: 'Failed to record prize' };
   }
 };
-
 export const getTierProgress = async (msisdn: string) => {
   try {
-    const response = await apiClient.get(`/spins/tier-progress?msisdn=${msisdn}`);
-    return response;
-  } catch (err) {
-    console.error('Failed to get tier progress:', err);
+    return await apiClient.get(`/spins/tier-progress?msisdn=${msisdn}`);
+  } catch {
     return { success: false, data: { currentTier: 0, progress: 0, cumulativeAmount: 0 } };
   }
 };
-
 export const getSpinTiers = async () => {
   try {
-    const response = await apiClient.get('/spins/tiers');
-    return response;
-  } catch (err) {
-    console.error('Failed to get spin tiers:', err);
+    return await apiClient.get('/spins/tiers');
+  } catch {
     return { success: false, data: [] };
   }
 };
 
-// ============================================================================
-// EDGE FUNCTIONS (Legacy Supabase compatibility)
-// ============================================================================
+// ─── Draws ───────────────────────────────────────────────────────────────────
+export const getActiveDraws = async () => drawApi.getActiveDraws();
+export const getDrawResults = async (drawId: string) => drawApi.getDrawResults(drawId);
 
+// ─── Daily subscription ───────────────────────────────────────────────────────
+export const processDailySubscription = async (d: { msisdn: string; tier_id?: string; payment_method?: string }) =>
+  (await apiClient.post('/subscriptions/daily', d)).data;
+export const getDailySubscriptionStatus = async (msisdn: string) =>
+  (await apiClient.get(`/subscriptions/daily/status?msisdn=${msisdn}`)).data;
+export const cancelDailySubscription = async (subscriptionId: string) =>
+  (await apiClient.post(`/subscriptions/daily/${subscriptionId}/cancel`)).data;
+
+// ─── Logging (no-op in production; kept for compatibility) ────────────────────
+export const logError = async (errorData: any) => {
+  if (import.meta.env.DEV) console.error('Error logged:', errorData);
+};
+export const logPerformance = async (_d: any) => { /* intentional no-op */ };
+
+// ─── Legacy edge-function shim ────────────────────────────────────────────────
 export const callEdgeFunction = async (functionName: string, params: any) => {
-  // Legacy function for Supabase edge functions
-  // Now routes to appropriate Go backend API endpoints
-  console.warn(`callEdgeFunction('${functionName}') is deprecated. Use specific API methods instead.`);
-  
-  // Map legacy function names to new API endpoints
-  const functionMap: Record<string, () => Promise<any>> = {
-    'clean_working_admin_api_2025_11_12_17_00': () => adminApi.getStats(),
-    'updated_admin_subscription_api_2026_01_08_19_02': () => adminApi.getSubscriptions(),
-    'sync_frontend_settings_2025_11_10_14_30': () => adminApi.updateSettings(params),
-    'strategic_affiliate_admin_api_2025_11_12_18_30': () => adminApi.getAffiliateStats(),
+  console.warn(`callEdgeFunction('${functionName}') is deprecated.`);
+  const map: Record<string, () => Promise<any>> = {
+    'send-otp': () => authApi.sendOTP(params.phone_number),
+    'verify-otp': () => authApi.verifyOTP(params.phone_number, params.otp_code),
+    'initialize-payment': () => paymentApi.initializePayment(params),
+    'verify-payment': () => paymentApi.verifyPayment(params.reference),
+    'get-networks': () => rechargeApi.getNetworks(),
+    'spin-wheel': () => spinApi.spin(),
+    'get-active-draws': () => drawApi.getActiveDraws(),
+    'admin-login': () => adminAuthApi.login(params.email, params.password),
   };
-  
-  const handler = functionMap[functionName];
-  if (handler) {
-    return await handler();
-  }
-  
-  throw new Error(`Edge function '${functionName}' not implemented in Go backend`);
-};
-
-// ============================================================================
-// DRAW OPERATIONS (Additional)
-// ============================================================================
-
-export const getActiveDraws = async () => {
-  const response = await drawApi.getActiveDraws();
-  return response;
-};
-
-export const getDrawResults = async (drawId: string) => {
-  const response = await drawApi.getDrawResults(drawId);
-  return response;
-};
-
-// ============================================================================
-// DAILY SUBSCRIPTION OPERATIONS
-// ============================================================================
-
-export const processDailySubscription = async (subscriptionData: {
-  msisdn: string;
-  tier_id?: string;
-  payment_method?: 'paystack' | 'mtn_dcb';
-}) => {
-  const response = await apiClient.post('/subscriptions/daily', subscriptionData);
-  return response.data;
-};
-
-export const getDailySubscriptionStatus = async (msisdn: string) => {
-  const response = await apiClient.get(`/subscriptions/daily/status?msisdn=${msisdn}`);
-  return response.data;
-};
-
-export const cancelDailySubscription = async (subscriptionId: string) => {
-  const response = await apiClient.post(`/subscriptions/daily/${subscriptionId}/cancel`);
-  return response.data;
+  const fn = map[functionName];
+  if (fn) return fn();
+  throw new Error(`Edge function '${functionName}' not implemented.`);
 };

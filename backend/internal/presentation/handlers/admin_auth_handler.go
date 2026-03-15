@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 	"time"
 
@@ -91,8 +92,7 @@ func (h *AdminAuthHandler) Login(c *gin.Context) {
 
 	// Update last login
 	if err := h.adminRepo.UpdateLastLogin(ctx, admin.ID); err != nil {
-		// Log error but don't fail the login
-		// TODO: Add proper logging
+		log.Printf("[admin-auth] UpdateLastLogin for %s: %v", admin.ID, err)
 	}
 
 	// Set httpOnly cookie for browser-based admin panel

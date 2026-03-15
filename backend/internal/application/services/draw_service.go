@@ -363,9 +363,41 @@ func (s *DrawService) GetUserEntries(ctx context.Context, drawID uuid.UUID, msis
 	//     }
 	// }
 	
-	// For now, return empty list
-	// When repository methods are implemented, uncomment above code
-	_ = draw // Use draw to avoid unused variable error
+	// Query draw_entries table for this user/draw combination
+	type entryRow struct {
+		ID          string    `gorm:"column:id"`
+		DrawID      string    `gorm:"column:draw_id"`
+		MSISDN      string    `gorm:"column:msisdn"`
+		EntrySource string    `gorm:"column:entry_source"`
+		Amount      int64     `gorm:"column:amount"`
+		CreatedAt   time.Time `gorm:"column:created_at"`
+	}
+	var rows []entryRow
+	s.db.WithContext(ctx).Raw(`
+		SELECT id, draw_id, msisdn, entry_source, amount, created_at
+		FROM draw_entries
+		WHERE draw_id = ? AND msisdn = ?
+		ORDER BY created_at ASC
+	`, draw.ID, msisdn).Scan(&rows)
+
+	userID := uuid.Nil
+	if user, err2 := s.rechargeRepo.FindByReference(ctx, ""); err2 == nil && user != nil {
+		// user lookup not needed here; MSISDN is enough
+		_ = user
+	}
+
+	for _, r := range rows {
+		id, _ := uuid.Parse(r.ID)
+		drawUUID, _ := uuid.Parse(r.DrawID)
+		entries = append(entries, DrawEntryResponse{
+			ID:        id,
+			DrawID:    drawUUID,
+			UserID:    userID,
+			MSISDN:    r.MSISDN,
+			Amount:    r.Amount,
+			EntryDate: r.CreatedAt,
+		})
+	}
 
 	return entries, nil
 }
@@ -416,9 +448,44 @@ func (s *DrawService) GetDrawWinners(ctx context.Context, drawID uuid.UUID) ([]D
 	// }
 	// return response, nil
 	
-	// For now, return empty list
-	// When WinnerRepository is properly integrated, uncomment above code
-	return []DrawWinnerResponse{}, nil
+	// Query winners table for this draw
+	type winnerRow struct {
+		ID               string     `gorm:"column:id"`
+		DrawID           string     `gorm:"column:draw_id"`
+		MSISDN           string     `gorm:"column:msisdn"`
+		PrizeType        string     `gorm:"column:prize_type"`
+		PrizeDescription string     `gorm:"column:prize_description"`
+		PrizeAmount      *int64     `gorm:"column:prize_amount"`
+		ClaimStatus      string     `gorm:"column:claim_status"`
+		CreatedAt        time.Time  `gorm:"column:created_at"`
+	}
+	var rows []winnerRow
+	s.db.WithContext(ctx).Raw(`
+		SELECT id, draw_id, msisdn, prize_type, prize_description, prize_amount, claim_status, created_at
+		FROM winners
+		WHERE draw_id = ?
+		ORDER BY position ASC
+	`, drawID).Scan(&rows)
+
+	var response []DrawWinnerResponse
+	for _, r := range rows {
+		id, _ := uuid.Parse(r.ID)
+		dID, _ := uuid.Parse(r.DrawID)
+		prizeVal := int64(0)
+		if r.PrizeAmount != nil {
+			prizeVal = *r.PrizeAmount
+		}
+		response = append(response, DrawWinnerResponse{
+			ID:         id,
+			DrawID:     dID,
+			MSISDN:     r.MSISDN,
+			PrizeType:  r.PrizeType,
+			PrizeValue: float64(prizeVal),
+			Status:     r.ClaimStatus,
+			WonAt:      r.CreatedAt,
+		})
+	}
+	return response, nil
 }
 
 // DrawWinnerResponse represents a draw winner

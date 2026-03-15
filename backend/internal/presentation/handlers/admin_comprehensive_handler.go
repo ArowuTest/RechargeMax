@@ -28,7 +28,9 @@ type AdminComprehensiveHandler struct {
 	// Prize Tier System Services
 	drawTypeService      *services.DrawTypeService
 	prizeTemplateService *services.PrizeTemplateService
-	// Direct DB access for settings persistence
+	// Settings service for platform configuration persistence
+	settingsSvc *services.PlatformSettingsService
+	// Direct DB access still needed by some comprehensive handlers
 	db *gorm.DB
 }
 
@@ -50,6 +52,7 @@ func NewAdminComprehensiveHandler(
 	subscriptionService *services.SubscriptionService,
 	drawTypeService *services.DrawTypeService,
 	prizeTemplateService *services.PrizeTemplateService,
+	settingsSvc *services.PlatformSettingsService,
 	db *gorm.DB,
 ) *AdminComprehensiveHandler {
 	return &AdminComprehensiveHandler{
@@ -69,6 +72,7 @@ func NewAdminComprehensiveHandler(
 		subscriptionService:     subscriptionService,
 		drawTypeService:         drawTypeService,
 		prizeTemplateService:    prizeTemplateService,
+		settingsSvc:             settingsSvc,
 		db:                      db,
 	}
 }

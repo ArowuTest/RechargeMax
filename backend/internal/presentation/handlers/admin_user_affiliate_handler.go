@@ -151,10 +151,7 @@ func (h *AdminComprehensiveHandler) UpdateUserStatus(c *gin.Context) {
 
 	// Update loyalty tier if provided
 	if req.LoyaltyTier != "" {
-		if err := h.db.Exec(
-			`UPDATE users SET loyalty_tier = ? WHERE id = ?`,
-			req.LoyaltyTier, userID,
-		).Error; err != nil {
+		if err := h.userService.UpdateLoyaltyTier(ctx, userID.String(), req.LoyaltyTier); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"success": false,
 				"error":   "Failed to update loyalty tier",

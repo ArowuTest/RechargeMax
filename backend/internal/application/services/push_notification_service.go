@@ -1,14 +1,19 @@
 package services
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
+	"time"
 )
 
 // PushNotificationService handles FCM push notifications
 type PushNotificationService struct {
-	fcmServerKey string
+	fcmServerKey  string
 	deviceService *DeviceService
 }
 
@@ -20,76 +25,70 @@ func NewPushNotificationService(fcmServerKey string, deviceService *DeviceServic
 	}
 }
 
-// SendToUser sends a push notification to all user's devices
+// SendToUser sends a push notification to all active devices for the MSISDN.
 func (s *PushNotificationService) SendToUser(ctx context.Context, msisdn, title, body string, data map[string]string) error {
 	devices, err := s.deviceService.GetDevicesByMSISDN(ctx, msisdn)
 	if err != nil {
-		return fmt.Errorf("failed to get devices: %w", err)
+		return fmt.Errorf("GetDevicesByMSISDN: %w", err)
 	}
 
-		for _, device := range devices {
-			if device.IsActive && device.FCMToken != nil {
-				// Implement actual FCM API call
-				// In production, this would:
-				// 1. Make HTTP POST to FCM API
-				// 2. Include FCM server key in Authorization header
-				// 3. Send notification payload
-				// 4. Handle errors (invalid token, etc.)
-				//
-				// Example:
-				// err := s.SendToToken(ctx, *device.FCMToken, title, body, data)
-				// if err != nil {
-				//     log.Printf("Failed to send push to device %s: %v\n", device.ID, err)
-				// }
-				
-				// For now, log the push notification
-				log.Printf("[PUSH] To device %s (Token: %s), Title: %s, Body: %s\n", device.ID, *device.FCMToken, title, body)
+	var lastErr error
+	for _, device := range devices {
+		if device.IsActive && device.FCMToken != nil && *device.FCMToken != "" {
+			if err := s.SendToToken(ctx, *device.FCMToken, title, body, data); err != nil {
+				log.Printf("[push] device %s: %v", device.ID, err)
+				lastErr = err
 			}
 		}
-
-	return nil
+	}
+	return lastErr
 }
 
-// SendToToken sends a push notification to a specific device token
+// SendToToken sends a push notification to a specific FCM device token.
+// Falls back to stdout logging when no FCM key is configured.
 func (s *PushNotificationService) SendToToken(ctx context.Context, fcmToken, title, body string, data map[string]string) error {
-	// Implement actual FCM API call
-	// In production, this would:
-	// 1. Create FCM payload with notification and data
-	// 2. Make HTTP POST to https://fcm.googleapis.com/fcm/send
-	// 3. Include Authorization: key=<fcmServerKey> header
-	// 4. Handle response and errors
-	//
-	// Example implementation:
-	// import "bytes"
-	// import "encoding/json"
-	// import "net/http"
-	// 
-	// payload := map[string]interface{}{
-	//     "to": fcmToken,
-	//     "notification": map[string]string{
-	//         "title": title,
-	//         "body":  body,
-	//     },
-	//     "data": data,
-	// }
-	// 
-	// jsonData, _ := json.Marshal(payload)
-	// req, _ := http.NewRequestWithContext(ctx, "POST", "https://fcm.googleapis.com/fcm/send", bytes.NewBuffer(jsonData))
-	// req.Header.Set("Content-Type", "application/json")
-	// req.Header.Set("Authorization", "key="+s.fcmServerKey)
-	// 
-	// client := &http.Client{Timeout: 10 * time.Second}
-	// resp, err := client.Do(req)
-	// if err != nil {
-	//     return fmt.Errorf("failed to send FCM notification: %w", err)
-	// }
-	// defer resp.Body.Close()
-	// 
-	// if resp.StatusCode != 200 {
-	//     return fmt.Errorf("FCM API returned status %d", resp.StatusCode)
-	// }
-	
-	// For now, log the push notification (when FCM server key is configured, uncomment above)
-	log.Printf("[PUSH-TOKEN] To: %s, Title: %s, Body: %s\n", fcmToken, title, body)
+	if s.fcmServerKey == "" {
+		log.Printf("[PUSH-DEV] Token: %s | %s: %s", fcmToken, title, body)
+		return nil
+	}
+
+	if data == nil {
+		data = map[string]string{}
+	}
+	payload := map[string]interface{}{
+		"to": fcmToken,
+		"notification": map[string]string{
+			"title": title,
+			"body":  body,
+		},
+		"data":     data,
+		"priority": "high",
+	}
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal FCM payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST",
+		"https://fcm.googleapis.com/fcm/send", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("build FCM request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "key="+s.fcmServerKey)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("FCM API call: %w", err)
+	}
+	defer func() {
+		io.Copy(io.Discard, resp.Body) //nolint:errcheck
+		resp.Body.Close()
+	}()
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("FCM HTTP %d for token %s", resp.StatusCode, fcmToken)
+	}
 	return nil
 }

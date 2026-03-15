@@ -340,7 +340,22 @@ func (h *AdminUserManagementHandler) DeleteAdmin(c *gin.Context) {
 	}
 
 	// Prevent deleting the last super admin
-	// TODO: Add logic to check if this is the last super admin
+	allAdmins, _ := h.adminRepo.FindAll(ctx, 1000, 0)
+	superAdminCount := 0
+	for _, a := range allAdmins {
+		if a.Role == "super_admin" {
+			superAdminCount++
+		}
+	}
+	// Check the target admin's role
+	targetAdmin, _ := h.adminRepo.GetByID(ctx, adminID)
+	if targetAdmin != nil && targetAdmin.Role == "super_admin" && superAdminCount <= 1 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Cannot delete the last super admin account",
+		})
+		return
+	}
 
 	// Delete admin
 	if err := h.adminRepo.Delete(ctx, id); err != nil {

@@ -24,6 +24,7 @@ type WinnerService struct {
 	spinRepo            repositories.SpinRepository
 	hlrService          *HLRService
 	telecomService      *TelecomServiceIntegrated
+	paymentService      *PaymentService
 	notificationService *NotificationService
 	db                  *gorm.DB
 }
@@ -118,6 +119,7 @@ func NewWinnerService(
 	spinRepo repositories.SpinRepository,
 	hlrService *HLRService,
 	telecomService *TelecomServiceIntegrated,
+	paymentService *PaymentService,
 	notificationService *NotificationService,
 	db *gorm.DB,
 ) *WinnerService {
@@ -128,6 +130,7 @@ func NewWinnerService(
 		spinRepo:            spinRepo,
 		hlrService:          hlrService,
 		telecomService:      telecomService,
+		paymentService:      paymentService,
 		notificationService: notificationService,
 		db:                  db,
 	}
@@ -260,7 +263,43 @@ func (s *WinnerService) provisionPrize(ctx context.Context, winner *entities.Win
 	//     }
 	// }
 	
-	// For now, mark as completed (when TelecomService is integrated, uncomment above)
+	// Provision via TelecomService
+	if s.telecomService != nil {
+		switch winner.PrizeType {
+		case "airtime":
+			amountKobo := int64(0)
+			if winner.AirtimeAmount != nil {
+				amountKobo = *winner.AirtimeAmount
+			} else if winner.PrizeAmount != nil {
+				amountKobo = *winner.PrizeAmount
+			}
+			if amountKobo > 0 {
+				_, provErr := s.telecomService.PurchaseAirtime(ctx, network, winner.MSISDN, int(amountKobo/100))
+				if provErr != nil {
+					provErrStr := provErr.Error()
+					winner.ProvisionStatus = setStr(winner.ProvisionStatus, "failed")
+					winner.ProvisionError = &provErrStr
+					s.winnerRepo.Update(ctx, winner)
+					return
+				}
+			}
+		case "data":
+			amountKobo := int64(0)
+			if winner.PrizeAmount != nil {
+				amountKobo = *winner.PrizeAmount
+			}
+			variationCode := s.getDataVariationCode(amountKobo, network)
+			_, provErr := s.telecomService.PurchaseData(ctx, network, winner.MSISDN, variationCode, int(amountKobo/100))
+			if provErr != nil {
+				provErrStr := provErr.Error()
+				winner.ProvisionStatus = setStr(winner.ProvisionStatus, "failed")
+				winner.ProvisionError = &provErrStr
+				s.winnerRepo.Update(ctx, winner)
+				return
+			}
+		}
+	}
+
 	winner.ProvisionStatus = setStr(winner.ProvisionStatus, "completed")
 	winner.ProvisionedAt = timePtr(time.Now())
 	winner.ClaimStatus = "CLAIMED"
@@ -455,7 +494,28 @@ func (s *WinnerService) ProcessCashPayout(ctx context.Context, winnerID uuid.UUI
 	// 
 	// winner.PaymentReference = &transferRef
 	
-	// For now, mark as claimed (when PaymentService is integrated, uncomment above)
+	// Initiate bank transfer via PaymentService
+	if s.paymentService != nil {
+		ref := fmt.Sprintf("PRIZE_%s", winner.ID.String())
+		transferReq := map[string]interface{}{
+			"amount":         winner.PrizeAmount,
+			"bank_code":      bankName, // bankName used as bank_code; UI should pass code
+			"account_number": accountNumber,
+			"account_name":   accountName,
+			"reference":      ref,
+			"narration":      fmt.Sprintf("Prize payout - Draw %s", winner.DrawID.String()),
+		}
+		resp, transferErr := s.paymentService.ProcessTransfer(ctx, transferReq)
+		if transferErr != nil {
+			return fmt.Errorf("bank transfer failed: %w", transferErr)
+		}
+		if resp != nil {
+			if refStr, ok := resp["reference"].(string); ok && refStr != "" {
+				winner.PayoutReference = &refStr
+			}
+		}
+	}
+
 	winner.ClaimStatus = "CLAIMED"
 	winner.ClaimedAt = timePtr(time.Now())
 	winner.BankName = &bankName
@@ -541,11 +601,8 @@ func (s *WinnerService) GetUnclaimedWinners(ctx context.Context, daysBeforeDeadl
 	// // 
 	// // return winners, nil
 	
-	// For now, return empty list
-	// When FindUnclaimedBeforeDeadline repository method is implemented, uncomment above
-	_ = ctx
-	_ = daysBeforeDeadline
-	return nil, nil
+	deadline := time.Now().AddDate(0, 0, daysBeforeDeadline).Format("2006-01-02")
+	return s.winnerRepo.FindUnclaimedBeforeDeadline(ctx, deadline)
 }
 
 // SendClaimReminders sends reminder notifications to winners approaching claim deadline
@@ -1118,7 +1175,10 @@ func (s *WinnerService) ClaimSpinPrize(ctx context.Context, prizeID uuid.UUID, m
 			return fmt.Errorf("failed to update spin prize: %w", err)
 		}
 		
-		// TODO: Send notification to user about claim submission
+		// Notify winner of successful claim submission
+		if s.notificationService != nil {
+			go s.notificationService.SendSMS(context.Background(), msisdn, fmt.Sprintf("Your %s prize claim has been submitted successfully. We will process it shortly.", spinPrize.PrizeType))
+		}
 		
 		return nil
 	}
@@ -1258,10 +1318,21 @@ func (s *WinnerService) provisionDataManual(ctx context.Context, spinPrize *enti
 	return nil
 }
 
-// getDataVariationCode maps prize value to VTPass variation code
+// getDataVariationCode maps prize value to VTPass variation code.
+// Looks up wheel_prizes.variation_code by prize value and network first;
+// falls back to hardcoded defaults if not found.
 func (s *WinnerService) getDataVariationCode(prizeValue int64, network string) string {
-	// TODO: This should be stored in database (wheel_prizes.variation_code)
-	// For now, hardcode common mappings
+	if s.db != nil {
+		var code string
+		err := s.db.Table("wheel_prizes").
+			Where("network_provider = ? AND prize_value = ? AND variation_code IS NOT NULL", network, prizeValue).
+			Limit(1).
+			Pluck("variation_code", &code).Error
+		if err == nil && code != "" {
+			return code
+		}
+	}
+	// Fallback hardcoded mappings
 	
 	switch network {
 	case "MTN":

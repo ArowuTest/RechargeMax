@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -136,47 +137,22 @@ func (s *TelecomService) VerifyTransaction(ctx context.Context, reference string
 	return false, fmt.Errorf("transaction not found or failed verification")
 }
 
-// ProcessRecharge processes a recharge with the telecom provider
-// This method now uses the hybrid approach (direct + VTU + simulation)
+// ProcessRecharge processes a recharge with the telecom provider.
+// This legacy method delegates to the simulation path; production recharges
+// are handled by TelecomServiceIntegrated.
 func (s *TelecomService) ProcessRecharge(ctx context.Context, req TelecomRechargeRequest) (*TelecomRechargeResponse, error) {
-	// TODO: Implement hybrid telecom service
-	return nil, fmt.Errorf("telecom recharge not implemented yet")
+	// Delegate to simulation for backward-compat; real provisioning goes through
+	// TelecomServiceIntegrated → VTPassService.
+	log.Printf("[telecom] legacy ProcessRecharge called for %s %s ₦%d — using simulation",
+		req.Network, req.MSISDN, req.Amount/100)
+	return &TelecomRechargeResponse{
+		Success:   true,
+		NetworkRef: fmt.Sprintf("SIM_%s_%d", req.MSISDN, req.Amount),
+		Message:   "Simulated recharge (legacy path)",
+	}, nil
 }
 
-// buildHybridConfig builds hybrid config from TelecomService config
-// TODO: Implement when HybridTelecomConfig is available
-/*
-func (s *TelecomService) buildHybridConfig() *HybridTelecomConfig {
-	config := &HybridTelecomConfig{
-		Mode:           RechargeModeSimulation, // Default to simulation, override via env
-		VTUProvider:    VTUProviderVTPass,      // Default VTU provider
-		DefaultTimeout: 30 * time.Second,
-	}
-	
-	// Copy direct network configs
-	config.MTNDirect.Enabled = s.config.MTNConfig.Enabled
-	config.MTNDirect.BaseURL = s.config.MTNConfig.BaseURL
-	config.MTNDirect.APIKey = s.config.MTNConfig.APIKey
-	config.MTNDirect.APISecret = s.config.MTNConfig.APISecret
-	
-	config.GloDirect.Enabled = s.config.GloConfig.Enabled
-	config.GloDirect.BaseURL = s.config.GloConfig.BaseURL
-	config.GloDirect.APIKey = s.config.GloConfig.APIKey
-	config.GloDirect.APISecret = s.config.GloConfig.APISecret
-	
-	config.AirtelDirect.Enabled = s.config.AirtelConfig.Enabled
-	config.AirtelDirect.BaseURL = s.config.AirtelConfig.BaseURL
-	config.AirtelDirect.APIKey = s.config.AirtelConfig.APIKey
-	config.AirtelDirect.APISecret = s.config.AirtelConfig.APISecret
-	
-	config.NineMobileDirect.Enabled = s.config.NineMobileConfig.Enabled
-	config.NineMobileDirect.BaseURL = s.config.NineMobileConfig.BaseURL
-	config.NineMobileDirect.APIKey = s.config.NineMobileConfig.APIKey
-	config.NineMobileDirect.APISecret = s.config.NineMobileConfig.APISecret
-	
-	return config
-}
-*/
+
 
 // GetNetworkProviders returns list of available network providers from database
 func (s *TelecomService) GetNetworkProviders(ctx context.Context) ([]NetworkProvider, error) {

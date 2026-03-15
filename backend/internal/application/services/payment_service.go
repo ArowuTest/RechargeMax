@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"time"
 
@@ -395,10 +396,11 @@ func (s *PaymentService) verifyWebhookSignature(payload []byte, signature, gatew
 		return hmac.Equal([]byte(signature), []byte(expectedSignature))
 	}
 
-	// Flutterwave uses different signature method
+	// Flutterwave: the verif-hash header is compared against the secret hash configured
+	// in the Flutterwave dashboard. It is a plain header value, not a computed HMAC.
+	// See: https://developer.flutterwave.com/docs/integration-guides/webhooks/
 	if gateway == "flutterwave" {
-		// Flutterwave sends the secret key as the signature
-		return signature == secret
+		return hmac.Equal([]byte(signature), []byte(secret))
 	}
 
 	return false
@@ -474,12 +476,64 @@ func (s *PaymentService) refundPaystack(ctx context.Context, reference string, a
 	return nil
 }
 
-// refundFlutterwave processes Flutterwave refunds
+// refundFlutterwave processes Flutterwave refunds via their Refund API
 func (s *PaymentService) refundFlutterwave(ctx context.Context, reference string, amount int64, reason string) error {
-	// First, get transaction ID from reference
-	// Then process refund using Flutterwave API
-	// Implementation depends on Flutterwave's refund API structure
-	return fmt.Errorf("Flutterwave refunds not implemented yet")
+	if s.flutterwaveSecretKey == "" {
+		return fmt.Errorf("Flutterwave secret key not configured")
+	}
+
+	// Step 1: Resolve the transaction ID from reference
+	verifyURL := fmt.Sprintf("https://api.flutterwave.com/v3/transactions/verify_by_reference?tx_ref=%s", reference)
+	req, err := http.NewRequestWithContext(ctx, "GET", verifyURL, nil)
+	if err != nil {
+		return fmt.Errorf("build Flutterwave verify request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+s.flutterwaveSecretKey)
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("Flutterwave verify request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var verifyResp struct {
+		Status string `json:"status"`
+		Data   struct {
+			ID int64 `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&verifyResp); err != nil {
+		return fmt.Errorf("decode Flutterwave verify response: %w", err)
+	}
+	if verifyResp.Status != "success" || verifyResp.Data.ID == 0 {
+		return fmt.Errorf("Flutterwave transaction %s not found", reference)
+	}
+
+	// Step 2: Issue refund
+	refundURL := fmt.Sprintf("https://api.flutterwave.com/v3/transactions/%d/refund", verifyResp.Data.ID)
+	body, _ := json.Marshal(map[string]interface{}{
+		"amount": float64(amount) / 100.0, // kobo → naira
+	})
+	req2, err := http.NewRequestWithContext(ctx, "POST", refundURL, bytes.NewBuffer(body))
+	if err != nil {
+		return fmt.Errorf("build Flutterwave refund request: %w", err)
+	}
+	req2.Header.Set("Authorization", "Bearer "+s.flutterwaveSecretKey)
+	req2.Header.Set("Content-Type", "application/json")
+
+	resp2, err := s.client.Do(req2)
+	if err != nil {
+		return fmt.Errorf("Flutterwave refund API call: %w", err)
+	}
+	defer resp2.Body.Close()
+
+	if resp2.StatusCode >= 400 {
+		body2, _ := io.ReadAll(resp2.Body)
+		return fmt.Errorf("Flutterwave refund failed (HTTP %d): %s", resp2.StatusCode, string(body2))
+	}
+
+	log.Printf("[payment] Flutterwave refund issued for %s: ₦%d - %s", reference, amount/100, reason)
+	return nil
 }
 
 // ProcessTransfer processes bank transfer for affiliate payouts
@@ -701,4 +755,22 @@ func (s *PaymentService) IsPaymentProcessed(ctx context.Context, reference strin
 	}
 	
 	return false
+}
+
+// VerifyPaystackPayment is a simplified verification method for the reconciliation job.
+// It returns (paid bool, amount int64 in kobo, error).
+func (s *PaymentService) VerifyPaystackPayment(ctx context.Context, reference string) (bool, int64, error) {
+	ok, data, err := s.verifyPaystack(ctx, reference)
+	if err != nil {
+		return false, 0, err
+	}
+	if !ok {
+		return false, 0, nil
+	}
+	// data["amount"] is in kobo as float64
+	amount := int64(0)
+	if a, ok2 := data["amount"].(float64); ok2 {
+		amount = int64(a)
+	}
+	return true, amount, nil
 }

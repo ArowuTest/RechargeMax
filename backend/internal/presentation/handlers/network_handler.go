@@ -195,9 +195,14 @@ func (h *NetworkHandler) ValidateNetworkSelection(c *gin.Context) {
 				"code":    "NETWORK_MISMATCH",
 				"message": result.Message,
 			},
+			// Include all fields the frontend needs in data{} so networkValidation
+			// state is fully populated (message, valid, actual_network, confidence).
 			"data": gin.H{
+				"valid":              false,
+				"message":            result.Message,
 				"selected_network":   result.SelectedNetwork,
 				"actual_network":     result.ActualNetwork,
+				"network":            result.ActualNetwork,
 				"validation_source":  result.ValidationSource,
 				"confidence":         result.Confidence,
 			},

@@ -34,12 +34,19 @@ func main() {
 		log.Println("⚠️  No .env file found, using environment variables")
 	}
 
-	// Load configuration from environment
+	// ── Validate config FIRST ─────────────────────────────────────────────────
+	// CRITICAL: loadConfig/validateConfig must run BEFORE the liveness probe.
+	// If config is invalid (missing DATABASE_URL, JWT_SECRET, etc.) we must
+	// exit(1) immediately — BEFORE binding port 8080.
+	// Starting the liveness probe first would let Render's health check see 200,
+	// mark the deploy as "live", then the process exits silently → 502 forever.
 	config := loadConfig()
 
 	// ── Liveness probe server ──────────────────────────────────────────────────
-	// Start a minimal HTTP server IMMEDIATELY so Render's health check passes
-	// while DB connect + migrations run. Shuts down gracefully before gin starts.
+	// Start a minimal HTTP server so Render's health check passes while
+	// DB connect + migrations run. Shuts down gracefully before gin starts.
+	// Config is already validated above, so this server will only start
+	// when the application is genuinely ready to begin initialization.
 	port := config.Port
 	if port == "" {
 		port = "8080"

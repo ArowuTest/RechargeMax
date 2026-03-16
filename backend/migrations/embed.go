@@ -144,11 +144,13 @@ func execFileByStatement(db *sql.DB, path string) (int, int) {
 			continue
 		}
 		if _, err := db.Exec(stmt); err != nil {
-			// Only log non-trivial errors (ignore "already exists" etc.)
+			// Suppress expected idempotency errors — these occur on re-runs when
+			// tables/indexes/constraints already exist from a previous deploy.
 			errStr := err.Error()
 			if !strings.Contains(errStr, "already exists") &&
 				!strings.Contains(errStr, "duplicate key") &&
-				!strings.Contains(errStr, "does not exist") {
+				!strings.Contains(errStr, "does not exist") &&
+				!strings.Contains(errStr, "multiple primary keys") {
 				log.Printf("  ⚠️  %s: %v", filepath.Base(path), err)
 			}
 			fail++

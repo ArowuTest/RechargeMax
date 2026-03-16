@@ -69,7 +69,8 @@ func registerInfra(r *gin.Engine) {
 			"status":    "healthy",
 			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"service":   "rechargemax-api",
-			"version":   "1.0.0",
+			"version":   "1.1.0",
+			"build":     "20260316-a780001",
 		})
 	})
 

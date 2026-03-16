@@ -25,9 +25,9 @@ services:
       - key: APP_NAME
         value: RechargeMax
       - key: ALLOWED_ORIGINS
-        value: https://rechargemax-frontend-81yagmfv7-demo-twos-projects.vercel.app,https://rechargemax-frontend.vercel.app
+        value: https://rechargemax-frontend.vercel.app,https://rechargemax-frontend.onrender.com
       - key: FRONTEND_URL
-        value: https://rechargemax-frontend-81yagmfv7-demo-twos-projects.vercel.app
+        value: https://rechargemax-frontend.vercel.app
       - key: BACKEND_URL
         value: https://rechargemax-backend.onrender.com
       - key: APP_URL

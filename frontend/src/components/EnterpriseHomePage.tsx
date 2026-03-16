@@ -8,7 +8,7 @@ import { PremiumRechargeForm } from '@/components/recharge/PremiumRechargeForm';
 import { DrawsList } from '@/components/draws/DrawsList';
 import { SpinWheel } from '@/components/games/SpinWheel';
 import { DailySpinProgress } from '@/components/spin/DailySpinProgress';
-import { useToast } from '@/hooks/useToast';
+import { toast } from '@/components/ui/sonner';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { formatCurrency } from '@/lib/utils';
 import { getAvailableSpins, getPlatformStatistics, getRecentWinners } from '@/lib/api';
@@ -98,7 +98,7 @@ const TICKER_WINNERS = [
 /* ══════════════════════════════════════════════════════════════ */
 export const EnterpriseHomePage: React.FC = () => {
   const { user, isAuthenticated } = useAuthContext();
-  const { toast } = useToast();
+  // toast comes from sonner (global, no subscription needed)
   const [rechargeSuccess, setRechargeSuccess] = useState<any>(null);
   const [stats, setStats] = useState<Stats>({ totalUsers: 0, totalRecharges: 0, totalPrizes: 0, activeDraw: null });
   const [recentWinners, setRecentWinners] = useState<RecentWinner[]>([]);
@@ -171,7 +171,7 @@ export const EnterpriseHomePage: React.FC = () => {
     if (paymentSuccess && reference) {
       window.history.replaceState({}, document.title, window.location.pathname);
       // Show immediate "processing" feedback so the user knows something is happening
-      toast({ title: '✅ Payment Confirmed!', description: 'Your recharge is being processed, please wait…', duration: 5000 });
+      toast('✅ Payment Confirmed!', { description: 'Your recharge is being processed, please wait…', duration: 5000 });
 
       // Convert 234XXXXXXXXXX → 0XXXXXXXXXX for display
       const toLocalPhone = (msisdn: string) =>
@@ -222,8 +222,7 @@ export const EnterpriseHomePage: React.FC = () => {
                   ? ` You earned ${rewardParts.join(' and ')}.`
                   : '';
 
-                toast({
-                  title: '🎉 Recharge Successful!',
+                toast.success('🎉 Recharge Successful!', {
                   description: `₦${amount.toLocaleString()} recharged to ${displayPhone}.${rewardLine}`,
                   duration: 8000,
                 });
@@ -234,10 +233,8 @@ export const EnterpriseHomePage: React.FC = () => {
                 }
               } else if (txn.status === 'FAILED') {
                 setRechargeSuccess(null);
-                toast({
-                  title: 'Recharge Failed',
+                toast.error('Recharge Failed', {
                   description: txn.failure_reason || 'Transaction could not be completed. Please contact support.',
-                  variant: 'destructive',
                   duration: 10000,
                 });
               } else if (attempt < maxAttempts - 1) {
@@ -247,8 +244,7 @@ export const EnterpriseHomePage: React.FC = () => {
                 // 4-minute window exhausted. Leave the pending banner visible
                 // and show a toast so the user knows to check back.
                 setRechargeSuccess((prev: any) => prev ? { ...prev, pending: true, timedOut: true } : null);
-                toast({
-                  title: '⏳ Still Processing…',
+                toast('⏳ Still Processing…', {
                   description: `Your recharge for Ref: ${reference} is taking longer than usual. The airtime will be delivered — check your phone or transaction history shortly.`,
                   duration: 15000,
                 });
@@ -269,8 +265,7 @@ export const EnterpriseHomePage: React.FC = () => {
       const entries = parseInt(allParams.get('entries') || '0');
       const totalEntries = parseInt(allParams.get('totalEntries') || '0');
       setTimeout(() => {
-        toast({
-          title: '🎉 Subscription Activated!',
+        toast.success('🎉 Subscription Activated!', {
           description: `${entries} draw entries added (${totalEntries} total today). Good luck!`,
           duration: 8000,
         });
@@ -287,8 +282,7 @@ export const EnterpriseHomePage: React.FC = () => {
     if (subscriptionStatus === 'success' && subscriptionRecorded && subscriptionAmount > 0) {
       window.history.replaceState({}, document.title, window.location.pathname);
       setTimeout(() => {
-        toast({
-          title: '🎉 Subscription Successful!',
+        toast.success('🎉 Subscription Successful!', {
           description: `${subscriptionMsisdn} subscribed with ${subscriptionEntries} ${subscriptionEntries === 1 ? 'entry' : 'entries'}.`,
           duration: 8000,
         });
@@ -299,7 +293,7 @@ export const EnterpriseHomePage: React.FC = () => {
     if (subscriptionStatus === 'failed') {
       window.history.replaceState({}, document.title, window.location.pathname);
       setTimeout(() => {
-        toast({ title: 'Subscription Failed', description: 'Please try again.', variant: 'destructive', duration: 6000 });
+        toast.error('Subscription Failed', { description: 'Please try again.', duration: 6000 });
       }, 800);
     }
   }, []);

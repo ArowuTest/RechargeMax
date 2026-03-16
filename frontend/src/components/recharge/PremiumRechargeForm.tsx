@@ -9,7 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { rechargeApi, apiClient } from '@/lib/api-client';
 import { SpinWheel } from '@/components/games/SpinWheel';
 import { useAuthContext } from '@/contexts/AuthContext';
-import { useToast } from '@/hooks/useToast';
+import { toast } from '@/components/ui/sonner';
 import { logError, logPerformance } from '@/lib/api';
 import { useAffiliateTracking } from '@/hooks/useAffiliateTracking';
 import { 
@@ -98,7 +98,7 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
 }) => {
   const { user } = useAuthContext();
   const { getAffiliateCode } = useAffiliateTracking();
-  const { toast } = useToast();
+  // toast is from sonner — global, works outside React render cycle
 
   const [formData, setFormData] = useState<FormData>({
     phoneNumber: '',
@@ -153,7 +153,7 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
             setNetworkSuggestion(result.data.data);
             if (!formData.networkProvider) {
               setFormData(prev => ({ ...prev, networkProvider: result.data.data.network }));
-              toast({ title: "Network Detected", description: result.data.data.message, duration: 3000 });
+              toast('Network Detected', { description: result.data.data.message, duration: 3000 });
             }
           }
         } catch (error) {
@@ -227,19 +227,11 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
         setDataBundles(result.data.data);
       } else {
         console.error('Failed to load data plans:', result.data?.error);
-        toast({
-          title: "Error Loading Data Plans",
-          description: "Could not load data plans. Please try again.",
-          variant: "destructive"
-        });
+        toast.error("Error Loading Data Plans", { description: "Could not load data plans. Please try again." });
       }
     } catch (error) {
       console.error('Data plans loading error:', error);
-      toast({
-        title: "Error Loading Data Plans",
-        description: "Could not load data plans. Please try again.",
-        variant: "destructive"
-      });
+      toast.error("Error Loading Data Plans", { description: "Could not load data plans. Please try again." });
     } finally {
       setIsLoadingDataPlans(false);
     }
@@ -316,11 +308,7 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
         formData: { ...formData, phoneNumber: 'REDACTED' }
       });
       
-      toast({
-        title: "Validation Error",
-        description: "Please fix the errors and try again",
-        variant: "destructive"
-      });
+      toast.error("Validation Error", { description: "Please fix the errors and try again" });
       return;
     }
 
@@ -370,10 +358,7 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
 
       setProcessingProgress(100);
       
-      toast({
-        title: "Success!",
-        description: "Recharge initiated successfully",
-      });
+      toast.success("Success!", { description: "Recharge initiated successfully" });
 
       if (onRechargeSuccess) {
         onRechargeSuccess(response.data);
@@ -394,11 +379,7 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
         networkValidation: networkValidation
       });
       
-      toast({
-        title: "Recharge Failed",
-        description: error.message || 'Please try again later',
-        variant: "destructive"
-      });
+      toast.error("Recharge Failed", { description: error.message || 'Please try again later' });
     } finally {
       const duration = Date.now() - startTime;
       

@@ -103,10 +103,12 @@ func main() {
 	log.Println("✅ Router configured")
 
 	// Shut down liveness probe before main server binds the port
-	shutCtx, shutCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	shutCtx, shutCancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer shutCancel()
 	livenessShutdown <- shutCtx
 	<-livenessDone
+	// Give OS time to release the port before gin binds it
+	time.Sleep(200 * time.Millisecond)
 	log.Println("⚡ Liveness probe stopped — main server starting")
 
 	// Start server
@@ -280,14 +282,14 @@ func initDatabase(dbURL string) (*gorm.DB, error) {
 	// on first deploy. Retry up to 15 times with 2s backoff (30s total).
 	var db *gorm.DB
 	var err error
-	maxRetries := 15
+	maxRetries := 10
 	for i := 1; i <= maxRetries; i++ {
 		db, err = gorm.Open(postgres.Open(dbURL), &gorm.Config{})
 		if err == nil {
 			break
 		}
-		log.Printf("⏳ DB connection attempt %d/%d failed: %v — retrying in 2s...", i, maxRetries, err)
-		time.Sleep(2 * time.Second)
+		log.Printf("⏳ DB connection attempt %d/%d failed: %v — retrying in 1s...", i, maxRetries, err)
+		time.Sleep(1 * time.Second)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database after %d attempts: %w", maxRetries, err)
@@ -310,8 +312,8 @@ func initDatabase(dbURL string) (*gorm.DB, error) {
 		if err = sqlDB.Ping(); err == nil {
 			break
 		}
-		log.Printf("⏳ DB ping attempt %d/%d failed — retrying in 2s...", i, maxRetries)
-		time.Sleep(2 * time.Second)
+		log.Printf("⏳ DB ping attempt %d/%d failed — retrying in 1s...", i, maxRetries)
+		time.Sleep(1 * time.Second)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("database ping failed after %d attempts: %w", maxRetries, err)

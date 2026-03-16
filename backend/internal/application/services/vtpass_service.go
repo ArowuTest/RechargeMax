@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -135,9 +136,13 @@ const (
 
 // NewVTPassService creates a new VTPass service instance
 func NewVTPassService(config VTPassConfig) *VTPassService {
-	baseURL := "https://vtpass.com/api"
-	if config.IsSandbox {
-		baseURL = "https://sandbox.vtpass.com/api"
+	// Allow VTPASS_BASE_URL env var to override the base URL entirely
+	baseURL := os.Getenv("VTPASS_BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://vtpass.com/api"
+		if config.IsSandbox {
+			baseURL = "https://sandbox.vtpass.com/api"
+		}
 	}
 
 	logger.Info("🔧 Initializing VTPassService with:")

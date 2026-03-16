@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"net/http"
 	"strings"
 
@@ -319,57 +318,55 @@ func (h *PaymentHandler) HandleCallback(c *gin.Context) {
 	}
 
 	if success {
-		// Process the payment (trigger VTU recharge)
 		// Determine transaction type from reference prefix
+		isAPICall := strings.Contains(c.GetHeader("Accept"), "application/json")
+
 		if len(reference) >= 4 {
 			prefix := reference[:4]
-			
-			if prefix == "RCH_" {
-				// Process recharge asynchronously to avoid blocking user redirect
-				go func(ref string) {
-					if err := h.rechargeService.ProcessSuccessfulPayment(context.Background(), ref); err != nil {
-						errors.Error("Failed to process recharge payment in callback", err, map[string]interface{}{
-							"reference": ref,
-						})
-					}
-				}(reference)
-			} else if prefix == "SUB_" {
-				// Process subscription asynchronously
-				go func(ref string) {
-					if err := h.subscriptionService.ProcessSuccessfulPayment(context.Background(), ref); err != nil {
-						errors.Error("Failed to process subscription payment in callback", err, map[string]interface{}{
-							"reference": ref,
-						})
-					}
-				}(reference)
+
+			switch prefix {
+			case "RCH_":
+				// Process synchronously so the transaction status is committed in the DB
+				// BEFORE we redirect the browser (or return JSON) and the frontend starts polling.
+				// Idempotency is handled inside ProcessSuccessfulPayment (checks status != PENDING).
+				if err := h.rechargeService.ProcessSuccessfulPayment(c.Request.Context(), reference); err != nil {
+					// Log the error but don't fail the redirect — frontend will poll and
+					// eventually show a "processing" toast if status is still pending.
+					errors.Error("Failed to process recharge payment in callback", err, map[string]interface{}{
+						"reference": reference,
+					})
+				}
+			case "SUB_":
+				if err := h.subscriptionService.ProcessSuccessfulPayment(c.Request.Context(), reference); err != nil {
+					errors.Error("Failed to process subscription payment in callback", err, map[string]interface{}{
+						"reference": reference,
+					})
+				}
 			}
 		}
-		
+
 		// Check if this is an API call (fetch/AJAX) or browser redirect
-		accept := c.GetHeader("Accept")
-		if strings.Contains(accept, "application/json") {
-			// Return JSON for API calls
+		if isAPICall {
+			// Return JSON for API calls (frontend already on page, called via fetch)
 			c.JSON(http.StatusOK, gin.H{
-				"success": true,
-				"message": "Payment verified and processing",
+				"success":   true,
+				"message":   "Payment verified and processing",
 				"reference": reference,
 			})
 		} else {
-			// Redirect to frontend success page for browser
+			// Browser redirect from Paystack — go to frontend success page
 			c.Redirect(http.StatusFound, h.frontendURL+"/?payment=success&reference="+reference)
 		}
 	} else {
 		// Check if this is an API call
-		accept := c.GetHeader("Accept")
-		if strings.Contains(accept, "application/json") {
-			// Return JSON for API calls
+		isAPICall := strings.Contains(c.GetHeader("Accept"), "application/json")
+		if isAPICall {
 			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Payment verification failed",
+				"success":   false,
+				"message":   "Payment verification failed",
 				"reference": reference,
 			})
 		} else {
-			// Redirect to frontend cancel page for browser
 			c.Redirect(http.StatusFound, h.frontendURL+"/?payment=failed&reference="+reference)
 		}
 	}

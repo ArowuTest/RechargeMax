@@ -356,9 +356,16 @@ func (s *TelecomServiceIntegrated) initializeVTPassService(config map[string]int
 	
 	isSandbox, _ := config["is_sandbox"].(bool)
 	if !isSandbox {
-		// Check environment for sandbox mode
+		// Check all possible sandbox env var names (order of precedence):
+		// 1. VTPASS_SANDBOX_MODE=true  (Render/render.yaml style)
+		// 2. VTPASS_MODE=sandbox        (legacy style)
+		// 3. config["mode"]=="sandbox"  (DB provider_configs style)
+		sandboxMode := os.Getenv("VTPASS_SANDBOX_MODE")
 		mode := os.Getenv("VTPASS_MODE")
-		isSandbox = mode == "sandbox"
+		configMode, _ := config["mode"].(string)
+		isSandbox = sandboxMode == "true" || sandboxMode == "1" ||
+			mode == "sandbox" ||
+			configMode == "sandbox"
 	}
 
 	return NewVTPassService(VTPassConfig{

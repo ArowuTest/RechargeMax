@@ -36,7 +36,39 @@ func main() {
 
 	// Load configuration from environment
 	config := loadConfig()
-	
+
+	// ── Liveness probe server ──────────────────────────────────────────────────
+	// Start a minimal HTTP server IMMEDIATELY so Render's health check passes
+	// while DB connect + migrations run. Shuts down gracefully before gin starts.
+	port := config.Port
+	if port == "" {
+		port = "8080"
+	}
+	livenessReady := make(chan struct{})
+	livenessDone := make(chan struct{})
+	livenessShutdown := make(chan context.Context, 1)
+	go func() {
+		defer close(livenessDone)
+		mux := http.NewServeMux()
+		mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"status":"starting","service":"rechargemax-api","version":"1.1.0"}`))
+		})
+		srv := &http.Server{Addr: ":" + port, Handler: mux}
+		go func() {
+			ctx := <-livenessShutdown
+			srv.Shutdown(ctx)
+		}()
+		log.Printf("⚡ Liveness probe started on :%s/health", port)
+		go func() {
+			time.Sleep(20 * time.Millisecond)
+			close(livenessReady)
+		}()
+		_ = srv.ListenAndServe()
+	}()
+	<-livenessReady
+
 	// Initialize database
 	db, err := initDatabase(config.DatabaseURL)
 	if err != nil {
@@ -69,6 +101,13 @@ func main() {
 	// Setup router
 	router := routes.Register(hdlrs, svcs, db)
 	log.Println("✅ Router configured")
+
+	// Shut down liveness probe before main server binds the port
+	shutCtx, shutCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer shutCancel()
+	livenessShutdown <- shutCtx
+	<-livenessDone
+	log.Println("⚡ Liveness probe stopped — main server starting")
 
 	// Start server
 	srv := &http.Server{

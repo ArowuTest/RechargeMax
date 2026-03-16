@@ -44,13 +44,17 @@ func main() {
 	}
 	log.Println("✅ Database connected successfully")
 
-	// Run embedded SQL migrations — creates all tables from scratch if they don't exist
-	migrations.RunAll(db)
+	// Run embedded SQL migrations + seed in background so HTTP server starts immediately
+	// (Render health check needs /health to respond within ~90s of container start)
+	// Tables already exist from the first deploy; subsequent runs are idempotent.
+	go func() {
+		log.Println("🔄 Running migrations in background...")
+		migrations.RunAll(db)
+		seedDatabase(db)
+		log.Println("✅ Background migrations + seed complete")
+	}()
 
-	// Seed essential data
-	seedDatabase(db)
-
-	// Initialize repositories
+	// Initialize repositories (tables exist from first deploy / migration already ran)
 	repos := initRepositories(db)
 	log.Println("✅ Repositories initialized")
 

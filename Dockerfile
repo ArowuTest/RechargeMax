@@ -1,7 +1,7 @@
 # ── Build stage ──────────────────────────────────────────────────────────────
 FROM golang:1.23-alpine AS builder
 
-RUN apk add --no-cache git
+RUN apk add --no-cache git gcc musl-dev
 
 WORKDIR /app
 
@@ -12,7 +12,7 @@ RUN go mod download
 # Copy backend source
 COPY backend/ .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o rechargemax ./cmd/server
+RUN CGO_ENABLED=1 GOOS=linux go build -a -ldflags="-s -w" -o rechargemax ./cmd/server
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────
 FROM alpine:latest

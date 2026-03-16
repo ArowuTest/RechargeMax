@@ -177,10 +177,9 @@ func (s *TelecomServiceIntegrated) getActiveProvider(ctx context.Context, networ
 
 // purchaseAirtimeVTU handles airtime purchase via VTU aggregator (VTPass)
 func (s *TelecomServiceIntegrated) purchaseAirtimeVTU(ctx context.Context, providerConfig *ProviderConfig, network, phone string, amountNaira int) (*VTUResponse, error) {
-	// Initialize VTPass service if not already done
-	if s.vtpassService == nil {
-		s.vtpassService = s.initializeVTPassService(providerConfig.Config)
-	}
+	// Always re-initialize from latest env vars (credentials may have been updated without restart).
+	// This is cheap — it just reads env vars and builds a struct.
+	s.vtpassService = s.initializeVTPassService(providerConfig.Config)
 
 	// Normalize network to uppercase for VTPass
 	networkUpper := strings.ToUpper(network)
@@ -208,10 +207,8 @@ func (s *TelecomServiceIntegrated) purchaseAirtimeVTU(ctx context.Context, provi
 
 // purchaseDataVTU handles data purchase via VTU aggregator (VTPass)
 func (s *TelecomServiceIntegrated) purchaseDataVTU(ctx context.Context, providerConfig *ProviderConfig, network, phone, variationCode string, amountNaira int) (*VTUResponse, error) {
-	// Initialize VTPass service if not already done
-	if s.vtpassService == nil {
-		s.vtpassService = s.initializeVTPassService(providerConfig.Config)
-	}
+	// Always re-initialize from latest env vars.
+	s.vtpassService = s.initializeVTPassService(providerConfig.Config)
 
 	// Normalize network to uppercase for VTPass
 	networkUpper := strings.ToUpper(network)

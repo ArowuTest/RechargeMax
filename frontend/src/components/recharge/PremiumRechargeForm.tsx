@@ -358,13 +358,14 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
         throw new Error(response.error || 'Recharge initiation failed');
       }
 
-      // Step 3: Process payment
-      setProcessingStep('Processing payment...');
-      setProcessingProgress(80);
+      // Step 3: Redirect to payment gateway
+      setProcessingStep('Redirecting to secure payment...');
+      setProcessingProgress(90);
 
-      // Redirect to Paystack or handle payment
+      // Navigate to Paystack checkout. Page will come back to /?payment=success after payment.
       if (response.data?.payment_url) {
         window.location.href = response.data.payment_url;
+        return; // Stop execution — page is navigating away
       }
 
       setProcessingProgress(100);

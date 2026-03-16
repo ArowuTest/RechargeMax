@@ -1042,12 +1042,55 @@ func (s *RechargeService) requeryVTPassTransaction(ctx context.Context, recharge
 	}
 	switch status {
 	case "SUCCESS", "DELIVERED":
-		recharge.Status = "SUCCESS"
-		s.rechargeRepo.Update(ctx, recharge)
+		// Calculate points, draw entries, and spin eligibility — same logic as ProcessSuccessfulPayment.
+		// Previously this block only set status="SUCCESS" and missed awarding rewards,
+		// which caused the frontend poll to show 0 points / no spin wheel after a delayed VTPass response.
+		pointsEarned := recharge.Amount / 20000 // ₦200 (20000 kobo) = 1 point
+
+		var userForTier entities.Users
+		_ = s.db.WithContext(ctx).Where("msisdn = ?", recharge.MSISDN).First(&userForTier).Error
+		multiplier  := getTierMultiplier(s.db, ctx, userForTier.TotalPoints)
+		drawEntries := int64(float64(pointsEarned) * multiplier)
+		if drawEntries < pointsEarned {
+			drawEntries = pointsEarned
+		}
+		isWheelEligible := recharge.Amount >= 100000 // ₦1,000 = 100,000 kobo
+
+		now := time.Now()
+		if err := s.db.WithContext(ctx).
+			Model(&entities.Transactions{}).
+			Where("id = ?", recharge.ID).
+			Updates(map[string]interface{}{
+				"status":        "SUCCESS",
+				"points_earned": pointsEarned,
+				"draw_entries":  drawEntries,
+				"spin_eligible": isWheelEligible,
+				"completed_at":  now,
+			}).Error; err != nil {
+			return fmt.Errorf("requeryVTPass: failed to update transaction: %w", err)
+		}
+
+		// Award points to the user account
+		if pointsEarned > 0 {
+			s.db.WithContext(ctx).
+				Model(&entities.Users{}).
+				Where("msisdn = ?", recharge.MSISDN).
+				Updates(map[string]interface{}{
+					"total_points": gorm.Expr("total_points + ?", pointsEarned),
+				})
+		}
+
 		if s.notificationService != nil {
-			msg := fmt.Sprintf("Your ₦%d recharge has been processed successfully. Thank you!", recharge.Amount/100)
+			msg := fmt.Sprintf("Your ₦%d recharge has been processed successfully! You earned %d points. Thank you!", recharge.Amount/100, pointsEarned)
 			go s.notificationService.SendSMS(ctx, recharge.MSISDN, msg)
 		}
+		logger.Info("requeryVTPass: transaction completed",
+			zap.String("ref", recharge.PaymentReference),
+			zap.Int64("points", pointsEarned),
+			zap.Int64("draw_entries", drawEntries),
+			zap.Bool("spin_eligible", isWheelEligible),
+		)
+
 	case "FAILED":
 		return s.handleFailedRechargeWithRefund(ctx, recharge, "VTPass requery returned FAILED")
 	// PENDING / PROCESSING → do nothing; reconciliation job will retry later

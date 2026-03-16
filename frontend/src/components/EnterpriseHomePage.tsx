@@ -33,6 +33,7 @@ import {
   Crown,
   Target,
   Wifi,
+  Loader2,
 } from 'lucide-react';
 
 /* ─── types ───────────────────────────────────────────────────── */
@@ -176,8 +177,17 @@ export const EnterpriseHomePage: React.FC = () => {
       const toLocalPhone = (msisdn: string) =>
         msisdn?.startsWith('234') ? '0' + msisdn.slice(3) : msisdn;
 
-      const pollTransaction = (attempt = 0, maxAttempts = 30) => {
-        // 2 s between polls; max 30 attempts = 60 s window for VTPass to complete.
+      // Show a persistent "processing" banner so user doesn't think it failed
+      // while VTPass is working in the background (can take up to ~2 minutes).
+      setRechargeSuccess({ amount: 0, points: 0, drawEntries: 0, spinEligible: false, phone: '', network: '', transactionReference: reference, pending: true });
+
+      // Polling strategy:
+      //   Attempts  1-30  (0-60s):   every 2s  — covers fast VTPass responses
+      //   Attempts 31-60  (60-150s): every 3s  — covers VTPass requery at ~120s
+      //   Attempts 61-90 (150-240s): every 3s  — safety buffer
+      // Total window: ~4 minutes, which comfortably covers the 2-min backend requery.
+      const pollTransaction = (attempt = 0, maxAttempts = 90) => {
+        const delay = attempt < 30 ? 2000 : 3000;
         setTimeout(() => {
           apiClient.get(`/recharge/reference/${reference}`)
             .then(res => res.data)
@@ -200,6 +210,7 @@ export const EnterpriseHomePage: React.FC = () => {
                   phone:               displayPhone,
                   network:             txn.network_provider || 'MTN',
                   transactionReference: reference,
+                  pending:             false,
                 });
 
                 // Build reward summary line
@@ -222,6 +233,7 @@ export const EnterpriseHomePage: React.FC = () => {
                   setTimeout(() => setShowSpinWheel(true), 800);
                 }
               } else if (txn.status === 'FAILED') {
+                setRechargeSuccess(null);
                 toast({
                   title: 'Recharge Failed',
                   description: txn.failure_reason || 'Transaction could not be completed. Please contact support.',
@@ -229,19 +241,23 @@ export const EnterpriseHomePage: React.FC = () => {
                   duration: 10000,
                 });
               } else if (attempt < maxAttempts - 1) {
+                // Still PROCESSING — keep polling silently
                 pollTransaction(attempt + 1, maxAttempts);
               } else {
+                // 4-minute window exhausted. Leave the pending banner visible
+                // and show a toast so the user knows to check back.
+                setRechargeSuccess((prev: any) => prev ? { ...prev, pending: true, timedOut: true } : null);
                 toast({
                   title: '⏳ Still Processing…',
-                  description: `Your recharge is taking a bit longer. Reference: ${reference}. Check your history in a few minutes.`,
-                  duration: 10000,
+                  description: `Your recharge for Ref: ${reference} is taking longer than usual. The airtime will be delivered — check your phone or transaction history shortly.`,
+                  duration: 15000,
                 });
               }
             })
             .catch(() => {
               if (attempt < maxAttempts - 1) pollTransaction(attempt + 1, maxAttempts);
             });
-        }, 2000);
+        }, delay);
       };
       pollTransaction();
       return;
@@ -510,8 +526,26 @@ export const EnterpriseHomePage: React.FC = () => {
             </p>
           </div>
 
-          {/* Success alert */}
-          {rechargeSuccess && (
+          {/* Processing banner — shown while polling (pending=true, amount=0) */}
+          {rechargeSuccess?.pending && (
+            <Alert className="mb-6 border-blue-200 bg-blue-50 max-w-2xl mx-auto">
+              <div className="flex items-center gap-2">
+                {rechargeSuccess.timedOut ? (
+                  <Clock className="h-5 w-5 text-blue-500 shrink-0" />
+                ) : (
+                  <Loader2 className="h-5 w-5 text-blue-500 animate-spin shrink-0" />
+                )}
+                <AlertDescription className="text-blue-800 font-medium">
+                  {rechargeSuccess.timedOut
+                    ? `⏳ Your recharge (Ref: ${rechargeSuccess.transactionReference}) is still being processed by your network provider. The airtime will be delivered shortly — no action needed.`
+                    : '⏳ Your recharge is being processed… Please wait, this usually takes under 60 seconds.'}
+                </AlertDescription>
+              </div>
+            </Alert>
+          )}
+
+          {/* Success alert — shown when pending=false and amount > 0 */}
+          {rechargeSuccess && !rechargeSuccess.pending && rechargeSuccess.amount > 0 && (
             <Alert className="mb-6 border-green-200 bg-green-50 max-w-2xl mx-auto">
               <CheckCircle className="h-5 w-5 text-green-600" />
               <AlertDescription className="text-green-800 font-medium">

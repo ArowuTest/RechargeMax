@@ -70,7 +70,7 @@ func registerInfra(r *gin.Engine) {
 			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"service":   "rechargemax-api",
 			"version":   "1.1.0",
-			"build":     "20260316-toast-fix",
+			"build":     "20260316-vtpass-requery-fix",
 		})
 	})
 

@@ -149,20 +149,20 @@ func (s *TelecomServiceIntegrated) getActiveProvider(ctx context.Context, networ
 	if err == sql.ErrNoRows {
 		// FALLBACK: No provider configured in database, use environment-based VTPass
 		log.Printf("⚠️  No provider configured for %s/%s, using environment fallback\n", network, serviceType)
-		return &ProviderConfig{
-			ID:           0,
-			Network:      network,
-			ServiceType:  serviceType,
-			ProviderMode: "VTU",
-			ProviderName: "VTPass",
-			Priority:     1,
-			Config: map[string]interface{}{
-				"mode": "sandbox",
-			},
-		}, nil
+		return s.envFallbackProvider(network, serviceType), nil
 	}
 
 	if err != nil {
+		// FALLBACK: DB function may not exist yet (migrations pending) or any other DB error.
+		// Fall back to environment-based VTPass so recharges still work.
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "does not exist") ||
+			strings.Contains(errMsg, "42883") ||
+			strings.Contains(errMsg, "42P01") ||
+			strings.Contains(errMsg, "no rows") {
+			log.Printf("⚠️  get_active_provider DB error (%s) for %s/%s, using environment fallback\n", errMsg, network, serviceType)
+			return s.envFallbackProvider(network, serviceType), nil
+		}
 		return nil, fmt.Errorf("database error: %w", err)
 	}
 
@@ -334,6 +334,22 @@ func (s *TelecomServiceIntegrated) purchaseDataSimulation(ctx context.Context, p
 			"error":      "Simulated failure",
 		},
 	}, nil
+}
+
+// envFallbackProvider returns a default VTPass provider config using environment variables.
+// Used when the database get_active_provider function is missing or returns no rows.
+func (s *TelecomServiceIntegrated) envFallbackProvider(network, serviceType string) *ProviderConfig {
+	return &ProviderConfig{
+		ID:           0,
+		Network:      network,
+		ServiceType:  serviceType,
+		ProviderMode: "VTU",
+		ProviderName: "VTPass",
+		Priority:     1,
+		Config: map[string]interface{}{
+			"mode": "sandbox",
+		},
+	}
 }
 
 // initializeVTPassService creates a VTPass service from config

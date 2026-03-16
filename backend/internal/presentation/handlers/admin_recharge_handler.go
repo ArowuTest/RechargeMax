@@ -112,6 +112,17 @@ func (h *AdminComprehensiveHandler) RetryFailedRecharge(c *gin.Context) {
 		return
 	}
 
+	// Reset FAILED → PENDING so ProcessSuccessfulPayment accepts it
+	if recharge.Status == "FAILED" {
+		if err := h.rechargeService.ResetToPending(ctx, recharge.ID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"success": false,
+				"error":   "Failed to reset transaction status",
+			})
+			return
+		}
+	}
+
 	// Retry the transaction
 	if err := h.rechargeService.ProcessSuccessfulPayment(ctx, recharge.PaymentReference); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{

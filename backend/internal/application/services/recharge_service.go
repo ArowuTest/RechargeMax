@@ -1047,3 +1047,14 @@ func (s *RechargeService) requeryVTPassTransaction(ctx context.Context, recharge
 func (s *RechargeService) UpdateRecharge(ctx context.Context, recharge *entities.Recharge) error {
 	return s.rechargeRepo.Update(ctx, recharge)
 }
+
+// ResetToPending resets a FAILED transaction back to PENDING so it can be retried.
+// Used by the admin retry endpoint.
+func (s *RechargeService) ResetToPending(ctx context.Context, id uuid.UUID) error {
+	return s.db.Model(&entities.Transactions{}).
+		Where("id = ? AND status = 'FAILED'", id).
+		Updates(map[string]interface{}{
+			"status":         "PENDING",
+			"failure_reason": "",
+		}).Error
+}

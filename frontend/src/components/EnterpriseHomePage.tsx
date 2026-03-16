@@ -172,32 +172,76 @@ export const EnterpriseHomePage: React.FC = () => {
       // Show immediate "processing" feedback so the user knows something is happening
       toast({ title: '✅ Payment Confirmed!', description: 'Your recharge is being processed, please wait…', duration: 5000 });
 
-      const pollTransaction = (attempt = 0, maxAttempts = 25) => {
-        // First poll: 2s delay (VTPass needs a moment). Subsequent: 2s intervals.
-        const delay = 2000;
+      // Convert 234XXXXXXXXXX → 0XXXXXXXXXX for display
+      const toLocalPhone = (msisdn: string) =>
+        msisdn?.startsWith('234') ? '0' + msisdn.slice(3) : msisdn;
+
+      const pollTransaction = (attempt = 0, maxAttempts = 30) => {
+        // 2 s between polls; max 30 attempts = 60 s window for VTPass to complete.
         setTimeout(() => {
           apiClient.get(`/recharge/reference/${reference}`)
             .then(res => res.data)
             .then(response => {
               const txn = response.data || response;
               if (txn.status === 'SUCCESS' || txn.status === 'COMPLETED') {
-                const amount = txn.amount / 100;
-                const points = txn.points_earned || 0;
+                const amount       = txn.amount / 100;                          // kobo → naira
+                const points       = txn.points_earned || 0;
+                const drawEntries  = txn.draw_entries  || 0;
                 const spinEligible = txn.spin_eligible || amount >= 1000;
+                const displayPhone = toLocalPhone(txn.msisdn || '');
+
                 if (txn.msisdn && txn.msisdn !== 'null') setUserPhone(txn.msisdn);
-                setRechargeSuccess({ amount, points, spinEligible, phone: txn.msisdn || '', network: txn.network_provider || 'MTN', transactionReference: reference });
-                toast({ title: '🎉 Recharge Successful!', description: `₦${amount.toLocaleString()} recharged to ${txn.msisdn}. ${spinEligible ? 'Spin wheel unlocked!' : ''}`, duration: 6000 });
-                if (spinEligible) { setAvailableSpins(1); setTimeout(() => setShowSpinWheel(true), 800); }
+
+                setRechargeSuccess({
+                  amount,
+                  points,
+                  drawEntries,
+                  spinEligible,
+                  phone:               displayPhone,
+                  network:             txn.network_provider || 'MTN',
+                  transactionReference: reference,
+                });
+
+                // Build reward summary line
+                const rewardParts: string[] = [];
+                if (points > 0) rewardParts.push(`${points} point${points !== 1 ? 's' : ''}`);
+                if (drawEntries > 0) rewardParts.push(`${drawEntries} draw entr${drawEntries !== 1 ? 'ies' : 'y'}`);
+                if (spinEligible) rewardParts.push('spin wheel unlocked! 🎰');
+                const rewardLine = rewardParts.length
+                  ? ` You earned ${rewardParts.join(' and ')}.`
+                  : '';
+
+                toast({
+                  title: '🎉 Recharge Successful!',
+                  description: `₦${amount.toLocaleString()} recharged to ${displayPhone}.${rewardLine}`,
+                  duration: 8000,
+                });
+
+                if (spinEligible) {
+                  setAvailableSpins(1);
+                  setTimeout(() => setShowSpinWheel(true), 800);
+                }
               } else if (txn.status === 'FAILED') {
-                toast({ title: 'Recharge Failed', description: txn.failure_reason || 'Transaction could not be completed', variant: 'destructive' });
+                toast({
+                  title: 'Recharge Failed',
+                  description: txn.failure_reason || 'Transaction could not be completed. Please contact support.',
+                  variant: 'destructive',
+                  duration: 10000,
+                });
               } else if (attempt < maxAttempts - 1) {
                 pollTransaction(attempt + 1, maxAttempts);
               } else {
-                toast({ title: '⏳ Still Processing…', description: `Reference: ${reference}. Check your history in a few minutes.`, duration: 8000 });
+                toast({
+                  title: '⏳ Still Processing…',
+                  description: `Your recharge is taking a bit longer. Reference: ${reference}. Check your history in a few minutes.`,
+                  duration: 10000,
+                });
               }
             })
-            .catch(() => { if (attempt < maxAttempts - 1) pollTransaction(attempt + 1, maxAttempts); });
-        }, delay);
+            .catch(() => {
+              if (attempt < maxAttempts - 1) pollTransaction(attempt + 1, maxAttempts);
+            });
+        }, 2000);
       };
       pollTransaction();
       return;
@@ -471,8 +515,16 @@ export const EnterpriseHomePage: React.FC = () => {
             <Alert className="mb-6 border-green-200 bg-green-50 max-w-2xl mx-auto">
               <CheckCircle className="h-5 w-5 text-green-600" />
               <AlertDescription className="text-green-800 font-medium">
-                🎉 Recharge of ₦{rechargeSuccess.amount?.toLocaleString()} was successful!
-                {rechargeSuccess.points > 0 && ` You earned ${rechargeSuccess.points} points.`}
+                🎉 Recharge of ₦{rechargeSuccess.amount?.toLocaleString()} to {rechargeSuccess.phone} was successful!
+                {(rechargeSuccess.points > 0 || rechargeSuccess.drawEntries > 0) && (
+                  <>
+                    {' '}You earned{' '}
+                    {rechargeSuccess.points > 0 && `${rechargeSuccess.points} point${rechargeSuccess.points !== 1 ? 's' : ''}`}
+                    {rechargeSuccess.points > 0 && rechargeSuccess.drawEntries > 0 && ' and '}
+                    {rechargeSuccess.drawEntries > 0 && `${rechargeSuccess.drawEntries} draw entr${rechargeSuccess.drawEntries !== 1 ? 'ies' : 'y'}`}
+                    !
+                  </>
+                )}
                 {rechargeSuccess.spinEligible && ' 🎰 Spin wheel unlocked!'}
               </AlertDescription>
             </Alert>

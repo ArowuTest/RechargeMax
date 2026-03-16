@@ -169,9 +169,12 @@ export const EnterpriseHomePage: React.FC = () => {
 
     if (paymentSuccess && reference) {
       window.history.replaceState({}, document.title, window.location.pathname);
-      apiClient.get(`/payment/callback?reference=${reference}&gateway=paystack`).catch(console.error);
+      // Show immediate "processing" feedback so the user knows something is happening
+      toast({ title: '✅ Payment Confirmed!', description: 'Your recharge is being processed, please wait…', duration: 5000 });
 
-      const pollTransaction = (attempt = 0, maxAttempts = 20) => {
+      const pollTransaction = (attempt = 0, maxAttempts = 25) => {
+        // First poll: 2s delay (VTPass needs a moment). Subsequent: 2s intervals.
+        const delay = 2000;
         setTimeout(() => {
           apiClient.get(`/recharge/reference/${reference}`)
             .then(res => res.data)
@@ -190,11 +193,11 @@ export const EnterpriseHomePage: React.FC = () => {
               } else if (attempt < maxAttempts - 1) {
                 pollTransaction(attempt + 1, maxAttempts);
               } else {
-                toast({ title: '⏳ Processing…', description: `Reference: ${reference}. Check history in a few minutes.`, duration: 8000 });
+                toast({ title: '⏳ Still Processing…', description: `Reference: ${reference}. Check your history in a few minutes.`, duration: 8000 });
               }
             })
             .catch(() => { if (attempt < maxAttempts - 1) pollTransaction(attempt + 1, maxAttempts); });
-        }, attempt === 0 ? 3000 : 3000);
+        }, delay);
       };
       pollTransaction();
       return;

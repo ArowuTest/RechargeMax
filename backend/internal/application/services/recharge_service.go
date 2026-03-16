@@ -206,9 +206,21 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 		return fmt.Errorf("recharge not found: %w", err)
 	}
 
-	if recharge.Status != "PENDING" {
-		return fmt.Errorf("recharge is not in pending status, current status: %s", recharge.Status)
+	// Atomically claim the transaction by setting PENDING → PROCESSING.
+	// Uses WHERE status='PENDING' so only ONE concurrent goroutine wins;
+	// the others see RowsAffected=0 and return immediately (idempotent).
+	claim := s.db.WithContext(ctx).
+		Model(&entities.Transactions{}).
+		Where("id = ? AND status = 'PENDING'", recharge.ID).
+		Update("status", "PROCESSING")
+	if claim.Error != nil {
+		return fmt.Errorf("failed to claim transaction: %w", claim.Error)
 	}
+	if claim.RowsAffected == 0 {
+		// Another goroutine is already processing (or it's already done).
+		return nil
+	}
+	recharge.Status = "PROCESSING"
 
 	// ✅ NEW: Attempt VTU with automatic retry (up to 2 immediate retries)
 	vtuResponse, vtuErr := s.attemptVTUWithRetry(ctx, recharge, 2)

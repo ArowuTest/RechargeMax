@@ -1,6 +1,9 @@
 package middleware
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"time"
@@ -78,15 +81,24 @@ func OTPRateLimit(rl *OTPRateLimiter) gin.HandlerFunc {
 		// Determine the key: prefer MSISDN, fall back to IP
 		key := "ip:" + c.ClientIP()
 
-		// Peek at the body for the msisdn field without consuming it
-		var body struct {
-			MSISDN string `json:"msisdn"`
-		}
-		// Use ShouldBindBodyWith so the body remains available for subsequent handlers
-		if err := c.ShouldBindJSON(&body); err == nil && body.MSISDN != "" {
-			key = "msisdn:" + body.MSISDN
-			// Re-set the body so the next handler can read it
-			c.Set("parsed_msisdn", body.MSISDN)
+		// Peek at the body for the msisdn field WITHOUT consuming it.
+		// We must read the raw bytes, restore the body, then parse the MSISDN.
+		// Using c.ShouldBindJSON() would drain the io.Reader and the downstream
+		// handler would receive an empty body, causing "Invalid request format".
+		if c.Request.Body != nil {
+			bodyBytes, readErr := io.ReadAll(c.Request.Body)
+			// Always restore the body so the next handler can read it.
+			c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
+			if readErr == nil && len(bodyBytes) > 0 {
+				var peeked struct {
+					MSISDN string `json:"msisdn"`
+				}
+				if jsonErr := json.Unmarshal(bodyBytes, &peeked); jsonErr == nil && peeked.MSISDN != "" {
+					key = "msisdn:" + peeked.MSISDN
+					c.Set("parsed_msisdn", peeked.MSISDN)
+				}
+			}
 		}
 
 		if !rl.Allow(key) {

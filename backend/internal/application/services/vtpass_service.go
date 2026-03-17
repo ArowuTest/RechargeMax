@@ -411,14 +411,30 @@ func (s *VTPassService) generateRequestID() string {
 	return timestamp + uuid
 }
 
-// IsSuccessful checks if the response indicates a successful transaction
+// IsSuccessful checks if the response indicates a successful transaction.
+// VTPass returns code="000" with status="delivered" for confirmed delivery.
 func (r *VTPassResponse) IsSuccessful() bool {
 	return r.Code == VTPassCodeSuccess && r.Content.Transactions.Status == "delivered"
 }
 
-// IsPending checks if the response indicates a pending transaction
+// IsPending checks if the response indicates a pending/in-progress transaction.
+// Per VTPass docs, code="000" can return status="initiated" or "pending" —
+// both mean the network has not yet confirmed delivery and a requery is needed.
+// code="011" (VTPassCodePending) and code="099" also mean processing.
 func (r *VTPassResponse) IsPending() bool {
-	return r.Code == VTPassCodePending || r.Content.Transactions.Status == "pending"
+	if r.Code == VTPassCodePending {
+		return true
+	}
+	// code="099" means "TRANSACTION IS PROCESSING" — treat as pending
+	if r.Code == "099" {
+		return true
+	}
+	// code="000" with status other than "delivered" or "failed" means still in-flight
+	if r.Code == VTPassCodeSuccess {
+		status := r.Content.Transactions.Status
+		return status == "initiated" || status == "pending" || status == ""
+	}
+	return r.Content.Transactions.Status == "pending" || r.Content.Transactions.Status == "initiated"
 }
 
 // IsFailed checks if the response indicates a failed transaction

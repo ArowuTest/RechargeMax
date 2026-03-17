@@ -426,8 +426,13 @@ func (s *TelecomServiceIntegrated) LogProviderTransaction(ctx context.Context, t
 // QueryTransactionStatus re-checks a pending VTPass transaction by provider reference.
 // Returns a normalised status string: "SUCCESS", "FAILED", "PENDING", or "PROCESSING".
 func (s *TelecomServiceIntegrated) QueryTransactionStatus(ctx context.Context, providerRef string) (string, error) {
+	// Initialize vtpassService from env vars if not already set (e.g., after server restart
+	// or when called from reconciliation job without a prior purchase call).
 	if s.vtpassService == nil {
-		return "PENDING", nil // nothing to query
+		s.vtpassService = s.initializeVTPassService(map[string]interface{}{})
+	}
+	if s.vtpassService == nil {
+		return "PENDING", fmt.Errorf("vtpassService could not be initialized")
 	}
 	status, err := s.vtpassService.QueryTransaction(ctx, providerRef)
 	if err != nil {

@@ -350,13 +350,14 @@ func (h *AdminComprehensiveHandler) RefundRecharge(c *gin.Context) {
 		return
 	}
 
-	// Load the recharge record and update its status to REFUNDED
+	// Load the recharge record and update its status to CANCELLED (refunded).
+	// DB CHECK constraint only allows: PENDING, PROCESSING, SUCCESS, FAILED, CANCELLED
 	recharge, err := h.rechargeService.GetRechargeByID(ctx, id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Recharge not found"})
 		return
 	}
-	recharge.Status = "REFUNDED"
+	recharge.Status = "CANCELLED"
 	recharge.FailureReason = req.Reason
 	recharge.UpdatedAt = time.Now()
 

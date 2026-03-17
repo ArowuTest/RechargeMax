@@ -222,22 +222,28 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 	}
 	recharge.Status = "PROCESSING"
 
-	// ✅ NEW: Attempt VTU with automatic retry (up to 2 immediate retries)
-	vtuResponse, vtuErr := s.attemptVTUWithRetry(ctx, recharge, 2)
+	// Attempt VTU — no immediate retries for PENDING responses.
+	// VTPass sandbox (and sometimes production) returns code=000 with status=initiated
+	// on the first call, meaning the network has accepted the request but not yet confirmed
+	// delivery. Retrying immediately would just get the same response.
+	// Instead, we detect PENDING immediately and hand off to handlePendingRecharge,
+	// which starts a background requery loop (polls every 30s for up to 15 minutes).
+	vtuResponse, vtuErr := s.attemptVTUWithRetry(ctx, recharge, 0) // 0 retries — detect PENDING fast
 
 	if vtuErr != nil {
-		// All retries exhausted - initiate refund
+		// Hard error (network failure, invalid credentials, etc.) — initiate refund
 		return s.handleFailedRechargeWithRefund(ctx, recharge, vtuErr.Error())
 	}
 
 	// Check VTU response status
 	if !vtuResponse.Success {
-		// Check if it's a PENDING status (needs requery, not refund)
+		// Check if it's a PENDING/PROCESSING status (needs requery, not refund).
+		// VTPass returns code=000 with status=initiated or code=011 for in-flight transactions.
 		if vtuResponse.Status == "PROCESSING" || vtuResponse.Status == "PENDING" {
 			return s.handlePendingRecharge(ctx, recharge, vtuResponse)
 		}
 		
-		// All retries exhausted - initiate refund
+		// Definitive failure — initiate refund
 		return s.handleFailedRechargeWithRefund(ctx, recharge, vtuResponse.Message)
 	}
 
@@ -931,8 +937,9 @@ func (s *RechargeService) handleFailedRechargeWithRefund(ctx context.Context, re
 			)
 		} else {
 			// Refund successful - update transaction
+			// Use CANCELLED status (matches DB CHECK constraint: PENDING/PROCESSING/SUCCESS/FAILED/CANCELLED)
 			logger.Info("refund initiated successfully", zap.String("transaction_id", recharge.ID.String()))
-			recharge.Status = "REFUNDED"
+			recharge.Status = "CANCELLED"
 			s.rechargeRepo.Update(ctx, recharge)
 			
 			// Notify customer of refund

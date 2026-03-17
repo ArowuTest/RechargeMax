@@ -189,7 +189,16 @@ func (s *VTPassService) PurchaseAirtime(ctx context.Context, network, phone stri
 		Phone:     phoneForVTPass,
 	}
 
-	return s.purchase(ctx, request)
+	resp, err := s.purchase(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	// VTPass does NOT echo requestId back in PROCESSING (code=011) responses.
+	// Always stamp our own requestID so the requery loop always has a valid key.
+	if resp.RequestID == "" {
+		resp.RequestID = requestID
+	}
+	return resp, nil
 }
 
 // PurchaseData purchases data bundle through VTPass
@@ -213,7 +222,16 @@ func (s *VTPassService) PurchaseData(ctx context.Context, network, phone, variat
 		VariationCode: variationCode,
 	}
 
-	return s.purchase(ctx, request)
+	resp, err := s.purchase(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	// VTPass does NOT echo requestId back in PROCESSING (code=011) responses.
+	// Always stamp our own requestID so the requery loop always has a valid key.
+	if resp.RequestID == "" {
+		resp.RequestID = requestID
+	}
+	return resp, nil
 }
 
 // GetDataVariations retrieves available data plans for a network

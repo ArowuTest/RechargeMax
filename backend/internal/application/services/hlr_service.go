@@ -127,10 +127,15 @@ func (s *HLRService) lookupViaHLR(ctx context.Context, msisdn string) (*NetworkD
 		return nil, errors.New("Termii API key not configured")
 	}
 
+	// Use a short 3-second deadline for HLR lookup to avoid blocking the recharge flow.
+	// If Termii is slow/unreachable, we fall back to prefix detection immediately.
+	hlrCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
 	// Termii HLR Lookup API endpoint
 	url := fmt.Sprintf("https://api.ng.termii.com/api/check/dnd?api_key=%s&phone_number=%s", s.termiiAPIKey, msisdn)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(hlrCtx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HLR request: %w", err)
 	}

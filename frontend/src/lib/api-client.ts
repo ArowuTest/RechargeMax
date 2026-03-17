@@ -308,22 +308,24 @@ export const rechargeApi = {
   },
 
   // Initialize airtime recharge
+  // Use a generous 65 s timeout to survive a Render cold-start (free tier spins down after
+  // 15 min of inactivity; first request can take 30-50 s to wake up the service).
   initiateAirtimeRecharge: async (data: {
     phone_number: string;
     network: string;
     amount: number;
   }) => {
-    const response = await apiClient.post<ApiResponse>('/recharge/airtime', data);
+    const response = await apiClient.post<ApiResponse>('/recharge/airtime', data, { timeout: 65000 });
     return response.data;
   },
 
-  // Initialize data recharge
+  // Initialize data recharge (same generous timeout)
   initiateDataRecharge: async (data: {
     phone_number: string;
     network: string;
     bundle_id: string;
   }) => {
-    const response = await apiClient.post<ApiResponse>('/recharge/data', data);
+    const response = await apiClient.post<ApiResponse>('/recharge/data', data, { timeout: 65000 });
     return response.data;
   },
 };

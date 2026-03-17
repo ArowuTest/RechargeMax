@@ -117,6 +117,7 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [rechargeResult, setRechargeResult] = useState<any>(null);
   const [showSpinWheel, setShowSpinWheel] = useState(false);
+  const [serverWaking, setServerWaking] = useState(false);
   
   // Network validation states
   const [networkSuggestion, setNetworkSuggestion] = useState<CachedNetworkResult | null>(null);
@@ -132,6 +133,12 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
     if (user) {
       loadWalletInfo();
     }
+    // Pre-warm the backend on mount so the first recharge POST doesn't hit a cold start.
+    // The Render free-tier service spins down after 15 min of inactivity; a cold start
+    // can take 30-50 s which exceeds the default axios timeout and shows a confusing error.
+    // This silent GET to /health ensures the service is awake before the user submits.
+    const baseURL = (import.meta.env.VITE_API_BASE_URL || '').replace('/api/v1', '');
+    fetch(`${baseURL}/health`, { method: 'GET' }).catch(() => {/* silent */});
   }, [user]);
 
   // Load data plans when network and recharge type change
@@ -316,6 +323,13 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
     setProcessingStep('Initializing...');
     setProcessingProgress(0);
 
+    // If the backend takes > 6 s to respond (possible on a cold Render start),
+    // show a friendly "server is waking up" notice so the user doesn't abandon.
+    const wakeTimer = setTimeout(() => {
+      setServerWaking(true);
+      setProcessingStep('Server is waking up, please wait…');
+    }, 6000);
+
     try {
       // Step 1: Final network validation
       setProcessingStep('Validating network...');
@@ -396,6 +410,8 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
         }
       });
       
+      clearTimeout(wakeTimer);
+      setServerWaking(false);
       setIsProcessing(false);
       setProcessingStep('');
       setProcessingProgress(0);
@@ -677,6 +693,11 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
                   />
                 </div>
                 <p className="text-sm text-center text-gray-600">{processingStep}</p>
+                {serverWaking && (
+                  <p className="text-xs text-center text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                    ⏳ The server is starting up (this takes up to 30 s on first use). <strong>Please keep this tab open</strong> — your payment will proceed automatically.
+                  </p>
+                )}
               </div>
             )}
           </form>

@@ -34,6 +34,7 @@ type VTUResponse struct {
 	Success           bool
 	Status            string // COMPLETED, PROCESSING, FAILED, REVERSED
 	ProviderReference string
+	VTPassRequestID   string // The request_id we sent to VTPass — used for requery when ProviderReference is empty
 	Message           string
 	Commission        float64
 	RawResponse       map[string]interface{}
@@ -199,6 +200,7 @@ func (s *TelecomServiceIntegrated) purchaseAirtimeVTU(ctx context.Context, provi
 		Success:           vtpassResp.IsSuccessful(),
 		Status:            vtpassResp.GetStatus(),
 		ProviderReference: vtpassResp.GetProviderReference(),
+		VTPassRequestID:   vtpassResp.RequestID, // echo'd back by VTPass; used for requery
 		Message:           vtpassResp.ResponseDescription,
 		Commission:        vtpassResp.GetCommission(),
 		RawResponse:       vtpassResp.RawResponse,
@@ -228,6 +230,7 @@ func (s *TelecomServiceIntegrated) purchaseDataVTU(ctx context.Context, provider
 		Success:           vtpassResp.IsSuccessful(),
 		Status:            vtpassResp.GetStatus(),
 		ProviderReference: vtpassResp.GetProviderReference(),
+		VTPassRequestID:   vtpassResp.RequestID, // echo'd back by VTPass; used for requery
 		Message:           vtpassResp.ResponseDescription,
 		Commission:        vtpassResp.GetCommission(),
 		RawResponse:       vtpassResp.RawResponse,

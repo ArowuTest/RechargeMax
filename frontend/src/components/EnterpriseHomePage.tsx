@@ -181,13 +181,14 @@ export const EnterpriseHomePage: React.FC = () => {
       // while VTPass is working in the background (can take up to ~2 minutes).
       setRechargeSuccess({ amount: 0, points: 0, drawEntries: 0, spinEligible: false, phone: '', network: '', transactionReference: reference, pending: true });
 
-      // Polling strategy:
-      //   Attempts  1-30  (0-60s):   every 2s  — covers fast VTPass responses
-      //   Attempts 31-60  (60-150s): every 3s  — covers VTPass requery at ~120s
-      //   Attempts 61-90 (150-240s): every 3s  — safety buffer
-      // Total window: ~4 minutes, which comfortably covers the 2-min backend requery.
-      const pollTransaction = (attempt = 0, maxAttempts = 90) => {
-        const delay = attempt < 30 ? 2000 : 3000;
+      // Polling strategy (adaptive intervals, total window ≈ 20 minutes):
+      //   Attempts  1-30  (0-60s):   every 2s  — fast VTPass responses
+      //   Attempts 31-60  (60-210s): every 5s  — VTPass requery window (backend polls every 30s)
+      //   Attempts 61-90 (210-510s): every 10s — extended wait for slow VTPass delivery
+      //   Attempts 91-120 (510-1110s): every 20s — final safety buffer up to ~18 min
+      // Total window: ~18-20 minutes, matching the backend's 15-minute requery loop.
+      const pollTransaction = (attempt = 0, maxAttempts = 120) => {
+        const delay = attempt < 30 ? 2000 : attempt < 60 ? 5000 : attempt < 90 ? 10000 : 20000;
         setTimeout(() => {
           apiClient.get(`/recharge/reference/${reference}`)
             .then(res => res.data)

@@ -949,31 +949,85 @@ func (s *RechargeService) handleFailedRechargeWithRefund(ctx context.Context, re
 
 // handlePendingRecharge handles a PENDING VTU response (requires requery, not refund)
 func (s *RechargeService) handlePendingRecharge(ctx context.Context, recharge *entities.Recharge, vtuResponse *VTUResponse) error {
-	// Update status to PROCESSING (will be requeried by background job)
+	// Use the VTPass request_id as the provider reference for requery.
+	// When VTPass returns code=011 (PROCESSING), the TransactionID field is empty,
+	// but the RequestID we sent is echoed back and is the correct requery key.
+	providerRef := vtuResponse.ProviderReference
+	if providerRef == "" {
+		providerRef = vtuResponse.VTPassRequestID
+	}
+
+	// Update status to PROCESSING and persist the requery reference.
 	recharge.Status = "PROCESSING"
-	recharge.ProviderReference = vtuResponse.ProviderReference
+	recharge.ProviderReference = providerRef
 	s.rechargeRepo.Update(ctx, recharge)
-	
-	logger.Info("transaction is PENDING with VTPass, will requery", zap.String("transaction_id", recharge.ID.String()))
-	
+
+	logger.Info("transaction is PENDING with VTPass, starting requery loop",
+		zap.String("transaction_id", recharge.ID.String()),
+		zap.String("provider_ref", providerRef),
+	)
+
 	// Notify customer that recharge is being processed
 	if s.notificationService != nil {
 		amountNaira := recharge.Amount / 100
 		msg := fmt.Sprintf("Your ₦%d recharge is being processed. You will be notified once it is complete.", amountNaira)
 		go s.notificationService.SendSMS(ctx, recharge.MSISDN, msg)
 	}
-	
-	// Schedule a background requery of VTPass after 2 minutes.
-	// The reconciliation job covers transactions still PROCESSING after 1 hour;
-	// this provides an earlier check for fast recovery.
+
+	// Background requery loop: poll VTPass every 30 seconds for up to 15 minutes (30 attempts).
+	// This ensures the transaction resolves quickly once VTPass delivers the airtime,
+	// rather than waiting for the hourly reconciliation job.
 	go func() {
 		bgCtx := context.Background()
-		timer := time.NewTimer(2 * time.Minute)
-		defer timer.Stop()
-		<-timer.C
-		if reqErr := s.requeryVTPassTransaction(bgCtx, recharge); reqErr != nil {
-			logger.Error("recharge requery failed", zap.String("transaction_id", recharge.ID.String()), zap.Error(reqErr))
+		const (
+			maxAttempts  = 30
+			pollInterval = 30 * time.Second
+		)
+		for attempt := 1; attempt <= maxAttempts; attempt++ {
+			time.Sleep(pollInterval)
+
+			// Re-fetch the latest recharge state to avoid acting on stale data.
+			latest, fetchErr := s.rechargeRepo.FindByID(bgCtx, recharge.ID)
+			if fetchErr != nil {
+				logger.Warn("requery: could not fetch latest recharge",
+					zap.String("transaction_id", recharge.ID.String()), zap.Error(fetchErr))
+				continue
+			}
+			// Stop if another path already resolved this transaction.
+			if latest.Status != "PROCESSING" {
+				logger.Info("requery: transaction already resolved, stopping loop",
+					zap.String("transaction_id", recharge.ID.String()),
+					zap.String("status", latest.Status),
+				)
+				return
+			}
+
+			logger.Info("requery attempt",
+				zap.Int("attempt", attempt),
+				zap.Int("max", maxAttempts),
+				zap.String("transaction_id", recharge.ID.String()),
+			)
+			if reqErr := s.requeryVTPassTransaction(bgCtx, latest); reqErr != nil {
+				logger.Warn("requery attempt failed",
+					zap.Int("attempt", attempt),
+					zap.String("transaction_id", recharge.ID.String()),
+					zap.Error(reqErr),
+				)
+				continue
+			}
+			// Re-check status after successful requery call.
+			resolved, _ := s.rechargeRepo.FindByID(bgCtx, recharge.ID)
+			if resolved != nil && resolved.Status != "PROCESSING" {
+				logger.Info("requery: transaction resolved",
+					zap.String("transaction_id", recharge.ID.String()),
+					zap.String("status", resolved.Status),
+				)
+				return
+			}
 		}
+		logger.Warn("requery loop exhausted without resolution",
+			zap.String("transaction_id", recharge.ID.String()),
+		)
 	}()
 	return nil
 }
@@ -1034,7 +1088,11 @@ func (s *RechargeService) createRechargeDrawEntries(ctx context.Context, tx *gor
 // and finalises its status. Called from a background goroutine.
 func (s *RechargeService) requeryVTPassTransaction(ctx context.Context, recharge *entities.Recharge) error {
 	if recharge.ProviderReference == "" {
-		return nil // nothing to requery
+		// No provider reference saved — nothing we can requery.
+		logger.Warn("requeryVTPass: no provider_reference, cannot requery",
+			zap.String("transaction_id", recharge.ID.String()),
+		)
+		return nil
 	}
 	status, err := s.telecomServiceIntegrated.QueryTransactionStatus(ctx, recharge.ProviderReference)
 	if err != nil {
@@ -1101,6 +1159,46 @@ func (s *RechargeService) requeryVTPassTransaction(ctx context.Context, recharge
 // UpdateRecharge persists changes to a recharge/transaction record.
 func (s *RechargeService) UpdateRecharge(ctx context.Context, recharge *entities.Recharge) error {
 	return s.rechargeRepo.Update(ctx, recharge)
+}
+
+// RecoverProcessingTransactions finds all PROCESSING transactions older than 5 minutes
+// and spawns a background requery goroutine for each one.
+// Called by the reconciliation job at startup and on every hourly pass.
+func (s *RechargeService) RecoverProcessingTransactions(ctx context.Context) error {
+	cutoff := time.Now().Add(-5 * time.Minute)
+
+	var rows []entities.Recharge
+	if err := s.db.WithContext(ctx).
+		Where("status = 'PROCESSING' AND created_at < ?", cutoff).
+		Order("created_at ASC").
+		Limit(100).
+		Find(&rows).Error; err != nil {
+		return fmt.Errorf("RecoverProcessingTransactions: query: %w", err)
+	}
+
+	if len(rows) == 0 {
+		logger.Info("RecoverProcessingTransactions: no stuck transactions found")
+		return nil
+	}
+
+	logger.Info("RecoverProcessingTransactions: found stuck transactions",
+		zap.Int("count", len(rows)),
+	)
+
+	for i := range rows {
+		recharge := &rows[i]
+		go func(r *entities.Recharge) {
+			bgCtx := context.Background()
+			if reqErr := s.requeryVTPassTransaction(bgCtx, r); reqErr != nil {
+				logger.Error("RecoverProcessingTransactions: requery failed",
+					zap.String("transaction_id", r.ID.String()),
+					zap.Error(reqErr),
+				)
+			}
+		}(recharge)
+	}
+
+	return nil
 }
 
 // ResetToPending resets a FAILED transaction back to PENDING so it can be retried.

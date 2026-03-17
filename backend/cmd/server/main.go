@@ -140,7 +140,8 @@ func main() {
 
 	reconciliationJob := jobs.NewReconciliationJob(db, svcs.Payment, svcs.Recharge, svcs.Notification)
 	reconciliationJob.StartScheduled(serverCtx, 1*time.Hour)
-	log.Println("✅ Reconciliation job started (interval: 1h)")
+	reconciliationJob.RunProcessingRecovery(serverCtx) // recover any PROCESSING txns from previous run
+	log.Println("✅ Reconciliation job started (interval: 1h, startup recovery: 30s)")
 
 	// Start server in goroutine
 	safe.Go(func() {

@@ -23,6 +23,7 @@ type ReconciliationPaymentVerifier interface {
 // ReconciliationRechargeProcessor can process a completed payment reference.
 type ReconciliationRechargeProcessor interface {
 	ProcessSuccessfulPayment(ctx context.Context, paymentRef string) error
+	RecoverProcessingTransactions(ctx context.Context) error
 }
 
 // ReconciliationNotifier can send a user-facing notification.
@@ -80,6 +81,21 @@ type stuckTransaction struct {
 	Amount           int64     `gorm:"column:amount"`
 	Msisdn           string    `gorm:"column:msisdn"`
 	CreatedAt        time.Time `gorm:"column:created_at"`
+}
+
+// RunProcessingRecovery immediately requeues all PROCESSING transactions older than 5 minutes.
+// Called once at server startup to recover any transactions stuck from a previous run.
+func (j *ReconciliationJob) RunProcessingRecovery(ctx context.Context) {
+	go func() {
+		// Wait 30 seconds after startup so the server is fully initialised.
+		time.Sleep(30 * time.Second)
+		logger.Info("[ReconciliationJob] Running startup PROCESSING recovery")
+		if err := j.recharge.RecoverProcessingTransactions(ctx); err != nil {
+			logger.Error("[ReconciliationJob] PROCESSING recovery error", zap.Error(err))
+		} else {
+			logger.Info("[ReconciliationJob] PROCESSING recovery complete")
+		}
+	}()
 }
 
 // Run executes one reconciliation pass.
@@ -168,5 +184,11 @@ func (j *ReconciliationJob) Run(ctx context.Context) error {
 	}
 
 	logger.Error("[ReconciliationJob] done: total= succeeded= failed=", zap.Any("processed", processed), zap.Any("succeeded", succeeded), zap.Any("failed", failed))
+
+	// Also recover any PROCESSING transactions that the background requery loop missed.
+	if err := j.recharge.RecoverProcessingTransactions(ctx); err != nil {
+		logger.Error("[ReconciliationJob] PROCESSING recovery error", zap.Error(err))
+	}
+
 	return nil
 }

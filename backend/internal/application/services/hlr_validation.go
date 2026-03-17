@@ -86,8 +86,8 @@ func (s *HLRService) ValidateNetworkSelection(ctx context.Context, msisdn string
 		if hlrResult.Network == selectedNetwork {
 			result.IsValid = true
 			result.Message = fmt.Sprintf("Network validated via HLR: %s", selectedNetwork)
-			// Cache the validated result
-			s.saveHLRResult(ctx, msisdn, hlrResult.Network, "termii", hlrResult)
+			// Cache the validated result asynchronously (non-blocking)
+			go s.saveHLRResult(context.Background(), msisdn, hlrResult.Network, "termii", hlrResult)
 		} else {
 			result.IsValid = false
 			result.Message = fmt.Sprintf("Network mismatch: selected %s but number belongs to %s", selectedNetwork, hlrResult.Network)
@@ -103,8 +103,8 @@ func (s *HLRService) ValidateNetworkSelection(ctx context.Context, msisdn string
 	result.IsValid = true
 	result.Message = fmt.Sprintf("Network accepted: %s (HLR API unavailable — user selection trusted)", selectedNetwork)
 
-	// Persist the user selection to cache so future requests are faster
-	s.saveUserSelection(ctx, msisdn, selectedNetwork)
+	// Persist the user selection to cache asynchronously (non-blocking)
+	go s.saveUserSelection(context.Background(), msisdn, selectedNetwork)
 
 	return result, nil
 }

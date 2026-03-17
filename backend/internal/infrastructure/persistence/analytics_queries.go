@@ -29,7 +29,7 @@ func GetRevenueAnalytics(ctx context.Context, db *gorm.DB) (map[string]interface
 	err := db.WithContext(ctx).
 		Table("transactions").
 		Select("COALESCE(SUM(amount), 0) as total_revenue, COUNT(*) as total_count").
-		Where("status = ? AND type = ?", "COMPLETED", "RECHARGE").
+		Where("status = ? AND type = ?", "SUCCESS", "RECHARGE").
 		Scan(&totalResult).Error
 	if err != nil {
 		return nil, err
@@ -43,7 +43,7 @@ func GetRevenueAnalytics(ctx context.Context, db *gorm.DB) (map[string]interface
 	err = db.WithContext(ctx).
 		Table("transactions").
 		Select("COALESCE(SUM(amount), 0) as total_revenue, COUNT(*) as total_count").
-		Where("status = ? AND type = ? AND created_at >= ?", "COMPLETED", "RECHARGE", todayStart).
+		Where("status = ? AND type = ? AND created_at >= ?", "SUCCESS", "RECHARGE", todayStart).
 		Scan(&todayResult).Error
 	if err != nil {
 		return nil, err
@@ -57,7 +57,7 @@ func GetRevenueAnalytics(ctx context.Context, db *gorm.DB) (map[string]interface
 	err = db.WithContext(ctx).
 		Table("transactions").
 		Select("COALESCE(SUM(amount), 0) as total_revenue, COUNT(*) as total_count").
-		Where("status = ? AND type = ? AND created_at >= ?", "COMPLETED", "RECHARGE", monthStart).
+		Where("status = ? AND type = ? AND created_at >= ?", "SUCCESS", "RECHARGE", monthStart).
 		Scan(&monthResult).Error
 	if err != nil {
 		return nil, err

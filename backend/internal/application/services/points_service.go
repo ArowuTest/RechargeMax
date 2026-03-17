@@ -163,7 +163,7 @@ func (s *PointsService) calculatePointsBySource(ctx context.Context, userID uuid
 			if dateTo != nil && r.CreatedAt.After(*dateTo) {
 				continue
 			}
-			if r.Status == "completed" {
+			if r.Status == "SUCCESS" {
 				pointsBySource["platform_recharge"] += int(r.Amount / 20000) // ₦200 = 1 point
 			}
 		}
@@ -238,7 +238,7 @@ func (s *PointsService) getLastPointsEarnedDate(ctx context.Context, userID uuid
 	recharges, err := s.rechargeRepo.FindByUserID(ctx, userID, 10000, 0)
 	if err == nil {
 		for _, r := range recharges {
-			if r.Status == "completed" {
+			if r.Status == "SUCCESS" {
 				if lastDate == nil || r.CreatedAt.After(*lastDate) {
 					lastDate = &r.CreatedAt
 				}
@@ -324,7 +324,7 @@ func (s *PointsService) getUserPointsHistory(ctx context.Context, userID uuid.UU
 				if dateTo != nil && r.CreatedAt.After(*dateTo) {
 					continue
 				}
-				if r.Status == "completed" {
+				if r.Status == "SUCCESS" {
 					points := int(r.Amount / 20000)
 					history = append(history, &PointsHistoryEntry{
 						ID:          r.ID,

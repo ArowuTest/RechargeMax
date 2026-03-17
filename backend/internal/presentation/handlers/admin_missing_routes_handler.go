@@ -625,7 +625,6 @@ func (h *AdminComprehensiveHandler) CreateAffiliate(c *gin.Context) {
 // UpdateAffiliate updates affiliate commission rate / status
 // PUT /admin/affiliates/:id
 func (h *AdminComprehensiveHandler) UpdateAffiliate(c *gin.Context) {
-	c.Request.URL.Path = c.Request.URL.Path // keep params as-is
 	// Delegate to the existing UpdateAffiliateCommissionRate handler
 	h.UpdateAffiliateCommissionRate(c)
 }

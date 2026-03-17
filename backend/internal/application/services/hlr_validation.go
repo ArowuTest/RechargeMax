@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"rechargemax/internal/utils"
@@ -11,15 +10,15 @@ import (
 
 // NetworkValidationResult contains the result of network validation
 type NetworkValidationResult struct {
-	MSISDN          string    `json:"msisdn"`
-	SelectedNetwork string    `json:"selected_network"`
-	ActualNetwork   string    `json:"actual_network"`
-	IsValid         bool      `json:"is_valid"`
-	ValidationSource string   `json:"validation_source"` // 'hlr_api', 'prefix', 'cache'
-	Confidence      string    `json:"confidence"`        // 'high', 'medium', 'low'
-	Message         string    `json:"message"`
-	CachedNetwork   *string   `json:"cached_network,omitempty"`
-	LastRecharged   *time.Time `json:"last_recharged,omitempty"`
+	MSISDN           string     `json:"msisdn"`
+	SelectedNetwork  string     `json:"selected_network"`
+	ActualNetwork    string     `json:"actual_network"`
+	IsValid          bool       `json:"is_valid"`
+	ValidationSource string     `json:"validation_source"` // 'hlr_api', 'user_selection', 'cache'
+	Confidence       string     `json:"confidence"`        // 'high', 'medium', 'low'
+	Message          string     `json:"message"`
+	CachedNetwork    *string    `json:"cached_network,omitempty"`
+	LastRecharged    *time.Time `json:"last_recharged,omitempty"`
 }
 
 // GetCachedNetworkForUser retrieves the network from recent successful recharges (last 7-30 days)
@@ -27,24 +26,24 @@ type NetworkValidationResult struct {
 func (s *HLRService) GetCachedNetworkForUser(ctx context.Context, msisdn string) (*NetworkValidationResult, error) {
 	// Normalize phone to international format for cache lookup
 	normalizedMSISDN := normalizeToInternational(msisdn)
-	
+
 	// Look for valid cache entry from last 30 days
 	cache, err := s.networkCacheRepo.FindValidCache(ctx, normalizedMSISDN)
 	if err != nil {
 		return nil, err // No cache found
 	}
-	
-	// Check if cache is from a successful recharge (not just prefix detection)
+
+	// Only trust hlr_api and user_selection sourced entries
 	if cache.LookupSource == "prefix_fallback" {
 		return nil, fmt.Errorf("only prefix-based cache available, not reliable")
 	}
-	
+
 	// Check if cache is recent (last 30 days)
 	daysSinceLastRecharge := time.Since(cache.LastVerified).Hours() / 24
 	if daysSinceLastRecharge > 30 {
 		return nil, fmt.Errorf("cache too old: %d days", int(daysSinceLastRecharge))
 	}
-	
+
 	return &NetworkValidationResult{
 		MSISDN:           msisdn,
 		ActualNetwork:    cache.Network,
@@ -56,103 +55,84 @@ func (s *HLRService) GetCachedNetworkForUser(ctx context.Context, msisdn string)
 	}, nil
 }
 
-// ValidateNetworkSelection validates that the selected network matches the actual network
-// This is called BEFORE showing data plans or processing payment
+// ValidateNetworkSelection validates the user's network selection.
+//
+// Strategy (in order of priority):
+//  1. If Termii HLR API is available and working, use it to validate the selection.
+//  2. Otherwise, trust the user's explicit selection completely.
+//     Prefix-based detection is NOT used — it is unreliable for ported numbers.
+//
+// This means: if the user selects MTN for their number, we accept MTN.
+// When Termii is live, we will cross-check and warn if there's a mismatch.
 func (s *HLRService) ValidateNetworkSelection(ctx context.Context, msisdn string, selectedNetwork string) (*NetworkValidationResult, error) {
 	// Normalise MSISDN to canonical international format (234...) at the service boundary
 	if normalized, err := utils.NormalizeMSISDN(msisdn); err == nil {
 		msisdn = normalized
 	}
+
 	result := &NetworkValidationResult{
 		MSISDN:          msisdn,
 		SelectedNetwork: selectedNetwork,
 		IsValid:         false,
 	}
-	
-	// Step 1: Try HLR API validation (highest confidence)
+
+	// Step 1: Try HLR API validation (highest confidence) — only when Termii is configured and reachable
 	hlrResult, err := s.lookupViaHLR(ctx, msisdn)
 	if err == nil && hlrResult != nil {
 		result.ActualNetwork = hlrResult.Network
 		result.ValidationSource = "hlr_api"
 		result.Confidence = "high"
-		
-		if strings.EqualFold(hlrResult.Network, selectedNetwork) {
+
+		if hlrResult.Network == selectedNetwork {
 			result.IsValid = true
-			result.Message = fmt.Sprintf("Network validated: %s", selectedNetwork)
-			
-			// Save successful validation to cache
+			result.Message = fmt.Sprintf("Network validated via HLR: %s", selectedNetwork)
+			// Cache the validated result
 			s.saveHLRResult(ctx, msisdn, hlrResult.Network, "termii", hlrResult)
 		} else {
 			result.IsValid = false
-			result.Message = fmt.Sprintf("Network mismatch: Selected %s but number belongs to %s", selectedNetwork, hlrResult.Network)
+			result.Message = fmt.Sprintf("Network mismatch: selected %s but number belongs to %s", selectedNetwork, hlrResult.Network)
 		}
-		
 		return result, nil
 	}
-	
-	// Step 2: Fallback to prefix validation if HLR API fails
-	prefixResult := s.detectByPrefix(msisdn)
-	if prefixResult != nil {
-		result.ActualNetwork = prefixResult.Network
-		result.ValidationSource = "prefix"
-		result.Confidence = "medium"
-		
-		if strings.EqualFold(prefixResult.Network, selectedNetwork) {
-			result.IsValid = true
-			result.Message = fmt.Sprintf("Network validated via prefix: %s", selectedNetwork)
-			
-			// Save prefix validation to cache (shorter TTL)
-			s.savePrefixDetection(ctx, msisdn, prefixResult.Network)
-		} else {
-			result.IsValid = false
-			result.Message = fmt.Sprintf("Prefix mismatch: Selected %s but prefix suggests %s", selectedNetwork, prefixResult.Network)
-		}
-		
-		return result, nil
-	}
-	
-	// Step 3: Accept user selection when both HLR and prefix validation unavailable
-	// This handles cases where:
-	// - HLR API is down/unavailable
-	// - Number has been ported to different network (prefix no longer reliable)
-	// - New number prefixes not yet in our database
+
+	// Step 2: HLR unavailable — trust the user's explicit network selection.
+	// Do NOT use prefix-based detection: Nigerian number portability makes prefixes unreliable.
 	result.ActualNetwork = selectedNetwork
 	result.ValidationSource = "user_selection"
-	result.Confidence = "low"
+	result.Confidence = "medium"
 	result.IsValid = true
-	result.Message = fmt.Sprintf("Network accepted based on user selection: %s (HLR API unavailable, prefix validation unavailable)", selectedNetwork)
-	
-	// Save user selection to cache with short TTL (7 days)
-	// Will be updated if recharge succeeds
-	s.savePrefixDetection(ctx, msisdn, selectedNetwork)
-	
+	result.Message = fmt.Sprintf("Network accepted: %s (HLR API unavailable — user selection trusted)", selectedNetwork)
+
+	// Persist the user selection to cache so future requests are faster
+	s.saveUserSelection(ctx, msisdn, selectedNetwork)
+
 	return result, nil
 }
 
-// ValidateAndDetectNetwork combines cache lookup and validation
+// ValidateAndDetectNetwork combines cache lookup and validation.
 // Used in the recharge flow:
-// 1. Check cache for auto-suggestion
-// 2. If user selects network, validate it
-// 3. Return validated network or error
+//  1. If user selects a network, validate/trust it.
+//  2. If no selection, check cache for a previous trusted result.
+//  3. If no cache, require the user to select a network.
 func (s *HLRService) ValidateAndDetectNetwork(ctx context.Context, msisdn string, userSelectedNetwork *string) (*NetworkValidationResult, error) {
 	// Normalise MSISDN to canonical international format (234...) at the service boundary
 	if normalized, err := utils.NormalizeMSISDN(msisdn); err == nil {
 		msisdn = normalized
 	}
-	// If user selected a network, validate it
+
+	// If user selected a network, validate (or trust) it
 	if userSelectedNetwork != nil && *userSelectedNetwork != "" {
 		return s.ValidateNetworkSelection(ctx, msisdn, *userSelectedNetwork)
 	}
-	
-	// No user selection - try to get from cache
+
+	// No user selection — try to get from cache
 	cachedResult, err := s.GetCachedNetworkForUser(ctx, msisdn)
 	if err == nil && cachedResult != nil {
-		// Return cached network as suggestion
 		cachedResult.SelectedNetwork = cachedResult.ActualNetwork
 		cachedResult.IsValid = true
 		return cachedResult, nil
 	}
-	
-	// No cache and no user selection - require user to select
-	return nil, fmt.Errorf("network selection required: no recent recharge history found")
+
+	// No cache and no user selection — require user to select
+	return nil, fmt.Errorf("network selection required: please select your network provider")
 }

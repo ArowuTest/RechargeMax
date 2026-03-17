@@ -600,12 +600,12 @@ func (s *RechargeService) GetStats(ctx context.Context) (map[string]interface{},
 	var pendingCount int64
 	
 	for _, recharge := range recharges {
-		if recharge.Status == "completed" || recharge.Status == "success" {
+		if recharge.Status == "SUCCESS" {
 			totalRevenue += float64(recharge.Amount) / 100.0
 			successfulCount++
-		} else if recharge.Status == "failed" {
+		} else if recharge.Status == "FAILED" {
 			failedCount++
-		} else if recharge.Status == "pending" || recharge.Status == "PENDING" {
+		} else if recharge.Status == "PENDING" {
 			pendingCount++
 		}
 	}
@@ -635,7 +635,7 @@ func (s *RechargeService) ProcessTelecomConfirmation(ctx context.Context, refere
 	}
 	
 	// Check if already processed
-	if recharge.Status == "completed" || recharge.Status == "success" {
+	if recharge.Status == "SUCCESS" {
 		return nil // Already processed, idempotent
 	}
 	
@@ -664,8 +664,8 @@ func (s *RechargeService) ProcessTelecomConfirmation(ctx context.Context, refere
 	}
 	
 	// Send notification to user about recharge status
-	if recharge.Status == "completed" {
-		// Get user details for notification
+	if recharge.Status == "SUCCESS" {
+			// Get user details for notification
 		user, err := s.userRepo.FindByMSISDN(ctx, recharge.MSISDN)
 		if err == nil && user != nil {
 			// Send SMS notification
@@ -738,7 +738,7 @@ func (s *RechargeService) ProcessTelecomConfirmation(ctx context.Context, refere
 		err := s.db.WithContext(ctx).
 			Table("transactions").
 			Select("COALESCE(SUM(amount), 0) as total_revenue, COUNT(*) as total_count").
-			Where("status = ? AND type = ?", "COMPLETED", "RECHARGE").
+			Where("status = ? AND type = ?", "SUCCESS", "RECHARGE").
 			Scan(&totalResult).Error
 		if err != nil {
 			return nil, fmt.Errorf("failed to get total revenue: %w", err)
@@ -752,7 +752,7 @@ func (s *RechargeService) ProcessTelecomConfirmation(ctx context.Context, refere
 		err = s.db.WithContext(ctx).
 			Table("transactions").
 			Select("COALESCE(SUM(amount), 0) as total_revenue, COUNT(*) as total_count").
-			Where("status = ? AND type = ? AND created_at >= ?", "COMPLETED", "RECHARGE", todayStart).
+			Where("status = ? AND type = ? AND created_at >= ?", "SUCCESS", "RECHARGE", todayStart).
 			Scan(&todayResult).Error
 		if err != nil {
 			return nil, fmt.Errorf("failed to get today's revenue: %w", err)
@@ -766,7 +766,7 @@ func (s *RechargeService) ProcessTelecomConfirmation(ctx context.Context, refere
 		err = s.db.WithContext(ctx).
 			Table("transactions").
 			Select("COALESCE(SUM(amount), 0) as total_revenue, COUNT(*) as total_count").
-			Where("status = ? AND type = ? AND created_at >= ?", "COMPLETED", "RECHARGE", monthStart).
+			Where("status = ? AND type = ? AND created_at >= ?", "SUCCESS", "RECHARGE", monthStart).
 			Scan(&monthResult).Error
 		if err != nil {
 			return nil, fmt.Errorf("failed to get month's revenue: %w", err)

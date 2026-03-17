@@ -47,7 +47,7 @@ func (s *PlatformService) GetStatistics(ctx context.Context) (*PlatformStats, er
 	}
 
 	var totalTransactions int64
-	if err := db.Model(&entities.Transaction{}).Where("status = ?", "completed").Count(&totalTransactions).Error; err != nil {
+	if err := db.Model(&entities.Transaction{}).Where("status = ?", "SUCCESS").Count(&totalTransactions).Error; err != nil {
 		return nil, err
 	}
 

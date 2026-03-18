@@ -262,34 +262,38 @@ func (s *AuthService) generateOTP() (string, error) {
 	return fmt.Sprintf("%06d", n.Add(n, min).Int64()), nil
 }
 
-// sendSMS sends the OTP message via NotificationService (production) or logs it
-// to stdout in development. The plaintext code is NEVER logged in production
-// to prevent OTP exposure in server logs (BUG-004).
+// sendSMS sends the OTP message via NotificationService (Termii) when configured,
+// or logs it to stdout in development/staging without the code (BUG-004).
+// NotificationService takes priority over environment check — if Termii is wired
+// (TERMII_SECRET_KEY set), SMS is sent even in staging mode, enabling real OTP delivery.
 func (s *AuthService) sendSMS(ctx context.Context, msisdn, code string) error {
 	message := fmt.Sprintf("Your RechargeMax verification code is: %s. Valid for 10 minutes. Do not share this code.", code)
 
-	if s.environment != "production" {
-		// Development / staging: log without the code to avoid accidental exposure
+	// Use NotificationService (Termii) whenever it is configured, regardless of environment.
+	// This allows staging deployments with a real Termii key to send actual SMS messages.
+	if s.notificationService != nil {
 		msisdnSuffix := msisdn
 		if len(msisdn) > 4 {
 			msisdnSuffix = msisdn[len(msisdn)-4:]
 		}
-		logger.Info("[SMS-DEV] OTP dispatched", zap.String("msisdn_suffix", "..."+msisdnSuffix))
-		return nil
-	}
-
-	// Production: route through NotificationService which calls Termii API
-	if s.notificationService != nil {
+		logger.Info("[SMS] Dispatching OTP via NotificationService", zap.String("msisdn_suffix", "..."+msisdnSuffix))
 		return s.notificationService.SendSMS(ctx, msisdn, message)
 	}
 
-	// Fallback: NotificationService not wired — log a warning (no OTP code in log)
+	// Fallback: NotificationService not wired.
+	// In production this is a hard error; in other environments log a warning
+	// without revealing the code.
 	msisdnSuffix2 := msisdn
 	if len(msisdn) > 4 {
 		msisdnSuffix2 = msisdn[len(msisdn)-4:]
 	}
-	logger.Warn("[SMS-WARN] NotificationService unavailable", zap.String("msisdn_suffix", "..."+msisdnSuffix2))
-	return fmt.Errorf("SMS delivery unavailable: NotificationService not configured")
+	if s.environment == "production" {
+		logger.Warn("[SMS-WARN] NotificationService unavailable in production", zap.String("msisdn_suffix", "..."+msisdnSuffix2))
+		return fmt.Errorf("SMS delivery unavailable: NotificationService not configured")
+	}
+	// Dev / staging with no SMS provider — silently succeed (OTP is in DB for testing)
+	logger.Info("[SMS-DEV] OTP dispatched (no SMS provider configured)", zap.String("msisdn_suffix", "..."+msisdnSuffix2))
+	return nil
 }
 
 func max(a, b int) int {

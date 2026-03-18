@@ -557,11 +557,18 @@ func (s *UserService) GetUserPrizes(ctx context.Context, msisdn string) ([]Prize
 	// Convert to response format
 	var result []PrizeResponse
 	for _, spin := range spins {
+		// Sanity cap: prize_value > ₦1 million (100_000_000 kobo) is almost certainly
+		// a data anomaly from before the wheel_prizes seed migration. Display the
+		// prize_name as-is and show 0.00 so users still see their won prize.
+		prizeValueNaira := float64(spin.PrizeValue) / 100.0
+		if spin.PrizeValue > 100_000_000 {
+			prizeValueNaira = 0
+		}
 		result = append(result, PrizeResponse{
 			ID:          spin.ID,
 			PrizeName:   spin.PrizeName,
 			PrizeType:   spin.PrizeType,
-			PrizeValue:  fmt.Sprintf("%.2f", float64(spin.PrizeValue)/100.0), // Convert kobo to naira
+			PrizeValue:  fmt.Sprintf("%.2f", prizeValueNaira),
 			WonAt:       spin.CreatedAt,
 			Status:      spin.ClaimStatus,
 			ClaimedAt:   spin.ClaimedAt,
@@ -844,11 +851,16 @@ func (s *UserService) getUserPrizes(ctx context.Context, userID uuid.UUID) []Pri
 
 	var result []PrizeItem
 	for _, spin := range spins {
+		// Sanity cap: guard against pre-seed corrupt prize_value data
+		prizeKobo := int64(spin.PrizeValue)
+		if prizeKobo > 100_000_000 {
+			prizeKobo = 0
+		}
 		result = append(result, PrizeItem{
 			ID:          spin.ID,
 			PrizeName:   spin.PrizeName,
 			PrizeType:   spin.PrizeType,
-			PrizeValue:  int64(spin.PrizeValue) / 100, // Convert kobo to naira
+			PrizeValue:  prizeKobo / 100, // Convert kobo to naira
 			Status:      spin.ClaimStatus,
 			WonAt:       spin.CreatedAt,
 			WonDate:     spin.CreatedAt.Format("2006-01-02 15:04:05"),

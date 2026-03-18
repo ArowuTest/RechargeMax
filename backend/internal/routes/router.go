@@ -358,6 +358,7 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	admin.GET("/recharge/transactions/:id",    hdlrs.AdminComprehensive.GetRechargeByID)
 	admin.GET("/recharge/stats",               hdlrs.AdminComprehensive.GetRechargeStats)
 	admin.POST("/recharge/:id/retry",          hdlrs.AdminComprehensive.RetryFailedRecharge)
+	admin.POST("/recharge/bulk-retry-processing", hdlrs.AdminComprehensive.BulkRetryProcessingTransactions)
 	admin.POST("/recharge/:id/refund",         hdlrs.AdminComprehensive.RefundRecharge)
 	admin.POST("/recharge/:id/mark-success",   hdlrs.AdminComprehensive.MarkRechargeSuccess)
 	admin.POST("/recharge/:id/mark-failed",    hdlrs.AdminComprehensive.MarkRechargeFailed)

@@ -103,17 +103,17 @@ func (h *AdminComprehensiveHandler) RetryFailedRecharge(c *gin.Context) {
 		return
 	}
 
-	// Validate status
-	if recharge.Status != "FAILED" && recharge.Status != "PENDING" {
+	// Validate status — allow FAILED, PENDING, and stuck PROCESSING transactions
+	if recharge.Status != "FAILED" && recharge.Status != "PENDING" && recharge.Status != "PROCESSING" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
-			"error":   "Only failed or pending transactions can be retried",
+			"error":   "Only failed, pending, or stuck processing transactions can be retried",
 		})
 		return
 	}
 
-	// Reset FAILED → PENDING so ProcessSuccessfulPayment accepts it
-	if recharge.Status == "FAILED" {
+	// Reset FAILED or stuck PROCESSING → PENDING so ProcessSuccessfulPayment accepts it
+	if recharge.Status == "FAILED" || recharge.Status == "PROCESSING" {
 		if err := h.rechargeService.ResetToPending(ctx, recharge.ID); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"success": false,
@@ -127,7 +127,7 @@ func (h *AdminComprehensiveHandler) RetryFailedRecharge(c *gin.Context) {
 	if err := h.rechargeService.ProcessSuccessfulPayment(ctx, recharge.PaymentReference); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
-			"error":   "Failed to retry transaction",
+			"error":   "Failed to retry transaction: " + err.Error(),
 		})
 		return
 	}
@@ -195,6 +195,53 @@ func (h *AdminComprehensiveHandler) UpdateProviderConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "Provider configuration updated successfully",
+	})
+}
+
+// BulkRetryProcessingTransactions retries all stuck PROCESSING transactions
+func (h *AdminComprehensiveHandler) BulkRetryProcessingTransactions(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// Get all PROCESSING transactions
+	transactions, err := h.rechargeService.GetRechargeHistory(ctx, "", 1000, 0)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to retrieve transactions",
+		})
+		return
+	}
+
+	retried := 0
+	failed := 0
+	var errors []string
+
+	for _, txn := range transactions {
+		if txn.Status != "PROCESSING" {
+			continue
+		}
+		// Reset to PENDING
+		if err := h.rechargeService.ResetToPending(ctx, txn.ID); err != nil {
+			failed++
+			errors = append(errors, "reset failed for "+txn.ID.String()+": "+err.Error())
+			continue
+		}
+		// Retry
+		if err := h.rechargeService.ProcessSuccessfulPayment(ctx, txn.PaymentReference); err != nil {
+			failed++
+			errors = append(errors, "retry failed for "+txn.ID.String()+": "+err.Error())
+			continue
+		}
+		retried++
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"retried": retried,
+			"failed":  failed,
+			"errors":  errors,
+		},
 	})
 }
 

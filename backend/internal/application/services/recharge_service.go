@@ -267,6 +267,14 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 
 	// CRITICAL: Wrap in database transaction for atomicity
 	// Update recharge + award points + process commission atomically
+	logger.Info("ProcessSuccessfulPayment: starting DB transaction",
+		zap.String("payment_ref", paymentRef),
+		zap.String("msisdn", recharge.MSISDN),
+		zap.Int64("amount", recharge.Amount),
+		zap.Int64("points_earned", pointsEarned),
+		zap.Bool("is_wheel_eligible", isWheelEligible),
+	)
+
 	err = s.db.Transaction(func(tx *gorm.DB) error {
 		// Update recharge status to SUCCESS with points and spin eligibility
 		recharge.Status = "SUCCESS"
@@ -277,8 +285,10 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 			"spin_eligible": isWheelEligible,
 			"completed_at":  time.Now(),
 		}).Error; err != nil {
+			logger.Error("ProcessSuccessfulPayment: failed to update recharge status", zap.String("payment_ref", paymentRef), zap.Error(err))
 			return fmt.Errorf("failed to update recharge status: %w", err)
 		}
+		logger.Info("ProcessSuccessfulPayment: recharge status updated to SUCCESS", zap.String("payment_ref", paymentRef))
 
 		// Find or create user account (auto-create for guest transactions)
 		// Query within transaction to see committed data
@@ -305,20 +315,25 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 			}
 			
 			if err := tx.Create(newUser).Error; err != nil {
+				logger.Error("ProcessSuccessfulPayment: failed to create user account", zap.String("msisdn", recharge.MSISDN), zap.Error(err))
 				return fmt.Errorf("failed to create user account: %w", err)
 			}
 				user = *newUser
+			logger.Info("ProcessSuccessfulPayment: user auto-created", zap.String("msisdn", recharge.MSISDN), zap.String("user_id", user.ID.String()))
 			
 			// Link transaction to newly created user
 			if err := tx.Model(&entities.Transactions{}).Where("id = ?", recharge.ID).Update("user_id", user.ID).Error; err != nil {
+				logger.Error("ProcessSuccessfulPayment: failed to link transaction to user", zap.Error(err))
 				return fmt.Errorf("failed to link transaction to user: %w", err)
 			}
 		} else {
 			// User exists - update points and stats
+			logger.Info("ProcessSuccessfulPayment: updating existing user", zap.String("msisdn", recharge.MSISDN), zap.String("user_id", user.ID.String()))
 			user.TotalPoints += int(pointsEarned)
 			user.TotalRechargeAmount += recharge.Amount
 			
 			if err := tx.Save(&user).Error; err != nil {
+				logger.Error("ProcessSuccessfulPayment: failed to update user points", zap.String("msisdn", recharge.MSISDN), zap.Error(err))
 				return fmt.Errorf("failed to update user points: %w", err)
 			}
 		}
@@ -350,8 +365,17 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 	})
 	
 	if err != nil {
+		logger.Error("ProcessSuccessfulPayment: DB transaction FAILED",
+			zap.String("payment_ref", paymentRef),
+			zap.String("msisdn", recharge.MSISDN),
+			zap.Error(err),
+		)
 		return fmt.Errorf("payment processing transaction failed: %w", err)
 	}
+	logger.Info("ProcessSuccessfulPayment: DB transaction committed successfully",
+		zap.String("payment_ref", paymentRef),
+		zap.String("msisdn", recharge.MSISDN),
+	)
 
 	// Update the user's cached loyalty_tier field based on their new total points.
 	// This is done asynchronously outside the transaction so a failure here never
@@ -453,6 +477,10 @@ func computeLoyaltyTier(db *gorm.DB, ctx context.Context, points int64) string {
 
 // GetRechargeHistory retrieves recharge history for a user
 func (s *RechargeService) GetRechargeHistory(ctx context.Context, msisdn string, limit, offset int) ([]*entities.Recharge, error) {
+	// If no MSISDN filter, return all transactions (admin use case)
+	if msisdn == "" {
+		return s.rechargeRepo.FindAll(ctx, limit, offset)
+	}
 	return s.rechargeRepo.FindByMSISDN(ctx, msisdn, limit, offset)
 }
 
@@ -1208,11 +1236,11 @@ func (s *RechargeService) RecoverProcessingTransactions(ctx context.Context) err
 	return nil
 }
 
-// ResetToPending resets a FAILED transaction back to PENDING so it can be retried.
+// ResetToPending resets FAILED or stuck PROCESSING transactions back to PENDING so they can be retried.
 // Used by the admin retry endpoint.
 func (s *RechargeService) ResetToPending(ctx context.Context, id uuid.UUID) error {
 	return s.db.Model(&entities.Transactions{}).
-		Where("id = ? AND status = 'FAILED'", id).
+		Where("id = ? AND status IN ('FAILED', 'PROCESSING')", id).
 		Updates(map[string]interface{}{
 			"status":         "PENDING",
 			"failure_reason": "",

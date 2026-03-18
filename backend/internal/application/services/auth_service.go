@@ -117,6 +117,16 @@ func (s *AuthService) SendOTP(ctx context.Context, msisdn string, purpose string
 		return fmt.Errorf("failed to create OTP record: %w", err)
 	}
 
+	// STAGING DEBUG: log OTP code so testers can login without real SMS delivery.
+	// This line is safe in staging — remove before going fully live with real users.
+	if s.environment != "production" {
+		logger.Info("[OTP-DEBUG] OTP code for testing",
+			zap.String("msisdn_suffix", "..."+normalizedMSISDN[max(0, len(normalizedMSISDN)-4):]),
+			zap.String("otp_code", otpCode),
+			zap.String("purpose", purpose),
+		)
+	}
+
 	// Send SMS (use normalised MSISDN for delivery)
 	if err := s.sendSMS(ctx, normalizedMSISDN, otpCode); err != nil {
 		// Log error but don't fail the request

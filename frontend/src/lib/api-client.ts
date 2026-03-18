@@ -78,12 +78,17 @@ fetchCSRFToken().catch(() => {});
 // ---------------------------------------------------------------------------
 apiClient.interceptors.request.use(
   async (config) => {
-    // httpOnly cookies are sent automatically via withCredentials: true
-    // For admin routes: also attach JWT as Bearer token (cross-domain: cookie won't work)
+    // httpOnly cookies are sent automatically via withCredentials: true.
+    // However, SameSite=Lax blocks cookies on cross-origin XHR/fetch (vercel → onrender).
+    // So we also store the token in localStorage and send it as Bearer for ALL routes.
     const adminToken = localStorage.getItem('rechargemax_admin_token');
+    const userToken = localStorage.getItem('rechargemax_user_token');
     if (adminToken && config.url?.includes('/admin/')) {
       config.headers = config.headers || {};
       config.headers['Authorization'] = `Bearer ${adminToken}`;
+    } else if (userToken && !config.url?.includes('/admin/')) {
+      config.headers = config.headers || {};
+      config.headers['Authorization'] = `Bearer ${userToken}`;
     }
     // For state-changing methods, also attach the CSRF token header (SEC-007)
     if (requiresCSRF(config.method)) {
@@ -132,10 +137,12 @@ apiClient.interceptors.response.use(
       } else if (!isSilentEndpoint && !isOnPublicPage) {
         // Only redirect to /login if we're on a protected page
         localStorage.removeItem('rechargemax_user');
+        localStorage.removeItem('rechargemax_user_token');
         window.location.href = '/login';
       } else {
         // Silent: just clear the user state without redirecting
         localStorage.removeItem('rechargemax_user');
+        localStorage.removeItem('rechargemax_user_token');
       }
     }
 
@@ -213,9 +220,12 @@ export const authApi = {
       otp: otp,
     });
     
-    // Token is now stored as httpOnly cookie by the server
-    // Only store non-sensitive user profile data in localStorage
+    // Store token in localStorage so it can be sent as Bearer header on
+    // cross-origin requests (cookie SameSite=Lax is blocked by browsers for XHR/fetch).
     if (response.data.success && response.data.data) {
+      if (response.data.data.token) {
+        localStorage.setItem('rechargemax_user_token', response.data.data.token);
+      }
       localStorage.setItem('rechargemax_user', JSON.stringify(response.data.data.user));
     }
     
@@ -228,8 +238,9 @@ export const authApi = {
       // Backend clears the httpOnly cookie on this call
       await apiClient.post('/auth/logout');
     } finally {
-      // Clear non-sensitive user profile data
+      // Clear user profile and token
       localStorage.removeItem('rechargemax_user');
+      localStorage.removeItem('rechargemax_user_token');
     }
   },
 

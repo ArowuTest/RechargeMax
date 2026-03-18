@@ -78,7 +78,7 @@ func NewSpinService(
 
 // CheckEligibility checks if user is eligible to spin
 func (s *SpinService) CheckEligibility(ctx context.Context, msisdn string) (*SpinEligibilityResponse, error) {
-user, err := s.userRepo.FindByMSISDN(ctx, msisdn)
+_, err := s.userRepo.FindByMSISDN(ctx, msisdn)
 if err != nil {
 return &SpinEligibilityResponse{
 Eligible: false,

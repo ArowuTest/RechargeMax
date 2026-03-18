@@ -86,21 +86,9 @@ Message:  "User not found",
 }, nil
 }
 
-	// Check if user has pending spins
-	// Get all spins for this user and filter by pending status
-	// Single COUNT query — avoids loading up to 100 rows and filtering in Go (BUG-001).
-	pendingSpins, err := s.spinRepo.CountPendingByUserID(ctx, user.ID)
-	if err != nil {
-		pendingSpins = 0
-	}
-
-if pendingSpins > 0 {
-return &SpinEligibilityResponse{
-Eligible:       true,
-AvailableSpins: pendingSpins,
-Message:        fmt.Sprintf("You have %d spin(s) available!", pendingSpins),
-}, nil
-}
+	// NOTE: We intentionally do NOT count spin_results with claim_status='PENDING' here.
+	// Those are already-played spins awaiting prize claim, not unplayed spin opportunities.
+	// Eligibility is determined solely by today's recharge amount vs tier limits.
 
 	// Check if user has made qualifying transactions today and apply daily tier limit
 	if s.db == nil {

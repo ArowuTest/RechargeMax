@@ -1214,15 +1214,35 @@ func (s *WinnerService) ClaimSpinPrize(ctx context.Context, prizeID uuid.UUID, m
 	return fmt.Errorf("unsupported prize type for claiming")
 }
 
-// triggerManualFulfillment triggers manual fulfillment for airtime/data prizes
+// triggerManualFulfillment triggers manual fulfillment for airtime/data prizes.
+// When VTPass / HLR is not yet configured (staging), falls back to PENDING_ADMIN_REVIEW
+// so the prize is queued for admin to fulfil manually rather than returning an error.
 func (s *WinnerService) triggerManualFulfillment(ctx context.Context, spinPrize *entities.SpinResults) error {
 	logger.Info("🔄 Triggering manual fulfillment for spin", zap.String("id", spinPrize.ID.String()))
-	
+
+	// If telecom service is not wired, queue for admin review instead of erroring.
+	if s.telecomService == nil {
+		logger.Info("⚠️  Telecom service unavailable — queuing spin prize for admin review",
+			zap.String("id", spinPrize.ID.String()))
+		now := time.Now()
+		spinPrize.ClaimStatus = "PENDING_ADMIN_REVIEW"
+		spinPrize.ClaimedAt = &now
+		spinPrize.FulfillmentError = "Telecom service not configured; queued for admin review"
+		return s.spinRepo.Update(ctx, spinPrize)
+	}
+
 	// Detect network
 	networkHint := ""
 	networkResult, err := s.hlrService.DetectNetwork(ctx, spinPrize.MSISDN, &networkHint)
 	if err != nil {
-		return fmt.Errorf("failed to detect network: %w", err)
+		// Network detection failed — queue for admin review rather than error out.
+		logger.Warn("⚠️  Network detection failed — queuing spin prize for admin review",
+			zap.String("id", spinPrize.ID.String()), zap.Error(err))
+		now := time.Now()
+		spinPrize.ClaimStatus = "PENDING_ADMIN_REVIEW"
+		spinPrize.ClaimedAt = &now
+		spinPrize.FulfillmentError = fmt.Sprintf("Network detection failed: %v; queued for admin review", err)
+		return s.spinRepo.Update(ctx, spinPrize)
 	}
 	network := networkResult.Network
 	

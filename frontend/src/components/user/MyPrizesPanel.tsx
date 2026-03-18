@@ -6,14 +6,40 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Gift,
-  CheckCircle2,
-  Clock,
-  AlertCircle,
-  Loader2,
-  Trophy,
-} from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+// Nigerian banks list with name + CBN code
+const NIGERIAN_BANKS = [
+  { name: 'Access Bank', code: '044' },
+  { name: 'Citibank Nigeria', code: '023' },
+  { name: 'Ecobank Nigeria', code: '050' },
+  { name: 'Fidelity Bank', code: '070' },
+  { name: 'First Bank of Nigeria', code: '011' },
+  { name: 'First City Monument Bank (FCMB)', code: '214' },
+  { name: 'Globus Bank', code: '00103' },
+  { name: 'Guaranty Trust Bank (GTBank)', code: '058' },
+  { name: 'Heritage Bank', code: '030' },
+  { name: 'Jaiz Bank', code: '301' },
+  { name: 'Keystone Bank', code: '082' },
+  { name: 'Kuda Microfinance Bank', code: '50211' },
+  { name: 'Lotus Bank', code: '303' },
+  { name: 'OPay Digital Services', code: '999992' },
+  { name: 'Palmpay', code: '999991' },
+  { name: 'Parallex Bank', code: '526' },
+  { name: 'Polaris Bank', code: '076' },
+  { name: 'Providus Bank', code: '101' },
+  { name: 'Stanbic IBTC Bank', code: '221' },
+  { name: 'Standard Chartered Bank', code: '068' },
+  { name: 'Sterling Bank', code: '232' },
+  { name: 'SunTrust Bank', code: '100' },
+  { name: 'Titan Trust Bank', code: '102' },
+  { name: 'Union Bank of Nigeria', code: '032' },
+  { name: 'United Bank for Africa (UBA)', code: '033' },
+  { name: 'Unity Bank', code: '215' },
+  { name: 'Wema Bank', code: '035' },
+  { name: 'Zenith Bank', code: '057' },
+];
+import { Gift, CheckCircle2, Clock, AlertCircle, Loader2, Trophy } from 'lucide-react';
 
 // Claim details required for cash / physical prizes
 interface ClaimDetails {
@@ -382,23 +408,30 @@ const MyPrizesPanel: React.FC = () => {
                           onChange={(e) => setClaimDetails((p) => ({ ...p, account_name: e.target.value }))}
                         />
                       </div>
-                      <div>
-                        <Label htmlFor="bank-name">Bank Name *</Label>
-                        <Input
-                          id="bank-name"
-                          placeholder="e.g. GTBank"
+                      <div className="col-span-2">
+                        <Label htmlFor="bank-select">Bank Name *</Label>
+                        <Select
                           value={claimDetails.bank_name}
-                          onChange={(e) => setClaimDetails((p) => ({ ...p, bank_name: e.target.value }))}
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="bank-code">Bank Code</Label>
-                        <Input
-                          id="bank-code"
-                          placeholder="058"
-                          value={claimDetails.bank_code}
-                          onChange={(e) => setClaimDetails((p) => ({ ...p, bank_code: e.target.value }))}
-                        />
+                          onValueChange={(val) => {
+                            const bank = NIGERIAN_BANKS.find((b) => b.name === val);
+                            setClaimDetails((p) => ({
+                              ...p,
+                              bank_name: val,
+                              bank_code: bank?.code ?? '',
+                            }));
+                          }}
+                        >
+                          <SelectTrigger id="bank-select">
+                            <SelectValue placeholder="Select your bank" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {NIGERIAN_BANKS.map((b) => (
+                              <SelectItem key={b.code} value={b.name}>
+                                {b.name} ({b.code})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       {(selectedPrize.prizeType === 'GOODS' ||
                         selectedPrize.prizeType === 'PHYSICAL') && (

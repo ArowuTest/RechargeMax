@@ -70,7 +70,7 @@ func registerInfra(r *gin.Engine) {
 			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"service":   "rechargemax-api",
 			"version":   "1.1.0",
-			"build":     "20260318-processing-retry-fix",
+			"build":     "20260318-process-stuck-fix",
 		})
 	})
 
@@ -118,6 +118,7 @@ func registerPublic(v1 *gin.RouterGroup, hdlrs *handlers.Registry, db *gorm.DB) 
 		recharge.POST("/data",                hdlrs.Recharge.InitiateDataRecharge)
 		recharge.GET("/:id",                  hdlrs.Recharge.GetRecharge)
 		recharge.GET("/reference/:reference", hdlrs.Recharge.GetRechargeByReference)
+		recharge.POST("/process/:reference",   hdlrs.Recharge.ProcessStuckRecharge)
 	}
 
 	// Payment (Paystack callbacks are public)

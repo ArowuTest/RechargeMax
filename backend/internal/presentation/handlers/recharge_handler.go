@@ -348,6 +348,54 @@ func (h *RechargeHandler) HandleTelecomWebhook(c *gin.Context) {
 	})
 }
 
+// ProcessStuckRecharge resets a stuck PROCESSING transaction to PENDING and retries it synchronously.
+// This is a debug/recovery endpoint — returns the exact error if processing fails.
+func (h *RechargeHandler) ProcessStuckRecharge(c *gin.Context) {
+	reference := c.Param("reference")
+	if reference == "" {
+		c.JSON(400, gin.H{"success": false, "error": "reference required"})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Get the transaction
+	recharge, err := h.rechargeService.GetRechargeByReference(ctx, reference)
+	if err != nil {
+		c.JSON(404, gin.H{"success": false, "error": "transaction not found: " + err.Error()})
+		return
+	}
+
+	// Only process PROCESSING or PENDING transactions
+	if recharge.Status != "PROCESSING" && recharge.Status != "PENDING" {
+		c.JSON(200, gin.H{"success": true, "message": "transaction already in status: " + recharge.Status, "status": recharge.Status})
+		return
+	}
+
+	// Reset to PENDING if stuck in PROCESSING
+	if recharge.Status == "PROCESSING" {
+		if err := h.rechargeService.ResetToPending(ctx, recharge.ID); err != nil {
+			c.JSON(500, gin.H{"success": false, "error": "failed to reset to pending: " + err.Error()})
+			return
+		}
+	}
+
+	// Process synchronously (not in goroutine) so we get the exact error
+	if err := h.rechargeService.ProcessSuccessfulPayment(ctx, reference); err != nil {
+		c.JSON(500, gin.H{"success": false, "error": "processing failed: " + err.Error(), "reference": reference})
+		return
+	}
+
+	// Check final status
+	final, _ := h.rechargeService.GetRechargeByReference(ctx, reference)
+	finalStatus := "UNKNOWN"
+	if final != nil {
+		finalStatus = final.Status
+	}
+
+	c.JSON(200, gin.H{"success": true, "message": "processed successfully", "reference": reference, "status": finalStatus})
+}
+
 // GetRechargeByReference godoc
 // @Summary Get recharge by payment reference
 // @Description Get recharge transaction details by payment reference

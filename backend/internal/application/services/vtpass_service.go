@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -414,7 +415,8 @@ func (s *VTPassService) generateRequestID() string {
 // IsSuccessful checks if the response indicates a successful transaction.
 // VTPass returns code="000" with status="delivered" for confirmed delivery.
 func (r *VTPassResponse) IsSuccessful() bool {
-	return r.Code == VTPassCodeSuccess && r.Content.Transactions.Status == "delivered"
+	status := strings.ToLower(strings.TrimSpace(r.Content.Transactions.Status))
+	return r.Code == VTPassCodeSuccess && (status == "delivered" || status == "success")
 }
 
 // IsPending checks if the response indicates a pending/in-progress transaction.
@@ -459,7 +461,9 @@ func (r *VTPassResponse) GetStatus() string {
 		return "FAILED"
 	}
 	if r.IsReversed() {
-		return "CANCELLED"
+		// Code 016 (REVERSED) may mean the transaction needs requery to confirm final status.
+		// Treat as PROCESSING so the requeryVTPassTransaction goroutine can determine outcome.
+		return "PROCESSING"
 	}
 	return "FAILED"
 }
@@ -523,8 +527,12 @@ func (s *VTPassService) QueryTransaction(ctx context.Context, requestID string) 
 	if resp.IsSuccessful() {
 		return "SUCCESS", nil
 	}
-	if resp.IsFailed() || resp.IsReversed() {
+	if resp.IsFailed() {
 		return "FAILED", nil
+	}
+	if resp.IsReversed() {
+		// 016 = reversed; requery again later to confirm final status
+		return "PENDING", nil
 	}
 	return "PENDING", nil
 }

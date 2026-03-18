@@ -1037,14 +1037,16 @@ func (s *SpinService) CreateSpinOpportunity(ctx context.Context, userID uuid.UUI
 	// CheckEligibility enforces the one-spin-per-qualifying-recharge rule by checking
 	// whether a WheelSpin row already exists for this rechargeID.
 	var existing entities.WheelSpin
+	// spin_results uses "transaction_id" (not "recharge_id") as the FK column name
 	err := s.db.WithContext(ctx).
-		Where("recharge_id = ?", rechargeID).
+		Where("transaction_id = ?", rechargeID).
 		First(&existing).Error
 	if err == nil {
 		// Already granted for this recharge
 		return nil
 	}
-	// Mark the transaction as spin_eligible so CheckEligibility finds it
+	// Mark the transaction as spin_eligible so CheckEligibility finds it.
+	// NOTE: this UPDATE runs OUTSIDE any outer DB transaction to avoid deadlocks.
 	return s.db.WithContext(ctx).
 		Model(&entities.Transaction{}).
 		Where("id = ?", rechargeID).

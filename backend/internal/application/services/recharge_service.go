@@ -275,6 +275,7 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 		zap.Bool("is_wheel_eligible", isWheelEligible),
 	)
 
+	var txUser entities.Users // hoisted so post-commit code can access the user ID
 	err = s.db.Transaction(func(tx *gorm.DB) error {
 		// Update recharge status to SUCCESS with points and spin eligibility
 		recharge.Status = "SUCCESS"
@@ -318,9 +319,10 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 				logger.Error("ProcessSuccessfulPayment: failed to create user account", zap.String("msisdn", recharge.MSISDN), zap.Error(err))
 				return fmt.Errorf("failed to create user account: %w", err)
 			}
-				user = *newUser
+			user = *newUser
+			txUser = user
 			logger.Info("ProcessSuccessfulPayment: user auto-created", zap.String("msisdn", recharge.MSISDN), zap.String("user_id", user.ID.String()))
-			
+		
 			// Link transaction to newly created user
 			if err := tx.Model(&entities.Transactions{}).Where("id = ?", recharge.ID).Update("user_id", user.ID).Error; err != nil {
 				logger.Error("ProcessSuccessfulPayment: failed to link transaction to user", zap.Error(err))
@@ -336,6 +338,7 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 				logger.Error("ProcessSuccessfulPayment: failed to update user points", zap.String("msisdn", recharge.MSISDN), zap.Error(err))
 				return fmt.Errorf("failed to update user points: %w", err)
 			}
+			txUser = user
 		}
 
 		// Process affiliate commission atomically inside this transaction (BUG-002).
@@ -349,14 +352,12 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 			}
 		}
 
-		// Create wheel spin opportunity if eligible
-		if isWheelEligible && s.spinService != nil {
-			if err := s.spinService.CreateSpinOpportunity(ctx, user.ID, recharge.ID); err != nil {
-				// Log error but don't fail the recharge
-				logger.Error("failed to create spin opportunity", zap.Error(err))
-				// Don't return error - spin opportunity failure shouldn't rollback recharge
-			}
-		}
+		// NOTE: CreateSpinOpportunity is called AFTER the transaction commits (below).
+		// Calling it inside the transaction causes a deadlock: the outer tx holds a
+		// row-lock on the transactions row, and CreateSpinOpportunity's s.db UPDATE
+		// on the same row blocks, preventing the transaction from ever committing.
+		// spin_eligible is already set to true in the Updates() call above, so no
+		// data is lost by moving this call post-commit.
 
 		// Create draw_entries rows for the active draw
 		s.createRechargeDrawEntries(ctx, tx, &user, int(drawEntries), recharge.MSISDN)
@@ -376,6 +377,17 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 		zap.String("payment_ref", paymentRef),
 		zap.String("msisdn", recharge.MSISDN),
 	)
+
+	// Create wheel spin opportunity POST-COMMIT to avoid deadlock.
+	// spin_eligible is already persisted by the transaction above; this call
+	// records the grant in the WheelSpin/spin_results table so CheckEligibility
+	// can enforce the one-spin-per-qualifying-recharge rule.
+	if isWheelEligible && s.spinService != nil && txUser.ID != uuid.Nil {
+		if spinErr := s.spinService.CreateSpinOpportunity(ctx, txUser.ID, recharge.ID); spinErr != nil {
+			// Non-fatal: spin_eligible is already true in the DB; the user can still spin.
+			logger.Error("post-commit CreateSpinOpportunity failed (non-fatal)", zap.Error(spinErr))
+		}
+	}
 
 	// Update the user's cached loyalty_tier field based on their new total points.
 	// This is done asynchronously outside the transaction so a failure here never

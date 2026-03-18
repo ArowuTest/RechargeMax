@@ -133,12 +133,15 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
       }, 4000);
     } catch (error: any) {
       setIsSpinning(false);
+      // error.response.data.error is an object {code, message} — extract .message to avoid React #31 crash
+      const errMsg: string =
+        error.response?.data?.error?.message ??
+        error.response?.data?.message ??
+        error.message ??
+        'Failed to spin the wheel. Please try again.';
       toast({
         title: 'Spin Failed',
-        description:
-          error.response?.data?.error ??
-          error.message ??
-          'Failed to spin the wheel. Please try again.',
+        description: errMsg,
         variant: 'destructive',
         duration: 5000,
       });

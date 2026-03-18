@@ -52,7 +52,7 @@ function App() {
         <AuthProvider>
           <AdminProvider>
             <Toaster />
-            <Sonner />
+            <Sonner position="top-center" richColors expand={true} />
             <BrowserRouter>
               <Header />
               <Suspense fallback={<div className="flex items-center justify-center h-screen text-muted-foreground">Loading…</div>}>

@@ -546,16 +546,16 @@ type PrizeResponse struct {
 // GetUserPrizes retrieves all prizes won by a user
 // sanitizePrizeValue returns the correct naira value for a prize.
 // When the stored prize_value kobo is corrupt (pre-seed anomaly, value > ₦1M),
-// it falls back to parsing the naira amount from the prize_name string,
+// it falls back to parsing the naira amount from the prize_name string.
+// Only extracts numbers that are explicitly preceded by ₦ or N (naira symbol),
 // e.g. "₦200 Cash" → 200.00, "₦1,000 Cash" → 1000.00, "1GB Data" → 0.00
 func sanitizePrizeValue(prizeValueKobo int64, prizeName string) float64 {
 	const maxSaneKobo = int64(100_000_000) // ₦1 million in kobo
 	if prizeValueKobo <= maxSaneKobo {
 		return float64(prizeValueKobo) / 100.0
 	}
-	// Corrupt value — try to extract naira amount from prize_name
-	// Matches optional ₦ or N, digits, optional comma-separated thousands
-	re := regexp.MustCompile(`[₦N]?([\d,]+)`)
+	// Corrupt value — extract naira amount ONLY when preceded by ₦ or N symbol
+	re := regexp.MustCompile(`[₦N]([\d,]+)`)
 	matches := re.FindStringSubmatch(prizeName)
 	if len(matches) >= 2 {
 		cleaned := strings.ReplaceAll(matches[1], ",", "")

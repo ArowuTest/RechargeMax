@@ -163,6 +163,7 @@ export const UserDashboard: React.FC = () => {
     spinsUsed: number;
     nextTierName?: string;
     nextTierMinAmount?: number;
+    amountToNextTier?: number;
     nextTierSpins?: number;
   } | null>(null);
 
@@ -244,6 +245,7 @@ export const UserDashboard: React.FC = () => {
           spinsUsed:         data.data.spins_used_today    ?? 0,
           nextTierName:      data.data.next_tier_name,
           nextTierMinAmount: data.data.next_tier_min_amount,
+          amountToNextTier: data.data.amount_to_next_tier,
           nextTierSpins:     data.data.next_tier_spins,
         });
         setTimeout(() => setShowUpgradeNudge(true), 1000);
@@ -1135,6 +1137,7 @@ export const UserDashboard: React.FC = () => {
                       spinsUsed:         d.spins_used_today    ?? 0,
                       nextTierName:      d.next_tier_name,
                       nextTierMinAmount: d.next_tier_min_amount,
+                    amountToNextTier: d.amount_to_next_tier,
                       nextTierSpins:     d.next_tier_spins,
                     });
                     setTimeout(() => setShowUpgradeNudge(true), 400);
@@ -1164,6 +1167,7 @@ export const UserDashboard: React.FC = () => {
           spinsUsed={nudgeData.spinsUsed}
           nextTierName={nudgeData.nextTierName}
           nextTierMinAmount={nudgeData.nextTierMinAmount}
+          amountToNextTier={nudgeData.amountToNextTier}
           nextTierSpins={nudgeData.nextTierSpins}
         />
       )}

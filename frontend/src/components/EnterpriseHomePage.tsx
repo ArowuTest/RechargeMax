@@ -112,6 +112,7 @@ export const EnterpriseHomePage: React.FC = () => {
     spinsUsed: number;
     nextTierName?: string;
     nextTierMinAmount?: number;
+    amountToNextTier?: number;
     nextTierSpins?: number;
   } | null>(null);
   const [userPhone, setUserPhone] = useState('');
@@ -178,6 +179,7 @@ export const EnterpriseHomePage: React.FC = () => {
             spinsUsed:         d.spins_used_today      ?? 0,
             nextTierName:      d.next_tier_name,
             nextTierMinAmount: d.next_tier_min_amount,
+            amountToNextTier: d.amount_to_next_tier,
             nextTierSpins:     d.next_tier_spins,
           });
           setShowUpgradeNudge(true);
@@ -1106,6 +1108,7 @@ export const EnterpriseHomePage: React.FC = () => {
                       spinsUsed:         d.spins_used_today      ?? 0,
                       nextTierName:      d.next_tier_name,
                       nextTierMinAmount: d.next_tier_min_amount,
+            amountToNextTier: d.amount_to_next_tier,
                       nextTierSpins:     d.next_tier_spins,
                     });
                     setTimeout(() => setShowUpgradeNudge(true), 400);
@@ -1129,6 +1132,7 @@ export const EnterpriseHomePage: React.FC = () => {
           spinsUsed={nudgeData.spinsUsed}
           nextTierName={nudgeData.nextTierName}
           nextTierMinAmount={nudgeData.nextTierMinAmount}
+          amountToNextTier={nudgeData.amountToNextTier}
           nextTierSpins={nudgeData.nextTierSpins}
         />
       )}

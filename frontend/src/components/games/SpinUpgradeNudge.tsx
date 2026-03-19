@@ -19,15 +19,17 @@ import { Zap, Trophy, ArrowRight, X, RotateCcw } from 'lucide-react';
 interface SpinUpgradeNudgeProps {
   isOpen: boolean;
   onClose: () => void;
-  /** Total spins granted from today's recharges */
+  /** Max daily spins allowed at current cumulative tier */
   spinsGranted: number;
   /** Spins already played today */
   spinsUsed: number;
-  /** Next tier name, e.g. "Silver" — undefined if already at max tier */
+  /** Next tier name, e.g. "Gold" */
   nextTierName?: string;
-  /** Min single-recharge amount (kobo) to reach next tier */
+  /** Absolute min cumulative amount (kobo) to reach next tier */
   nextTierMinAmount?: number;
-  /** Number of spins the next tier would give */
+  /** How much MORE to recharge today (kobo) to cross into next tier */
+  amountToNextTier?: number;
+  /** Number of spins the next tier allows per day */
   nextTierSpins?: number;
 }
 
@@ -52,14 +54,20 @@ export const SpinUpgradeNudge: React.FC<SpinUpgradeNudgeProps> = ({
   spinsUsed,
   nextTierName,
   nextTierMinAmount,
+  amountToNextTier,
   nextTierSpins,
 }) => {
   if (!isOpen) return null;
 
-  const hasNextTier  = !!nextTierName && !!nextTierMinAmount && !!nextTierSpins;
-  const tierGradient = nextTierName ? (TIER_COLORS[nextTierName] ?? 'from-green-500 to-emerald-400') : '';
-  const tierEmoji    = nextTierName ? (TIER_EMOJI[nextTierName] ?? '🏆') : '🏆';
-  const nextTierNaira = nextTierMinAmount ? nextTierMinAmount / 100 : 0;
+  const hasNextTier    = !!nextTierName && !!nextTierSpins;
+  const tierGradient   = nextTierName ? (TIER_COLORS[nextTierName] ?? 'from-green-500 to-emerald-400') : '';
+  const tierEmoji      = nextTierName ? (TIER_EMOJI[nextTierName] ?? '🏆') : '🏆';
+  // "Recharge X MORE today" is more actionable than the absolute minimum
+  const nudgeAmountNaira = amountToNextTier
+    ? amountToNextTier / 100
+    : nextTierMinAmount
+      ? nextTierMinAmount / 100
+      : 0;
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
@@ -119,28 +127,30 @@ export const SpinUpgradeNudge: React.FC<SpinUpgradeNudgeProps> = ({
           {/* Upgrade nudge */}
           {hasNextTier ? (
             <div className={`rounded-xl bg-gradient-to-br ${tierGradient} p-[2px] shadow-lg`}>
-              <div className="rounded-[10px] bg-white p-4 space-y-3">
+                <div className="rounded-[10px] bg-white p-4 space-y-3">
                 <div className="flex items-center gap-2">
                   <span className="text-2xl">{tierEmoji}</span>
                   <div>
                     <p className="font-bold text-gray-900 text-sm">
-                      Unlock {nextTierSpins} spin{nextTierSpins! > 1 ? 's' : ''} with {nextTierName} tier
+                      Unlock {nextTierSpins} spin{nextTierSpins! > 1 ? 's' : ''}/day with {nextTierName} tier
                     </p>
-                    <p className="text-xs text-gray-500">Recharge in a single top-up to qualify</p>
+                    <p className="text-xs text-gray-500">Based on your cumulative recharges today</p>
                   </div>
                 </div>
 
                 <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg p-3 flex items-center justify-between">
                   <div>
-                    <p className="text-xs text-gray-500 mb-0.5">Minimum single recharge</p>
+                    <p className="text-xs text-gray-500 mb-0.5">
+                      {amountToNextTier ? 'Recharge this much MORE today' : 'Minimum cumulative today'}
+                    </p>
                     <p className="text-2xl font-extrabold text-gray-900">
-                      {formatCurrency(nextTierNaira)}
+                      {formatCurrency(nudgeAmountNaira)}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs text-gray-500 mb-0.5">You'll earn</p>
+                    <p className="text-xs text-gray-500 mb-0.5">Daily cap rises to</p>
                     <p className="text-lg font-bold text-green-600">
-                      {nextTierSpins} spin{nextTierSpins! > 1 ? 's' : ''}
+                      {nextTierSpins} spin{nextTierSpins! > 1 ? 's' : ''}/day
                     </p>
                   </div>
                 </div>
@@ -148,8 +158,10 @@ export const SpinUpgradeNudge: React.FC<SpinUpgradeNudgeProps> = ({
                 <div className="flex items-start gap-2 text-xs text-gray-600">
                   <Zap className="w-3.5 h-3.5 text-yellow-500 mt-0.5 flex-shrink-0" />
                   <p>
-                    A single <span className="font-semibold">{formatCurrency(nextTierNaira)}+</span> recharge
-                    will instantly unlock <span className="font-semibold">{nextTierSpins} {nextTierName} spin{nextTierSpins! > 1 ? 's' : ''}</span> — no waiting, just spin!
+                    {amountToNextTier
+                      ? <>Top up <span className="font-semibold">{formatCurrency(nudgeAmountNaira)}+</span> more today and your daily spin limit jumps to <span className="font-semibold">{nextTierSpins} {nextTierName} spin{nextTierSpins! > 1 ? 's' : ''}</span>!</>
+                      : <>Reach a cumulative daily total of <span className="font-semibold">{formatCurrency(nudgeAmountNaira)}</span> to unlock {nextTierSpins} spins/day.</>
+                    }
                   </p>
                 </div>
               </div>

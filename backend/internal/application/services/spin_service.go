@@ -37,20 +37,30 @@ type SpinService struct {
 
 // SpinEligibilityResponse represents spin eligibility check response.
 //
-// When Eligible=false and the user has already used all their spins for
-// today's recharges, the NextTier* fields are populated so the frontend
-// can display a motivational upgrade nudge:
-//   "Recharge ₦2,500+ in one go to unlock 2 spins (Silver tier)"
+// Tier model: the user's CUMULATIVE daily recharge total determines which
+// tier they are in. The tier's SpinsPerDay is the maximum total spins
+// allowed for that day — it is a daily cap that grows as cumulative
+// recharges cross each tier threshold.
+//
+//   e.g. recharge ₦1,000 → Bronze → 1 spin/day allowance
+//        add another ₦1,500 (total ₦2,500) → Silver → 2 spins/day allowance
+//        add another ₦2,000 (total ₦4,500) → still Silver → still 2 spins/day
+//        add another ₦500 (total ₦5,000) → Gold → 3 spins/day allowance
+//
+// When Eligible=false and spins are exhausted, the NextTier* and
+// AmountToNextTier fields are populated so the frontend can show:
+//   "Recharge ₦326 more today to unlock 3 spins (Gold tier)"
 type SpinEligibilityResponse struct {
 	Eligible        bool   `json:"eligible"`
 	AvailableSpins  int64  `json:"available_spins"`
-	SpinsGranted    int64  `json:"spins_granted_today"`  // total spins earned from today's recharges
-	SpinsUsed       int64  `json:"spins_used_today"`     // spins already played today
+	SpinsGranted    int64  `json:"spins_granted_today"` // daily cap from cumulative tier
+	SpinsUsed       int64  `json:"spins_used_today"`
 	Message         string `json:"message"`
 
-	// Upgrade nudge fields — only set when Eligible=false
+	// Upgrade nudge fields — only set when Eligible=false and spins are exhausted
 	NextTierName      string `json:"next_tier_name,omitempty"`
-	NextTierMinAmount int64  `json:"next_tier_min_amount,omitempty"` // in kobo
+	NextTierMinAmount int64  `json:"next_tier_min_amount,omitempty"` // absolute min (kobo)
+	AmountToNextTier  int64  `json:"amount_to_next_tier,omitempty"`  // how much MORE to recharge today (kobo)
 	NextTierSpins     int    `json:"next_tier_spins,omitempty"`
 }
 
@@ -120,81 +130,66 @@ func (s *SpinService) CheckEligibility(ctx context.Context, msisdn string) (*Spi
 	// regardless of when during the day this is called.
 	today := time.Now().UTC().Truncate(24 * time.Hour)
 
-	// ── Step 1: count spins earned from EACH qualifying recharge today ─────────
+	// ── Step 1: sum ALL of today's qualifying recharges (cumulative total) ────
 	//
-	// DESIGN: spins are granted per individual recharge (not per cumulative total).
-	// A user who makes 2 separate ₦1,563 recharges earns 2 spins (1 each).
-	// A user who makes one ₦5,000 recharge earns 3 spins (Gold tier).
-	// The total available = sum of spins earned by each qualifying transaction,
-	// minus the spins already played today.
+	// TIER MODEL (cumulative daily cap):
+	//   The user's running total for the day determines which tier they are in.
+	//   The tier's SpinsPerDay is the MAXIMUM daily spin allowance — a cap that
+	//   grows as the cumulative total crosses each threshold.
 	//
-	// This matches the product description: "one free spin for any single recharge
-	// of ₦1,000+" while higher-value recharges earn proportionally more.
-	tierCalc := utils.NewSpinTierCalculatorDB(s.db)
-
-	// Fetch all today's successful qualifying transactions for this MSISDN.
-	type txRow struct {
-		Amount int64
-	}
-	var txRows []txRow
+	//   ₦1,000 cumulative → Bronze → 1 spin/day cap
+	//   ₦2,500 cumulative → Silver → 2 spins/day cap  (+1 vs Bronze)
+	//   ₦5,000 cumulative → Gold   → 3 spins/day cap  (+1 vs Silver)
+	//   ₦10,000 cumulative→ Plat.  → 5 spins/day cap  (+2 vs Gold)
+	//
+	//   This prevents unbounded spins from many small recharges (e.g., 100×₦1k).
+	//   The only way to raise the daily cap is to spend enough that the
+	//   cumulative total crosses the next tier threshold.
+	var todayAmountKobo int64
 	s.db.Model(&entities.Transactions{}).
-		Where("msisdn = ? AND status = ? AND amount >= ? AND created_at >= ?",
-			msisdn, "SUCCESS", int64(100000), today).
-		Select("amount").
-		Scan(&txRows)
+		Where("msisdn = ? AND status = ? AND created_at >= ?", msisdn, "SUCCESS", today).
+		Select("COALESCE(SUM(amount), 0)").
+		Scan(&todayAmountKobo)
 
-	if len(txRows) == 0 {
+	if todayAmountKobo < 100000 { // minimum ₦1,000 (100,000 kobo)
 		return &SpinEligibilityResponse{
 			Eligible: false,
 			Message:  "No qualifying recharges found. Recharge ₦1000+ to earn a spin!",
 		}, nil
 	}
 
-	// Sum spins earned per qualifying recharge.
-	totalGranted := int64(0)
-	for _, tx := range txRows {
-		spinsForTx := int64(1) // minimum 1 spin per qualifying recharge
-		if tier, err := tierCalc.GetSpinTierFromDB(tx.Amount); err == nil && tier.SpinsPerDay > 0 {
-			spinsForTx = int64(tier.SpinsPerDay)
-		}
-		totalGranted += spinsForTx
+	// ── Step 2: determine daily spin cap from cumulative tier ─────────────────
+	tierCalc := utils.NewSpinTierCalculatorDB(s.db)
+	dailyCap := int64(1) // conservative fallback if tier lookup fails
+	if tier, err := tierCalc.GetSpinTierFromDB(todayAmountKobo); err == nil && tier.SpinsPerDay > 0 {
+		dailyCap = int64(tier.SpinsPerDay)
 	}
 
-	// ── Step 2: count ALL spins played today (any claim_status) ───────────────
-	// IMPORTANT: A spin with claim_status='PENDING' means the wheel was already
-	// spun and a prize was won. It is NOT an available spin slot.
-	// Counting by MSISDN (not user_id) also catches any spins recorded before
-	// the user fully registered.
+	// ── Step 3: count all spins played today ──────────────────────────────────
+	// Counting by MSISDN catches spins recorded before the user fully registered.
 	var spinsToday int64
 	s.db.Model(&entities.WheelSpin{}).
 		Where("msisdn = ? AND created_at >= ?", msisdn, today).
 		Count(&spinsToday)
 
-	available := totalGranted - spinsToday
+	available := dailyCap - spinsToday
 	if available <= 0 {
-		// Build upgrade nudge: find the next tier above the highest single
-		// recharge the user made today, so the suggestion is actionable.
-		var maxSingleRecharge int64
-		for _, tx := range txRows {
-			if tx.Amount > maxSingleRecharge {
-				maxSingleRecharge = tx.Amount
-			}
-		}
-
+		// Build upgrade nudge: tell user exactly how much MORE to recharge today
+		// to cross into the next tier and unlock more spins.
 		resp := &SpinEligibilityResponse{
 			Eligible:     false,
-			SpinsGranted: totalGranted,
+			SpinsGranted: dailyCap,
 			SpinsUsed:    spinsToday,
-			Message:      fmt.Sprintf("Daily spin limit reached (%d/%d used today). Recharge more to unlock additional spins!", spinsToday, totalGranted),
+			Message:      fmt.Sprintf("Daily spin limit reached (%d/%d used today). Recharge more today to unlock additional spins!", spinsToday, dailyCap),
 		}
 
-		// Walk tiers in ascending order to find the next tier above maxSingleRecharge
 		allTiers, _ := tierCalc.GetAllTiersFromDB()
 		for _, t := range allTiers {
-			if t.MinDailyAmount > maxSingleRecharge {
-				resp.NextTierName = t.TierDisplayName
+			if t.MinDailyAmount > todayAmountKobo {
+				resp.NextTierName      = t.TierDisplayName
 				resp.NextTierMinAmount = t.MinDailyAmount
-				resp.NextTierSpins = t.SpinsPerDay
+				resp.AmountToNextTier  = t.MinDailyAmount - todayAmountKobo // how much MORE needed
+				resp.NextTierSpins     = t.SpinsPerDay
 				break
 			}
 		}
@@ -204,7 +199,7 @@ func (s *SpinService) CheckEligibility(ctx context.Context, msisdn string) (*Spi
 	return &SpinEligibilityResponse{
 		Eligible:       true,
 		AvailableSpins: available,
-		SpinsGranted:   totalGranted,
+		SpinsGranted:   dailyCap,
 		SpinsUsed:      spinsToday,
 		Message:        fmt.Sprintf("You have %d spin(s) available today!", available),
 	}, nil

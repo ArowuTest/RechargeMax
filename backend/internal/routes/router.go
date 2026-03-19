@@ -159,6 +159,9 @@ func registerPublic(v1 *gin.RouterGroup, hdlrs *handlers.Registry, db *gorm.DB) 
 	spin := v1.Group("/spin")
 	{
 		spin.GET("/prizes", hdlrs.Spin.GetPrizes)
+		// Guest-accessible play: OptionalAuth — MSISDN comes from JWT if present,
+		// otherwise from request body (with strict 4-hour transaction window check).
+		spin.POST("/play", middleware.OptionalAuthMiddleware(), hdlrs.Spin.PlaySpin)
 	}
 
 	spins := v1.Group("/spins", middleware.OptionalAuthMiddleware())
@@ -235,11 +238,10 @@ func registerProtected(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *serv
 		winner.POST("/:id/claim", hdlrs.Winner.ClaimPrize)
 	}
 
-	// Spin wheel (authenticated) — play, eligibility, and history require JWT.
-	// MSISDN is always sourced from the token; body MSISDN is never trusted.
+	// Spin wheel (authenticated actions) — eligibility and history require JWT.
+	// /spin/play lives in registerPublic with OptionalAuth to allow guest spins.
 	spinProtected := protected.Group("/spin")
 	{
-		spinProtected.POST("/play",       hdlrs.Spin.PlaySpin)
 		spinProtected.GET("/eligibility", hdlrs.Spin.CheckEligibility)
 		spinProtected.GET("/history",     hdlrs.Spin.GetHistory)
 	}

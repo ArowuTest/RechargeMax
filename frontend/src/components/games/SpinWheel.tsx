@@ -6,6 +6,7 @@ import { formatCurrency } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
 import { Gift, Zap, RotateCcw, Loader2 } from 'lucide-react';
 import apiClient from '@/lib/api-client';
+import { useAuthContext } from '@/contexts/AuthContext';
 
 // Fallback prizes used only when /spin/prizes is unreachable
 const FALLBACK_PRIZES = [
@@ -43,6 +44,7 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
   onPrizeWon,
 }) => {
   const { toast } = useToast();
+  const { isAuthenticated } = useAuthContext();
   const [prizes, setPrizes] = useState<WheelPrize[]>(FALLBACK_PRIZES);
   const [loadingPrizes, setLoadingPrizes] = useState(true);
   const [isSpinning, setIsSpinning] = useState(false);
@@ -84,12 +86,15 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
     setIsSpinning(true);
 
     try {
-      // SECURITY: prize is always determined server-side.
-      // The JWT in the Authorization header (set by api-client.ts) identifies
-      // the user — we do NOT pass msisdn in the body for auth purposes.
-      // The body field is kept for backward-compat but the server ignores it
-      // when a valid JWT is present.
-      const response = await apiClient.post('/spin/play', {});
+      // SECURITY: prize is ALWAYS determined server-side.
+      // When the user is logged in, the JWT (sent automatically via the
+      // Authorization header in api-client.ts) identifies them — no MSISDN
+      // needed in the body.
+      // When the user is a guest (not logged in), we send the MSISDN from the
+      // recharge form so the backend can validate a qualifying transaction
+      // exists within the last 4 hours for that number.
+      const spinBody = isAuthenticated ? {} : { msisdn: userPhone };
+      const response = await apiClient.post('/spin/play', spinBody);
 
       if (!response.data.success) {
         throw new Error(response.data.error || 'Failed to spin');

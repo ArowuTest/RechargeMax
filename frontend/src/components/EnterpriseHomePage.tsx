@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { apiClient } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -99,7 +98,6 @@ const TICKER_WINNERS = [
 /* ══════════════════════════════════════════════════════════════ */
 export const EnterpriseHomePage: React.FC = () => {
   const { user, isAuthenticated } = useAuthContext();
-  const navigate = useNavigate();
   // toast comes from sonner (global, no subscription needed)
   const [rechargeSuccess, setRechargeSuccess] = useState<any>(null);
   const [stats, setStats] = useState<Stats>({ totalUsers: 0, totalRecharges: 0, totalPrizes: 0, activeDraw: null });
@@ -149,28 +147,33 @@ export const EnterpriseHomePage: React.FC = () => {
   }, [stats.activeDraw]);
 
   // Verify eligibility with the backend before opening the spin wheel.
-  // This is the ONLY place that should set showSpinWheel=true so there is
-  // one authoritative path and no way to bypass the server check.
+  // For LOGGED-IN users: calls /spin/eligibility (auth-required) to get exact spin count.
+  // For GUEST users: shows the wheel directly — the backend will validate eligibility
+  //   at spin time (via /spin/play). We don't redirect guests to login; they can spin
+  //   freely and will be asked to log in only when they try to CLAIM their prize.
   const openSpinWheelIfEligible = useCallback(async () => {
-    if (!isAuthenticated) {
-      // Not logged in — redirect to login; the dashboard will show the wheel after auth
-      toast('🔒 Login required', { description: 'Please log in to spin the wheel and claim prizes.' });
-      navigate('/login');
-      return;
-    }
-    try {
-      const res = await apiClient.get('/spin/eligibility');
-      const spins: number = res.data?.data?.available_spins ?? 0;
-      if (spins > 0) {
-        setAvailableSpins(spins);
-        setShowSpinWheel(true);
-      } else {
-        toast('No spins available', { description: res.data?.data?.message ?? 'Recharge ₦1,000+ to unlock a spin.' });
+    if (isAuthenticated) {
+      // Logged-in path: confirm remaining spins with the server first
+      try {
+        const res = await apiClient.get('/spin/eligibility');
+        const spins: number = res.data?.data?.available_spins ?? 0;
+        if (spins > 0) {
+          setAvailableSpins(spins);
+          setShowSpinWheel(true);
+        } else {
+          toast('No spins available', { description: res.data?.data?.message ?? 'Recharge ₦1,000+ to unlock a spin.' });
+        }
+      } catch {
+        toast.error('Could not check eligibility', { description: 'Please try again shortly.' });
       }
-    } catch {
-      toast.error('Could not check eligibility', { description: 'Please try again shortly.' });
+    } else {
+      // Guest path: show the wheel immediately.
+      // /spin/play will validate the qualifying transaction (within 4 hours) server-side.
+      // After spinning, the prize result screen shows a "Log in to claim" button.
+      setAvailableSpins(1);
+      setShowSpinWheel(true);
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated]);
 
   /* recharge success */
   const handleRechargeSuccess = (result: any) => {

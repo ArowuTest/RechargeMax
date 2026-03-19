@@ -54,18 +54,41 @@ func (h *SpinHandler) CheckEligibility(c *gin.Context) {
 // @Failure 500 {object} errors.ErrorResponse
 // @Router /spin/play [post]
 func (h *SpinHandler) PlaySpin(c *gin.Context) {
-	// SECURITY: Spin play requires a valid JWT session.
-	// The MSISDN must come from the authenticated token — never from the request body.
-	// This prevents bad actors from triggering spins on arbitrary MSISDNs.
-	msisdn := c.GetString("msisdn")
-	if msisdn == "" {
-		middleware.RespondWithError(c, errors.Unauthorized("Authentication required to spin. Please log in first."))
-		return
-	}
+	// MSISDN resolution — two paths:
+	//
+	// Path A (authenticated user — JWT present):
+	//   The MSISDN is extracted from the verified JWT by OptionalAuthMiddleware.
+	//   The request body is ignored for MSISDN purposes.
+	//
+	// Path B (guest user — no JWT):
+	//   The MSISDN is taken from the request body.
+	//   The spin service will validate that this MSISDN has a qualifying
+	//   recharge within the last 4 hours before allowing the spin.
+	//   This preserves the "recharge → spin → log in to claim" UX while
+	//   making it impractical to spin on behalf of an arbitrary number
+	//   (the attacker would also need to have recharged for that number
+	//   within the last 4 hours).
+	msisdn := c.GetString("msisdn") // set by OptionalAuthMiddleware when JWT is valid
 
-	errors.Info("Authenticated spin request", map[string]interface{}{
-		"msisdn": msisdn,
-	})
+	if msisdn == "" {
+		// Guest path: require MSISDN in request body
+		var req struct {
+			MSISDN string `json:"msisdn" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			middleware.RespondWithError(c, errors.BadRequest("Phone number required. Please provide your MSISDN."))
+			return
+		}
+		// Normalise to international format (234XXXXXXXXXX)
+		if normalized, err := validation.NormalizeMSISDN(req.MSISDN); err == nil {
+			msisdn = normalized
+		} else {
+			msisdn = req.MSISDN
+		}
+		errors.Info("Guest spin request", map[string]interface{}{"msisdn": msisdn})
+	} else {
+		errors.Info("Authenticated spin request", map[string]interface{}{"msisdn": msisdn})
+	}
 
 	// Service will validate spin eligibility
 	errors.Info("Calling PlaySpin service", map[string]interface{}{

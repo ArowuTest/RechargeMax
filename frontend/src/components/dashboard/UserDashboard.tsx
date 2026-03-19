@@ -214,41 +214,30 @@ export const UserDashboard: React.FC = () => {
   const checkPendingSpins = async () => {
     if (!user?.msisdn || checkingSpins) return;
 
-    // Session-level guard: only auto-popup once per login session per MSISDN.
-    // This prevents the wheel from re-appearing every time the dashboard re-mounts
-    // (e.g. navigating away and back) when there are legitimate remaining spins.
-    const sessionKey = `spin_popup_shown_${user.msisdn}`;
-    if (sessionStorage.getItem(sessionKey)) return;
-
     try {
       setCheckingSpins(true);
       const response = await apiClient.get('/spin/eligibility');
       const data = response.data;
 
       if (data.success && data.data.eligible && data.data.available_spins > 0) {
-        // ✅ Spins available — show the wheel
+        // Spins available — update count and show banner (NOT auto-popup)
         setAvailableSpins(data.data.available_spins);
-        sessionStorage.setItem(sessionKey, '1');
-        setTimeout(() => setShowSpinWheel(true), 1000);
 
       } else if (
         data.success &&
         !data.data.eligible &&
         (data.data.spins_granted_today > 0 || data.data.spins_used_today > 0)
       ) {
-        // ❌ Spins exhausted — show upgrade nudge INSTEAD of wheel
-        // Only if the user actually has recharge history today (spins_granted > 0),
-        // so we don't nag users who just logged in without recharging.
-        sessionStorage.setItem(sessionKey, '1');
+        // Spins exhausted — store nudge data ready if user opens it
+        setAvailableSpins(0);
         setNudgeData({
           spinsGranted:      data.data.spins_granted_today ?? 0,
           spinsUsed:         data.data.spins_used_today    ?? 0,
           nextTierName:      data.data.next_tier_name,
           nextTierMinAmount: data.data.next_tier_min_amount,
-          amountToNextTier: data.data.amount_to_next_tier,
+          amountToNextTier:  data.data.amount_to_next_tier,
           nextTierSpins:     data.data.next_tier_spins,
         });
-        setTimeout(() => setShowUpgradeNudge(true), 1000);
       }
     } catch (error) {
       console.error('Failed to check pending spins:', error);
@@ -530,6 +519,58 @@ export const UserDashboard: React.FC = () => {
           {/* Overview Tab */}
           {activeTab === 'overview' && (
             <div className="space-y-4">
+
+              {/* ── Spin Banner — shown when spins are available ──────────────── */}
+              {availableSpins > 0 && (
+                <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-yellow-400 via-orange-400 to-pink-500 p-[2px] shadow-lg">
+                  <div className="rounded-[10px] bg-gradient-to-r from-yellow-50 to-orange-50 px-5 py-4 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-3xl">🎡</span>
+                      <div>
+                        <p className="font-bold text-gray-900 text-sm sm:text-base">
+                          You have {availableSpins} free spin{availableSpins > 1 ? 's' : ''} waiting!
+                        </p>
+                        <p className="text-xs text-gray-600 mt-0.5">
+                          Earned from today's recharge{availableSpins > 1 ? 's' : ''} — spin to win airtime, data or cash
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowSpinWheel(true)}
+                      className="flex-shrink-0 bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 text-white font-bold text-sm px-4 py-2.5 rounded-lg shadow transition-all active:scale-95"
+                    >
+                      Spin Now ⚡
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Nudge Banner — shown when spins are exhausted today ───────── */}
+              {availableSpins === 0 && nudgeData && (nudgeData.spinsGranted > 0 || nudgeData.spinsUsed > 0) && (
+                <div className="rounded-xl border border-indigo-200 bg-gradient-to-r from-indigo-50 to-purple-50 px-5 py-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">✅</span>
+                    <div>
+                      <p className="font-bold text-indigo-900 text-sm">
+                        All {nudgeData.spinsGranted} spin{nudgeData.spinsGranted > 1 ? 's' : ''} used today
+                      </p>
+                      <p className="text-xs text-indigo-600 mt-0.5">
+                        {nudgeData.nextTierName && nudgeData.amountToNextTier
+                          ? `Recharge ₦${Math.ceil(nudgeData.amountToNextTier / 100).toLocaleString()} more → unlock ${nudgeData.nextTierSpins} spins (${nudgeData.nextTierName})`
+                          : 'Come back tomorrow for fresh spins!'}
+                      </p>
+                    </div>
+                  </div>
+                  {nudgeData.nextTierName && (
+                    <button
+                      onClick={() => setShowUpgradeNudge(true)}
+                      className="flex-shrink-0 text-xs border border-indigo-300 text-indigo-700 hover:bg-indigo-100 font-semibold px-3 py-2 rounded-lg transition-all"
+                    >
+                      See how
+                    </button>
+                  )}
+                </div>
+              )}
               <div className="grid gap-4 md:grid-cols-2">
                 <Card>
                   <CardHeader>

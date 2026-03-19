@@ -544,17 +544,24 @@ type PrizeResponse struct {
 }
 
 // GetUserPrizes retrieves all prizes won by a user
-// sanitizePrizeValue returns the correct naira value for a prize.
-// When the stored prize_value kobo is corrupt (pre-seed anomaly, value > ₦1M),
-// it falls back to parsing the naira amount from the prize_name string.
-// Only extracts numbers that are explicitly preceded by ₦ or N (naira symbol),
-// e.g. "₦200 Cash" → 200.00, "₦1,000 Cash" → 1000.00, "1GB Data" → 0.00
-func sanitizePrizeValue(prizeValueKobo int64, prizeName string) float64 {
-	const maxSaneKobo = int64(100_000_000) // ₦1 million in kobo
-	if prizeValueKobo <= maxSaneKobo {
+// resolvePrizeValueNaira returns the correct naira value for a spin result.
+//
+// Priority order:
+//  1. wheelPrize.PrizeValue (preloaded from wheel_prizes) → authoritative DB value
+//  2. prizeValueKobo (copied into spin_results at spin time) if sane (<= ₦1M kobo)
+//  3. Regex fallback: parse naira amount from prize_name (requires ₦/N prefix)
+//     "₦200 Cash" → 200, "1GB Data" → 0  (non-monetary prizes return 0)
+func resolvePrizeValueNaira(prizeValueKobo int64, prizeName string, wheelPrize *entities.WheelPrize) float64 {
+	// 1. Authoritative value from wheel_prizes table
+	if wheelPrize != nil {
+		return float64(wheelPrize.PrizeValue) / 100.0
+	}
+	// 2. Copied value is sane
+	const maxSaneKobo = int64(100_000_000) // ₦1 million
+	if prizeValueKobo > 0 && prizeValueKobo <= maxSaneKobo {
 		return float64(prizeValueKobo) / 100.0
 	}
-	// Corrupt value — extract naira amount ONLY when preceded by ₦ or N symbol
+	// 3. Regex fallback for corrupt/missing values
 	re := regexp.MustCompile(`[₦N]([\d,]+)`)
 	matches := re.FindStringSubmatch(prizeName)
 	if len(matches) >= 2 {
@@ -582,7 +589,7 @@ func (s *UserService) GetUserPrizes(ctx context.Context, msisdn string) ([]Prize
 	// Convert to response format
 	var result []PrizeResponse
 	for _, spin := range spins {
-		prizeValueNaira := sanitizePrizeValue(spin.PrizeValue, spin.PrizeName)
+		prizeValueNaira := resolvePrizeValueNaira(spin.PrizeValue, spin.PrizeName, spin.Prize)
 		result = append(result, PrizeResponse{
 			ID:          spin.ID,
 			PrizeName:   spin.PrizeName,
@@ -870,9 +877,9 @@ func (s *UserService) getUserPrizes(ctx context.Context, userID uuid.UUID) []Pri
 
 	var result []PrizeItem
 	for _, spin := range spins {
-		// Use sanitizePrizeValue to recover correct naira amount from prize_name
-		// when stored prize_value kobo is corrupt (pre-seed data anomaly).
-		prizeNaira := int64(sanitizePrizeValue(spin.PrizeValue, spin.PrizeName))
+		// Resolve prize value: prefer authoritative wheel_prizes value (via preloaded Prize),
+		// fall back to the copied kobo value if sane, then regex from prize_name as last resort.
+		prizeNaira := int64(resolvePrizeValueNaira(spin.PrizeValue, spin.PrizeName, spin.Prize))
 		result = append(result, PrizeItem{
 			ID:          spin.ID,
 			PrizeName:   spin.PrizeName,

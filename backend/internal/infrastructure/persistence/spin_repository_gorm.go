@@ -62,10 +62,13 @@ func (r *spinRepositoryGORM) Count(ctx context.Context) (int64, error) {
 	return count, err
 }
 
-// FindByUserID retrieves spin results for a specific user with pagination
+// FindByUserID retrieves spin results for a specific user with pagination.
+// Preloads the associated WheelPrize so callers can use the authoritative
+// prize_value from wheel_prizes instead of the (potentially stale) copied value.
 func (r *spinRepositoryGORM) FindByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*entities.SpinResults, error) {
 	var results []*entities.SpinResults
 	err := r.db.WithContext(ctx).
+		Preload("Prize").
 		Where("user_id = ?", userID).
 		Order("created_at DESC").
 		Limit(limit).

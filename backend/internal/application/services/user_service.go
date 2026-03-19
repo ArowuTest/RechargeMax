@@ -552,16 +552,19 @@ type PrizeResponse struct {
 //  3. Regex fallback: parse naira amount from prize_name (requires ₦/N prefix)
 //     "₦200 Cash" → 200, "1GB Data" → 0  (non-monetary prizes return 0)
 func resolvePrizeValueNaira(prizeValueKobo int64, prizeName string, wheelPrize *entities.WheelPrize) float64 {
-	// 1. Authoritative value from wheel_prizes table
-	if wheelPrize != nil {
+	const maxSaneKobo = int64(100_000_000) // ₦1 million sanity cap
+
+	// 1. Authoritative value from wheel_prizes table — but only if the value itself is sane.
+	//    Old wheel_prizes rows created before migration 037 may also have corrupt values.
+	if wheelPrize != nil && wheelPrize.PrizeValue > 0 && wheelPrize.PrizeValue <= maxSaneKobo {
 		return float64(wheelPrize.PrizeValue) / 100.0
 	}
-	// 2. Copied value is sane
-	const maxSaneKobo = int64(100_000_000) // ₦1 million
+	// 2. Copied value in spin_results is sane
 	if prizeValueKobo > 0 && prizeValueKobo <= maxSaneKobo {
 		return float64(prizeValueKobo) / 100.0
 	}
-	// 3. Regex fallback for corrupt/missing values
+	// 3. Regex fallback: extract naira amount from prize_name (₦/N prefix required)
+	//    "₦200 Cash" → 200, "₦1,000 Cash" → 1000, "1GB Data" → 0
 	re := regexp.MustCompile(`[₦N]([\d,]+)`)
 	matches := re.FindStringSubmatch(prizeName)
 	if len(matches) >= 2 {

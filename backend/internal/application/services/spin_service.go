@@ -108,28 +108,47 @@ func (s *SpinService) CheckEligibility(ctx context.Context, msisdn string) (*Spi
 	// regardless of when during the day this is called.
 	today := time.Now().UTC().Truncate(24 * time.Hour)
 
-	// ── Step 1: sum today's successful recharges for this MSISDN ──────────────
-	var todayAmountKobo int64
-	s.db.Model(&entities.Transactions{}).
-		Where("msisdn = ? AND status = ? AND created_at >= ?", msisdn, "SUCCESS", today).
-		Select("COALESCE(SUM(amount), 0)").
-		Scan(&todayAmountKobo)
+	// ── Step 1: count spins earned from EACH qualifying recharge today ─────────
+	//
+	// DESIGN: spins are granted per individual recharge (not per cumulative total).
+	// A user who makes 2 separate ₦1,563 recharges earns 2 spins (1 each).
+	// A user who makes one ₦5,000 recharge earns 3 spins (Gold tier).
+	// The total available = sum of spins earned by each qualifying transaction,
+	// minus the spins already played today.
+	//
+	// This matches the product description: "one free spin for any single recharge
+	// of ₦1,000+" while higher-value recharges earn proportionally more.
+	tierCalc := utils.NewSpinTierCalculatorDB(s.db)
 
-	if todayAmountKobo < 100000 { // minimum ₦1,000 (100,000 kobo)
+	// Fetch all today's successful qualifying transactions for this MSISDN.
+	type txRow struct {
+		Amount int64
+	}
+	var txRows []txRow
+	s.db.Model(&entities.Transactions{}).
+		Where("msisdn = ? AND status = ? AND amount >= ? AND created_at >= ?",
+			msisdn, "SUCCESS", int64(100000), today).
+		Select("amount").
+		Scan(&txRows)
+
+	if len(txRows) == 0 {
 		return &SpinEligibilityResponse{
 			Eligible: false,
 			Message:  "No qualifying recharges found. Recharge ₦1000+ to earn a spin!",
 		}, nil
 	}
 
-	// ── Step 2: determine tier daily limit ────────────────────────────────────
-	dailyLimit := 1 // conservative default if tier lookup fails
-	tierCalc := utils.NewSpinTierCalculatorDB(s.db)
-	if tier, err := tierCalc.GetSpinTierFromDB(todayAmountKobo); err == nil && tier.SpinsPerDay > 0 {
-		dailyLimit = tier.SpinsPerDay
+	// Sum spins earned per qualifying recharge.
+	totalGranted := int64(0)
+	for _, tx := range txRows {
+		spinsForTx := int64(1) // minimum 1 spin per qualifying recharge
+		if tier, err := tierCalc.GetSpinTierFromDB(tx.Amount); err == nil && tier.SpinsPerDay > 0 {
+			spinsForTx = int64(tier.SpinsPerDay)
+		}
+		totalGranted += spinsForTx
 	}
 
-	// ── Step 3: count ALL spins played today (any claim_status) ───────────────
+	// ── Step 2: count ALL spins played today (any claim_status) ───────────────
 	// IMPORTANT: A spin with claim_status='PENDING' means the wheel was already
 	// spun and a prize was won. It is NOT an available spin slot.
 	// Counting by MSISDN (not user_id) also catches any spins recorded before
@@ -139,11 +158,11 @@ func (s *SpinService) CheckEligibility(ctx context.Context, msisdn string) (*Spi
 		Where("msisdn = ? AND created_at >= ?", msisdn, today).
 		Count(&spinsToday)
 
-	available := int64(dailyLimit) - spinsToday
+	available := totalGranted - spinsToday
 	if available <= 0 {
 		return &SpinEligibilityResponse{
 			Eligible: false,
-			Message:  fmt.Sprintf("Daily spin limit reached (%d/%d used today). Recharge more to unlock additional spins!", spinsToday, dailyLimit),
+			Message:  fmt.Sprintf("Daily spin limit reached (%d/%d used today). Recharge more to unlock additional spins!", spinsToday, totalGranted),
 		}, nil
 	}
 

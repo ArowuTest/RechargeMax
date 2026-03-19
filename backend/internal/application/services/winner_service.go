@@ -1255,7 +1255,20 @@ func (s *WinnerService) triggerManualFulfillment(ctx context.Context, spinPrize 
 		return s.spinRepo.Update(ctx, spinPrize)
 	}
 	network := networkResult.Network
-	
+
+	// Guard against corrupt prize_value (pre-seed data anomaly).
+	// Prize values > ₦1 million (100_000_000 kobo) are clearly wrong; queue for admin.
+	if spinPrize.PrizeValue > 100_000_000 {
+		logger.Warn("⚠️  Corrupt prize_value detected — queuing for admin review",
+			zap.String("id", spinPrize.ID.String()),
+			zap.Int64("prize_value_kobo", spinPrize.PrizeValue))
+		now := time.Now()
+		spinPrize.ClaimStatus = "PENDING_ADMIN_REVIEW"
+		spinPrize.ClaimedAt = &now
+		spinPrize.FulfillmentError = "Prize value appears corrupt (pre-seed data); queued for admin review"
+		return s.spinRepo.Update(ctx, spinPrize)
+	}
+
 	// Increment fulfillment attempts
 	spinPrize.FulfillmentAttempts++
 	now := time.Now()
@@ -1355,12 +1368,16 @@ func (s *WinnerService) provisionDataManual(ctx context.Context, spinPrize *enti
 // falls back to hardcoded defaults if not found.
 func (s *WinnerService) getDataVariationCode(prizeValue int64, network string) string {
 	if s.db != nil {
+		// Use a raw query to avoid GORM error if the variation_code column doesn't yet exist
 		var code string
-		err := s.db.Table("wheel_prizes").
-			Where("network_provider = ? AND prize_value = ? AND variation_code IS NOT NULL", network, prizeValue).
-			Limit(1).
-			Pluck("variation_code", &code).Error
-		if err == nil && code != "" {
+		row := s.db.Raw(
+			`SELECT variation_code FROM wheel_prizes WHERE network_provider = ? AND prize_value = ? AND variation_code IS NOT NULL LIMIT 1`,
+			network, prizeValue,
+		).Row()
+		if row != nil {
+			_ = row.Scan(&code) // ignore errors (column may not exist yet)
+		}
+		if code != "" {
 			return code
 		}
 	}

@@ -76,51 +76,64 @@ func NewSpinService(
 	}
 }
 
-// CheckEligibility checks if user is eligible to spin
+// CheckEligibility checks if user is eligible to spin.
+// Rules (applied in order):
+//  1. User must exist in the database (registered via OTP).
+//  2. User must have ≥ ₦1,000 in successful recharges today.
+//  3. Number of spins already played today must be < tier daily limit.
+//
+// Security notes:
+//   - spinsToday counts ALL spin_results rows for the MSISDN today, regardless of
+//     claim_status. A PENDING claim means the spin was ALREADY played and the prize
+//     is awaiting collection — it must NOT be treated as a fresh spin slot.
+//   - Only recharges whose MSISDN matches the authenticated user are counted,
+//     preventing eligibility inflation via third-party recharges.
 func (s *SpinService) CheckEligibility(ctx context.Context, msisdn string) (*SpinEligibilityResponse, error) {
-_, err := s.userRepo.FindByMSISDN(ctx, msisdn)
-if err != nil {
-return &SpinEligibilityResponse{
-Eligible: false,
-Message:  "User not found",
-}, nil
-}
+	_, err := s.userRepo.FindByMSISDN(ctx, msisdn)
+	if err != nil {
+		return &SpinEligibilityResponse{
+			Eligible: false,
+			Message:  "User not found",
+		}, nil
+	}
 
-	// NOTE: We intentionally do NOT count spin_results with claim_status='PENDING' here.
-	// Those are already-played spins awaiting prize claim, not unplayed spin opportunities.
-	// Eligibility is determined solely by today's recharge amount vs tier limits.
-
-	// Check if user has made qualifying transactions today and apply daily tier limit
 	if s.db == nil {
 		return &SpinEligibilityResponse{
 			Eligible: false,
 			Message:  "No qualifying recharges found. Recharge ₦1000+ to earn a spin!",
 		}, nil
 	}
-	today := time.Now().Truncate(24 * time.Hour)
 
-	// Sum today's successful recharge amount for this MSISDN
+	// Use midnight of today in UTC as the day boundary so the count is consistent
+	// regardless of when during the day this is called.
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+
+	// ── Step 1: sum today's successful recharges for this MSISDN ──────────────
 	var todayAmountKobo int64
 	s.db.Model(&entities.Transactions{}).
 		Where("msisdn = ? AND status = ? AND created_at >= ?", msisdn, "SUCCESS", today).
 		Select("COALESCE(SUM(amount), 0)").
 		Scan(&todayAmountKobo)
 
-	if todayAmountKobo < 100000 { // minimum ₦1,000
+	if todayAmountKobo < 100000 { // minimum ₦1,000 (100,000 kobo)
 		return &SpinEligibilityResponse{
 			Eligible: false,
 			Message:  "No qualifying recharges found. Recharge ₦1000+ to earn a spin!",
 		}, nil
 	}
 
-	// Determine how many spins the tier allows today
-	dailyLimit := 1 // default fallback
+	// ── Step 2: determine tier daily limit ────────────────────────────────────
+	dailyLimit := 1 // conservative default if tier lookup fails
 	tierCalc := utils.NewSpinTierCalculatorDB(s.db)
 	if tier, err := tierCalc.GetSpinTierFromDB(todayAmountKobo); err == nil && tier.SpinsPerDay > 0 {
 		dailyLimit = tier.SpinsPerDay
 	}
 
-	// Count spins already used today
+	// ── Step 3: count ALL spins played today (any claim_status) ───────────────
+	// IMPORTANT: A spin with claim_status='PENDING' means the wheel was already
+	// spun and a prize was won. It is NOT an available spin slot.
+	// Counting by MSISDN (not user_id) also catches any spins recorded before
+	// the user fully registered.
 	var spinsToday int64
 	s.db.Model(&entities.WheelSpin{}).
 		Where("msisdn = ? AND created_at >= ?", msisdn, today).

@@ -153,13 +153,19 @@ func registerPublic(v1 *gin.RouterGroup, hdlrs *handlers.Registry, db *gorm.DB) 
 		draws.GET("/my-entries",  hdlrs.Draw.GetMyEntries)
 	}
 
-	// Spin wheel (guest + authenticated — OptionalAuth extracts JWT if present)
-	spin := v1.Group("/spin", middleware.OptionalAuthMiddleware())
+	// Spin wheel — public endpoints (prizes list, tiers) use OptionalAuth.
+	// /spin/play and /spin/eligibility require a valid JWT so the MSISDN is
+	// always bound to the authenticated user and cannot be spoofed.
+	spin := v1.Group("/spin")
 	{
-		spin.POST("/play",       hdlrs.Spin.PlaySpin)
-		spin.GET("/eligibility", hdlrs.Spin.CheckEligibility)
-		spin.GET("/history",     hdlrs.Spin.GetHistory)
-		spin.GET("/prizes",      hdlrs.Spin.GetPrizes)
+		// Authenticated-only: eligibility check and play action
+		spinAuth := spin.Group("", middleware.AuthMiddleware(svcs.Auth, svcs.Token))
+		spinAuth.POST("/play",       hdlrs.Spin.PlaySpin)
+		spinAuth.GET("/eligibility", hdlrs.Spin.CheckEligibility)
+		spinAuth.GET("/history",     hdlrs.Spin.GetHistory)
+
+		// Public: anyone can browse available prizes
+		spin.GET("/prizes", hdlrs.Spin.GetPrizes)
 	}
 
 	spins := v1.Group("/spins", middleware.OptionalAuthMiddleware())

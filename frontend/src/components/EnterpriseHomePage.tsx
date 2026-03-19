@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiClient } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -98,6 +99,7 @@ const TICKER_WINNERS = [
 /* ══════════════════════════════════════════════════════════════ */
 export const EnterpriseHomePage: React.FC = () => {
   const { user, isAuthenticated } = useAuthContext();
+  const navigate = useNavigate();
   // toast comes from sonner (global, no subscription needed)
   const [rechargeSuccess, setRechargeSuccess] = useState<any>(null);
   const [stats, setStats] = useState<Stats>({ totalUsers: 0, totalRecharges: 0, totalPrizes: 0, activeDraw: null });
@@ -146,11 +148,38 @@ export const EnterpriseHomePage: React.FC = () => {
     return () => clearInterval(id);
   }, [stats.activeDraw]);
 
+  // Verify eligibility with the backend before opening the spin wheel.
+  // This is the ONLY place that should set showSpinWheel=true so there is
+  // one authoritative path and no way to bypass the server check.
+  const openSpinWheelIfEligible = useCallback(async () => {
+    if (!isAuthenticated) {
+      // Not logged in — redirect to login; the dashboard will show the wheel after auth
+      toast('🔒 Login required', { description: 'Please log in to spin the wheel and claim prizes.' });
+      navigate('/login');
+      return;
+    }
+    try {
+      const res = await apiClient.get('/spin/eligibility');
+      const spins: number = res.data?.data?.available_spins ?? 0;
+      if (spins > 0) {
+        setAvailableSpins(spins);
+        setShowSpinWheel(true);
+      } else {
+        toast('No spins available', { description: res.data?.data?.message ?? 'Recharge ₦1,000+ to unlock a spin.' });
+      }
+    } catch {
+      toast.error('Could not check eligibility', { description: 'Please try again shortly.' });
+    }
+  }, [isAuthenticated, navigate]);
+
   /* recharge success */
   const handleRechargeSuccess = (result: any) => {
     setRechargeSuccess(result);
-    if (result.amount >= 1000) setShowSpinWheel(true);
     fetchPlatformData();
+    // After a successful recharge, verify eligibility server-side before showing wheel
+    if (result.amount >= 1000) {
+      openSpinWheelIfEligible();
+    }
   };
 
   /* ── boot: payment callback + fetch data ─────────────────────── */
@@ -229,8 +258,8 @@ export const EnterpriseHomePage: React.FC = () => {
                 });
 
                 if (spinEligible) {
-                  setAvailableSpins(1);
-                  setTimeout(() => setShowSpinWheel(true), 800);
+                  // Always verify with the backend rather than trusting the frontend flag
+                  setTimeout(() => openSpinWheelIfEligible(), 800);
                 }
               } else if (txn.status === 'FAILED') {
                 setRechargeSuccess(null);
@@ -583,7 +612,7 @@ export const EnterpriseHomePage: React.FC = () => {
 
                   {availableSpins > 0 ? (
                     <Button
-                      onClick={() => setShowSpinWheel(true)}
+                      onClick={() => openSpinWheelIfEligible()}
                       className="w-full bg-white text-purple-700 font-bold hover:bg-yellow-50 shadow-md"
                     >
                       🎰 Spin Now! ({availableSpins} left)
@@ -1036,7 +1065,20 @@ export const EnterpriseHomePage: React.FC = () => {
           onClose={() => { setShowSpinWheel(false); setAvailableSpins(0); }}
           transactionAmount={rechargeSuccess?.amount || 1000}
           userPhone={userPhone || ''}
-          onPrizeWon={() => {}}
+          onPrizeWon={async () => {
+            // Re-check remaining spins from the server after each prize
+            try {
+              const res = await apiClient.get('/spin/eligibility');
+              const remaining: number = res.data?.data?.available_spins ?? 0;
+              setAvailableSpins(remaining);
+              if (remaining <= 0) {
+                setTimeout(() => setShowSpinWheel(false), 3000);
+              }
+            } catch {
+              setAvailableSpins(0);
+              setTimeout(() => setShowSpinWheel(false), 3000);
+            }
+          }}
         />
       )}
     </div>

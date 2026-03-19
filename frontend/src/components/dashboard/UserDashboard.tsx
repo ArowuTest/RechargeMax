@@ -189,7 +189,10 @@ export const UserDashboard: React.FC = () => {
     }
   }, [isAuthenticated, user, fetchDashboardData]);
 
-  // Check for pending spins after dashboard data is loaded (only once)
+  // Check for pending spins after dashboard data is loaded.
+  // We use sessionStorage to ensure the auto-popup fires at most ONCE per browser
+  // session for a given MSISDN.  The user can always open it manually via the
+  // "Prizes" tab or a dashboard button, but we won't interrupt them repeatedly.
   useEffect(() => {
     if (dashboardData && user?.msisdn && !checkingSpins) {
       checkPendingSpins();
@@ -200,6 +203,12 @@ export const UserDashboard: React.FC = () => {
   const checkPendingSpins = async () => {
     if (!user?.msisdn || checkingSpins) return;
 
+    // Session-level guard: only auto-popup once per login session per MSISDN.
+    // This prevents the wheel from re-appearing every time the dashboard re-mounts
+    // (e.g. navigating away and back) when there are legitimate remaining spins.
+    const sessionKey = `spin_popup_shown_${user.msisdn}`;
+    if (sessionStorage.getItem(sessionKey)) return;
+
     try {
       setCheckingSpins(true);
       const response = await apiClient.get('/spin/eligibility');
@@ -208,6 +217,8 @@ export const UserDashboard: React.FC = () => {
 
       if (data.success && data.data.eligible && data.data.available_spins > 0) {
         setAvailableSpins(data.data.available_spins);
+        // Mark that we have shown (or are about to show) the popup this session
+        sessionStorage.setItem(sessionKey, '1');
         // Auto-show spin wheel after a short delay
         setTimeout(() => {
           setShowSpinWheel(true);
@@ -1077,13 +1088,25 @@ export const UserDashboard: React.FC = () => {
             // Refresh dashboard to show new prizes
             fetchDashboardData();
           }}
-          transactionAmount={1000} // Default amount, actual spins are managed by backend
+          transactionAmount={1000} // actual spins are managed by the backend
           userPhone={user?.msisdn || ''}
-          onPrizeWon={(prize) => {
-            // Decrease available spins
-            setAvailableSpins(prev => Math.max(0, prev - 1));
-            // If no more spins, close wheel
-            if (availableSpins <= 1) {
+          onPrizeWon={async (_prize) => {
+            // After a spin completes, ask the BACKEND how many spins remain.
+            // Never trust the client-side decrement alone — the server is the
+            // single source of truth for spin counts.
+            try {
+              const res = await apiClient.get('/spin/eligibility');
+              const remaining = res.data?.data?.available_spins ?? 0;
+              setAvailableSpins(remaining);
+              if (remaining <= 0) {
+                setTimeout(() => {
+                  setShowSpinWheel(false);
+                  fetchDashboardData();
+                }, 3000);
+              }
+            } catch {
+              // Fallback: close wheel and refresh
+              setAvailableSpins(0);
               setTimeout(() => {
                 setShowSpinWheel(false);
                 fetchDashboardData();

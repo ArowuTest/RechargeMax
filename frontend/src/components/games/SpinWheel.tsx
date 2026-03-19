@@ -84,8 +84,12 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
     setIsSpinning(true);
 
     try {
-      // SECURITY: prize is always determined server-side
-      const response = await apiClient.post('/spin/play', { msisdn: userPhone });
+      // SECURITY: prize is always determined server-side.
+      // The JWT in the Authorization header (set by api-client.ts) identifies
+      // the user — we do NOT pass msisdn in the body for auth purposes.
+      // The body field is kept for backward-compat but the server ignores it
+      // when a valid JWT is present.
+      const response = await apiClient.post('/spin/play', {});
 
       if (!response.data.success) {
         throw new Error(response.data.error || 'Failed to spin');

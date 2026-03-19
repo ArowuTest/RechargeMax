@@ -54,46 +54,18 @@ func (h *SpinHandler) CheckEligibility(c *gin.Context) {
 // @Failure 500 {object} errors.ErrorResponse
 // @Router /spin/play [post]
 func (h *SpinHandler) PlaySpin(c *gin.Context) {
-	// DEBUG: Log incoming request
-	errors.Info("PlaySpin called", map[string]interface{}{
-		"method": c.Request.Method,
-		"path": c.Request.URL.Path,
-	})
-	
-	// Support both authenticated users (JWT) and guest users (request body)
-	// OptionalAuthMiddleware sets msisdn in context if JWT is present
+	// SECURITY: Spin play requires a valid JWT session.
+	// The MSISDN must come from the authenticated token — never from the request body.
+	// This prevents bad actors from triggering spins on arbitrary MSISDNs.
 	msisdn := c.GetString("msisdn")
-	errors.Info("MSISDN from context", map[string]interface{}{
-		"msisdn": msisdn,
-		"has_auth_header": c.GetHeader("Authorization") != "",
-	})
-	
-	// If no MSISDN from JWT context, try to get from request body (guest spin)
 	if msisdn == "" {
-		var req struct {
-			MSISDN string `json:"msisdn" binding:"required"`
-		}
-		if err := c.ShouldBindJSON(&req); err != nil {
-			errors.Info("Failed to bind JSON", map[string]interface{}{
-				"error": err.Error(),
-			})
-			middleware.RespondWithError(c, errors.BadRequest("MSISDN required for spin"))
-			return
-		}
-		// Normalise guest MSISDN to canonical international format (234...)
-		if normalized, err := validation.NormalizeMSISDN(req.MSISDN); err == nil {
-			msisdn = normalized
-		} else {
-			msisdn = req.MSISDN
-		}
-		errors.Info("Guest spin request (normalised)", map[string]interface{}{
-			"msisdn": msisdn,
-		})
-	} else {
-		errors.Info("Authenticated spin request", map[string]interface{}{
-			"msisdn": msisdn,
-		})
+		middleware.RespondWithError(c, errors.Unauthorized("Authentication required to spin. Please log in first."))
+		return
 	}
+
+	errors.Info("Authenticated spin request", map[string]interface{}{
+		"msisdn": msisdn,
+	})
 
 	// Service will validate spin eligibility
 	errors.Info("Calling PlaySpin service", map[string]interface{}{

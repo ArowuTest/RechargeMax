@@ -73,8 +73,8 @@ export const SpinUpgradeNudge: React.FC<SpinUpgradeNudgeProps> = ({
   const nudgeDrawEntries = nudgeAmountNaira > 0 ? Math.floor(nudgeAmountNaira / 200) : 0;
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-md shadow-2xl border-0 overflow-hidden">
+    <div className="fixed inset-0 bg-black/80 flex items-start sm:items-center justify-center z-50 p-4 overflow-y-auto">
+      <Card className="w-full max-w-md shadow-2xl border-0 overflow-hidden my-auto">
 
         {/* Header — spinning coins animation feel */}
         <CardHeader className="bg-gradient-to-br from-gray-900 to-gray-800 text-white pb-6 relative">

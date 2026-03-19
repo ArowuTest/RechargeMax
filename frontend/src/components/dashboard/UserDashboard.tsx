@@ -1108,48 +1108,46 @@ export const UserDashboard: React.FC = () => {
       {showSpinWheel && availableSpins > 0 && (
         <SpinWheel
           isOpen={showSpinWheel}
-          onClose={() => {
+          onClose={async () => {
             setShowSpinWheel(false);
-            setAvailableSpins(0);
-            // Refresh dashboard to show new prizes
             fetchDashboardData();
-          }}
-          transactionAmount={1000} // actual spins are managed by the backend
-          userPhone={user?.msisdn || ''}
-          onPrizeWon={async (_prize) => {
-            // After a spin completes, ask the BACKEND how many spins remain.
-            // Never trust the client-side decrement alone — the server is the
-            // single source of truth for spin counts.
+            // Check eligibility NOW (after the user has dismissed the wheel themselves)
+            // and show the upgrade nudge if all spins are used up.
             try {
               const res = await apiClient.get('/spin/eligibility');
               const d = res.data?.data ?? {};
               const remaining: number = d.available_spins ?? 0;
               setAvailableSpins(remaining);
-              if (remaining <= 0) {
-                // No more spins — close the wheel after a short delay,
-                // then show the upgrade nudge if they have recharge history today.
+              if (remaining <= 0 && (d.spins_granted_today ?? 0) > 0) {
+                // Small delay so the wheel close animation completes first
                 setTimeout(() => {
-                  setShowSpinWheel(false);
-                  fetchDashboardData();
-                  if (d.spins_granted_today > 0) {
-                    setNudgeData({
-                      spinsGranted:      d.spins_granted_today ?? 0,
-                      spinsUsed:         d.spins_used_today    ?? 0,
-                      nextTierName:      d.next_tier_name,
-                      nextTierMinAmount: d.next_tier_min_amount,
-                    amountToNextTier: d.amount_to_next_tier,
-                      nextTierSpins:     d.next_tier_spins,
-                    });
-                    setTimeout(() => setShowUpgradeNudge(true), 400);
-                  }
-                }, 3000);
+                  setNudgeData({
+                    spinsGranted:      d.spins_granted_today  ?? 0,
+                    spinsUsed:         d.spins_used_today      ?? 0,
+                    nextTierName:      d.next_tier_name,
+                    nextTierMinAmount: d.next_tier_min_amount,
+                    amountToNextTier:  d.amount_to_next_tier,
+                    nextTierSpins:     d.next_tier_spins,
+                  });
+                  setShowUpgradeNudge(true);
+                }, 400);
               }
             } catch {
               setAvailableSpins(0);
-              setTimeout(() => {
-                setShowSpinWheel(false);
-                fetchDashboardData();
-              }, 3000);
+            }
+          }}
+          transactionAmount={1000}
+          userPhone={user?.msisdn || ''}
+          onPrizeWon={async (_prize) => {
+            // Only update the remaining spin count — do NOT close the wheel
+            // or show the nudge here. The user is still reading their prize
+            // details and may need to click "Login to Claim". Let them.
+            try {
+              const res = await apiClient.get('/spin/eligibility');
+              const d = res.data?.data ?? {};
+              setAvailableSpins(d.available_spins ?? 0);
+            } catch {
+              // silently ignore — onClose will re-check
             }
           }}
         />

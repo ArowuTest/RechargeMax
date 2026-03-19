@@ -1088,36 +1088,45 @@ export const EnterpriseHomePage: React.FC = () => {
       {showSpinWheel && availableSpins > 0 && (
         <SpinWheel
           isOpen={showSpinWheel}
-          onClose={() => { setShowSpinWheel(false); setAvailableSpins(0); }}
-          transactionAmount={rechargeSuccess?.amount || 1000}
-          userPhone={userPhone || ''}
-          onPrizeWon={async () => {
-            // Re-check remaining spins from the server after each prize
-            try {
-              const res = await apiClient.get('/spin/eligibility');
-              const d = res.data?.data ?? {};
-              const remaining: number = d.available_spins ?? 0;
-              setAvailableSpins(remaining);
-              if (remaining <= 0) {
-                setTimeout(() => {
-                  setShowSpinWheel(false);
-                  // Show upgrade nudge after the wheel closes
-                  if (d.spins_granted_today > 0 && isAuthenticated) {
+          onClose={async () => {
+            setShowSpinWheel(false);
+            setAvailableSpins(0);
+            // Only check for nudge AFTER the user has closed the wheel themselves —
+            // never interrupt them while they're reading their prize / Login to Claim.
+            if (isAuthenticated) {
+              try {
+                const res = await apiClient.get('/spin/eligibility');
+                const d = res.data?.data ?? {};
+                const remaining: number = d.available_spins ?? 0;
+                if (remaining <= 0 && (d.spins_granted_today ?? 0) > 0) {
+                  setTimeout(() => {
                     setNudgeData({
                       spinsGranted:      d.spins_granted_today  ?? 0,
                       spinsUsed:         d.spins_used_today      ?? 0,
                       nextTierName:      d.next_tier_name,
                       nextTierMinAmount: d.next_tier_min_amount,
-            amountToNextTier: d.amount_to_next_tier,
+                      amountToNextTier:  d.amount_to_next_tier,
                       nextTierSpins:     d.next_tier_spins,
                     });
-                    setTimeout(() => setShowUpgradeNudge(true), 400);
-                  }
-                }, 3000);
+                    setShowUpgradeNudge(true);
+                  }, 400);
+                }
+              } catch {
+                // ignore
               }
+            }
+          }}
+          transactionAmount={rechargeSuccess?.amount || 1000}
+          userPhone={userPhone || ''}
+          onPrizeWon={async () => {
+            // Only silently update the remaining count — let the user stay on
+            // their prize screen for as long as they want.
+            try {
+              const res = await apiClient.get('/spin/eligibility');
+              const d = res.data?.data ?? {};
+              setAvailableSpins(d.available_spins ?? 0);
             } catch {
-              setAvailableSpins(0);
-              setTimeout(() => setShowSpinWheel(false), 3000);
+              // ignore — onClose will re-check
             }
           }}
         />

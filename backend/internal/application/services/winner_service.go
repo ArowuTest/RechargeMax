@@ -1185,24 +1185,34 @@ func (s *WinnerService) ClaimSpinPrize(ctx context.Context, prizeID uuid.UUID, m
 		return nil
 	}
 	
-	// For non-cash prizes (airtime, data, points) in MANUAL mode
+	// For non-cash prizes (airtime, data, points) in MANUAL mode.
+	// Also allow claiming if mode is AUTO but the prize is still PENDING — this happens
+	// when the spin was created before prize_fulfillment_config was seeded and the GORM
+	// column default ("AUTO") was persisted instead of the intended "MANUAL" value.
 	if spinPrize.PrizeType == "AIRTIME" || spinPrize.PrizeType == "DATA" {
-		// Check if this is in manual fulfillment mode
-		if spinPrize.FulfillmentMode != "MANUAL" {
+		isManual := spinPrize.FulfillmentMode == "MANUAL"
+		isAutoButPending := spinPrize.FulfillmentMode == "AUTO" && spinPrize.ClaimStatus == "PENDING"
+
+		if !isManual && !isAutoButPending {
 			return fmt.Errorf("this prize was auto-provisioned and does not require claiming")
 		}
-		
+
 		// Check if user can retry (for failed auto-provision)
 		if !spinPrize.CanRetry {
 			return fmt.Errorf("this prize cannot be claimed - provisioning failed permanently")
 		}
-		
+
+		// Correct the fulfillment mode to MANUAL if it was stuck as AUTO+PENDING
+		if isAutoButPending {
+			spinPrize.FulfillmentMode = "MANUAL"
+		}
+
 		// Trigger manual fulfillment
 		err = s.triggerManualFulfillment(ctx, spinPrize)
 		if err != nil {
 			return fmt.Errorf("failed to provision prize: %w", err)
 		}
-		
+
 		return nil
 	}
 	

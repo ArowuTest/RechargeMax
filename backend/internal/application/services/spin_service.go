@@ -254,8 +254,13 @@ if err != nil || len(prizes) == 0 {
 			return fmt.Errorf("failed to get fulfillment config: %w", err)
 		}
 
-		// Set fulfillment mode on spin result
+		// Set fulfillment mode on spin result and persist it immediately.
+		// tx.Create above used the GORM column default ("AUTO"); we must explicitly
+		// save the configured mode so ClaimSpinPrize can read the correct value later.
 		spin.FulfillmentMode = config.FulfillmentMode
+		if err := tx.Model(spin).Update("fulfillment_mode", spin.FulfillmentMode).Error; err != nil {
+			return fmt.Errorf("failed to save fulfillment mode: %w", err)
+		}
 
 		// Auto-provision if mode is AUTO and prize is airtime/data (PERF-002).
 		// We return PROVISIONING immediately so the HTTP response is fast.

@@ -94,7 +94,16 @@ func (h *WinnerHandler) ClaimPrize(c *gin.Context) {
 
 	// Try to claim as spin prize first
 	spinErr := h.winnerService.ClaimSpinPrize(c.Request.Context(), winnerIDUUID, msisdn, req.AccountNumber, req.AccountName, req.BankName)
-	
+
+	if spinErr != nil {
+		// Log for diagnostics so we can see why spin claim failed before draw fallback
+		errors.Info("ClaimSpinPrize attempt failed (trying draw fallback)", map[string]interface{}{
+			"msisdn":   msisdn,
+			"prize_id": winnerID,
+			"error":    spinErr.Error(),
+		})
+	}
+
 	if spinErr == nil {
 		// Successfully claimed as spin prize
 		errors.Info("Spin prize claimed", map[string]interface{}{

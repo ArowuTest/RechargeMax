@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { formatCurrency } from '@/lib/utils';
-import { Zap, Trophy, ArrowRight, X, RotateCcw } from 'lucide-react';
+import { Zap, Trophy, ArrowRight, X, RotateCcw, Ticket } from 'lucide-react';
 
 interface SpinUpgradeNudgeProps {
   isOpen: boolean;
@@ -68,6 +68,9 @@ export const SpinUpgradeNudge: React.FC<SpinUpgradeNudgeProps> = ({
     : nextTierMinAmount
       ? nextTierMinAmount / 100
       : 0;
+
+  // Calculate draw entries the nudge amount would earn (₦200 = 1 point = 1 entry)
+  const nudgeDrawEntries = nudgeAmountNaira > 0 ? Math.floor(nudgeAmountNaira / 200) : 0;
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
@@ -179,14 +182,38 @@ export const SpinUpgradeNudge: React.FC<SpinUpgradeNudgeProps> = ({
             </div>
           )}
 
+          {/* Prize draw motivation banner */}
+          <div className="rounded-xl bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                <Ticket className="w-4 h-4 text-indigo-600" />
+              </div>
+              <p className="text-sm font-bold text-indigo-900">Boost your daily prize draw entries too!</p>
+            </div>
+            <p className="text-xs text-indigo-700 leading-relaxed">
+              Every ₦200 you recharge earns <span className="font-bold">1 draw entry</span> into the daily jackpot prize draw.
+              {nudgeDrawEntries > 0 && (
+                <> Top up <span className="font-bold">{formatCurrency(nudgeAmountNaira)}</span> more and you'll
+                also earn at least <span className="font-bold">{nudgeDrawEntries} extra draw {nudgeDrawEntries === 1 ? 'entry' : 'entries'}</span> —
+                more entries = better chances of winning big!</>
+              )}
+              {nudgeDrawEntries === 0 && (
+                <> The more you recharge, the more entries you earn and the better your chances of winning the daily jackpot!</>
+              )}
+            </p>
+            <p className="text-xs text-indigo-500 italic">
+              🎯 Higher loyalty tiers earn bonus multiplied entries on every recharge
+            </p>
+          </div>
+
           {/* Recharge tier ladder (quick reference) */}
           <div className="space-y-1.5">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Spin tiers</p>
             {[
-              { name: 'Bronze',   range: '₦1,000 – ₦2,499',  spins: 1, emoji: '🥉' },
-              { name: 'Silver',   range: '₦2,500 – ₦4,999',  spins: 2, emoji: '🥈' },
-              { name: 'Gold',     range: '₦5,000 – ₦9,999',  spins: 3, emoji: '🥇' },
-              { name: 'Platinum', range: '₦10,000+',          spins: 5, emoji: '💎' },
+              { name: 'Bronze',   range: '₦1,000 – ₦2,499',  spins: 1, emoji: '🥉', entries: '5+' },
+              { name: 'Silver',   range: '₦2,500 – ₦4,999',  spins: 2, emoji: '🥈', entries: '12+' },
+              { name: 'Gold',     range: '₦5,000 – ₦9,999',  spins: 3, emoji: '🥇', entries: '25+' },
+              { name: 'Platinum', range: '₦10,000+',          spins: 5, emoji: '💎', entries: '50+' },
             ].map((t) => (
               <div
                 key={t.name}
@@ -197,7 +224,10 @@ export const SpinUpgradeNudge: React.FC<SpinUpgradeNudgeProps> = ({
                 }`}
               >
                 <span>{t.emoji} {t.name} <span className="text-gray-400 font-normal">({t.range})</span></span>
-                <span className="font-bold text-gray-700">{t.spins} spin{t.spins > 1 ? 's' : ''}</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-indigo-500 font-medium text-[10px]">{t.entries} entries</span>
+                  <span className="font-bold text-gray-700">{t.spins} spin{t.spins > 1 ? 's' : ''}</span>
+                </div>
               </div>
             ))}
           </div>

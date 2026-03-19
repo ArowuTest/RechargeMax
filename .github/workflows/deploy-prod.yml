@@ -74,10 +74,13 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Run migrations on production database
-        if: ${{ secrets.PROD_DATABASE_URL != '' }}
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
         run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::warning::PROD_DATABASE_URL not set – skipping migrations."
+            exit 0
+          fi
           echo "▶ Applying migrations to production..."
           for f in $(ls database/migrations/*.sql | sort); do
             echo "  → $(basename $f)"

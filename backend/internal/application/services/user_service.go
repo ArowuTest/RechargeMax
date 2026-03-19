@@ -3,6 +3,9 @@ package services
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -541,6 +544,28 @@ type PrizeResponse struct {
 }
 
 // GetUserPrizes retrieves all prizes won by a user
+// sanitizePrizeValue returns the correct naira value for a prize.
+// When the stored prize_value kobo is corrupt (pre-seed anomaly, value > ₦1M),
+// it falls back to parsing the naira amount from the prize_name string,
+// e.g. "₦200 Cash" → 200.00, "₦1,000 Cash" → 1000.00, "1GB Data" → 0.00
+func sanitizePrizeValue(prizeValueKobo int64, prizeName string) float64 {
+	const maxSaneKobo = int64(100_000_000) // ₦1 million in kobo
+	if prizeValueKobo <= maxSaneKobo {
+		return float64(prizeValueKobo) / 100.0
+	}
+	// Corrupt value — try to extract naira amount from prize_name
+	// Matches optional ₦ or N, digits, optional comma-separated thousands
+	re := regexp.MustCompile(`[₦N]?([\d,]+)`)
+	matches := re.FindStringSubmatch(prizeName)
+	if len(matches) >= 2 {
+		cleaned := strings.ReplaceAll(matches[1], ",", "")
+		if val, err := strconv.ParseFloat(cleaned, 64); err == nil {
+			return val
+		}
+	}
+	return 0
+}
+
 func (s *UserService) GetUserPrizes(ctx context.Context, msisdn string) ([]PrizeResponse, error) {
 	// Get user
 	user, err := s.userRepo.FindByMSISDN(ctx, msisdn)
@@ -557,13 +582,7 @@ func (s *UserService) GetUserPrizes(ctx context.Context, msisdn string) ([]Prize
 	// Convert to response format
 	var result []PrizeResponse
 	for _, spin := range spins {
-		// Sanity cap: prize_value > ₦1 million (100_000_000 kobo) is almost certainly
-		// a data anomaly from before the wheel_prizes seed migration. Display the
-		// prize_name as-is and show 0.00 so users still see their won prize.
-		prizeValueNaira := float64(spin.PrizeValue) / 100.0
-		if spin.PrizeValue > 100_000_000 {
-			prizeValueNaira = 0
-		}
+		prizeValueNaira := sanitizePrizeValue(spin.PrizeValue, spin.PrizeName)
 		result = append(result, PrizeResponse{
 			ID:          spin.ID,
 			PrizeName:   spin.PrizeName,
@@ -851,16 +870,14 @@ func (s *UserService) getUserPrizes(ctx context.Context, userID uuid.UUID) []Pri
 
 	var result []PrizeItem
 	for _, spin := range spins {
-		// Sanity cap: guard against pre-seed corrupt prize_value data
-		prizeKobo := int64(spin.PrizeValue)
-		if prizeKobo > 100_000_000 {
-			prizeKobo = 0
-		}
+		// Use sanitizePrizeValue to recover correct naira amount from prize_name
+		// when stored prize_value kobo is corrupt (pre-seed data anomaly).
+		prizeNaira := int64(sanitizePrizeValue(spin.PrizeValue, spin.PrizeName))
 		result = append(result, PrizeItem{
 			ID:          spin.ID,
 			PrizeName:   spin.PrizeName,
 			PrizeType:   spin.PrizeType,
-			PrizeValue:  prizeKobo / 100, // Convert kobo to naira
+			PrizeValue:  prizeNaira,
 			Status:      spin.ClaimStatus,
 			WonAt:       spin.CreatedAt,
 			WonDate:     spin.CreatedAt.Format("2006-01-02 15:04:05"),

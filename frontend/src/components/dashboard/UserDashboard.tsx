@@ -43,6 +43,7 @@ import { formatCurrency, formatDate, getNetworkColor } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
 import { useNavigate } from 'react-router-dom';
 import { SpinWheel } from '@/components/games/SpinWheel';
+import { SpinUpgradeNudge } from '@/components/games/SpinUpgradeNudge';
 import {
   CreditCard,
   Gift,
@@ -155,6 +156,15 @@ export const UserDashboard: React.FC = () => {
   const [showSpinWheel, setShowSpinWheel] = useState(false);
   const [availableSpins, setAvailableSpins] = useState(0);
   const [checkingSpins, setCheckingSpins] = useState(false);
+  // Upgrade nudge state — shown when spins are exhausted instead of the wheel
+  const [showUpgradeNudge, setShowUpgradeNudge] = useState(false);
+  const [nudgeData, setNudgeData] = useState<{
+    spinsGranted: number;
+    spinsUsed: number;
+    nextTierName?: string;
+    nextTierMinAmount?: number;
+    nextTierSpins?: number;
+  } | null>(null);
 
   const fetchDashboardData = useCallback(async () => {
     if (!user?.msisdn) {
@@ -212,17 +222,31 @@ export const UserDashboard: React.FC = () => {
     try {
       setCheckingSpins(true);
       const response = await apiClient.get('/spin/eligibility');
-
       const data = response.data;
 
       if (data.success && data.data.eligible && data.data.available_spins > 0) {
+        // ✅ Spins available — show the wheel
         setAvailableSpins(data.data.available_spins);
-        // Mark that we have shown (or are about to show) the popup this session
         sessionStorage.setItem(sessionKey, '1');
-        // Auto-show spin wheel after a short delay
-        setTimeout(() => {
-          setShowSpinWheel(true);
-        }, 1000);
+        setTimeout(() => setShowSpinWheel(true), 1000);
+
+      } else if (
+        data.success &&
+        !data.data.eligible &&
+        (data.data.spins_granted_today > 0 || data.data.spins_used_today > 0)
+      ) {
+        // ❌ Spins exhausted — show upgrade nudge INSTEAD of wheel
+        // Only if the user actually has recharge history today (spins_granted > 0),
+        // so we don't nag users who just logged in without recharging.
+        sessionStorage.setItem(sessionKey, '1');
+        setNudgeData({
+          spinsGranted:      data.data.spins_granted_today ?? 0,
+          spinsUsed:         data.data.spins_used_today    ?? 0,
+          nextTierName:      data.data.next_tier_name,
+          nextTierMinAmount: data.data.next_tier_min_amount,
+          nextTierSpins:     data.data.next_tier_spins,
+        });
+        setTimeout(() => setShowUpgradeNudge(true), 1000);
       }
     } catch (error) {
       console.error('Failed to check pending spins:', error);
@@ -1096,16 +1120,28 @@ export const UserDashboard: React.FC = () => {
             // single source of truth for spin counts.
             try {
               const res = await apiClient.get('/spin/eligibility');
-              const remaining = res.data?.data?.available_spins ?? 0;
+              const d = res.data?.data ?? {};
+              const remaining: number = d.available_spins ?? 0;
               setAvailableSpins(remaining);
               if (remaining <= 0) {
+                // No more spins — close the wheel after a short delay,
+                // then show the upgrade nudge if they have recharge history today.
                 setTimeout(() => {
                   setShowSpinWheel(false);
                   fetchDashboardData();
+                  if (d.spins_granted_today > 0) {
+                    setNudgeData({
+                      spinsGranted:      d.spins_granted_today ?? 0,
+                      spinsUsed:         d.spins_used_today    ?? 0,
+                      nextTierName:      d.next_tier_name,
+                      nextTierMinAmount: d.next_tier_min_amount,
+                      nextTierSpins:     d.next_tier_spins,
+                    });
+                    setTimeout(() => setShowUpgradeNudge(true), 400);
+                  }
                 }, 3000);
               }
             } catch {
-              // Fallback: close wheel and refresh
               setAvailableSpins(0);
               setTimeout(() => {
                 setShowSpinWheel(false);
@@ -1113,6 +1149,22 @@ export const UserDashboard: React.FC = () => {
               }, 3000);
             }
           }}
+        />
+      )}
+
+      {/* Upgrade Nudge Modal — shown when spins are exhausted instead of the wheel */}
+      {showUpgradeNudge && nudgeData && (
+        <SpinUpgradeNudge
+          isOpen={showUpgradeNudge}
+          onClose={() => {
+            setShowUpgradeNudge(false);
+            setNudgeData(null);
+          }}
+          spinsGranted={nudgeData.spinsGranted}
+          spinsUsed={nudgeData.spinsUsed}
+          nextTierName={nudgeData.nextTierName}
+          nextTierMinAmount={nudgeData.nextTierMinAmount}
+          nextTierSpins={nudgeData.nextTierSpins}
         />
       )}
     </div>

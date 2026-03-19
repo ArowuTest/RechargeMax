@@ -35,11 +35,23 @@ type SpinService struct {
 	db              *gorm.DB // Database connection for advisory locks
 }
 
-// SpinEligibilityResponse represents spin eligibility check response
+// SpinEligibilityResponse represents spin eligibility check response.
+//
+// When Eligible=false and the user has already used all their spins for
+// today's recharges, the NextTier* fields are populated so the frontend
+// can display a motivational upgrade nudge:
+//   "Recharge ₦2,500+ in one go to unlock 2 spins (Silver tier)"
 type SpinEligibilityResponse struct {
-Eligible      bool   `json:"eligible"`
-AvailableSpins int64  `json:"available_spins"`
-Message       string `json:"message"`
+	Eligible        bool   `json:"eligible"`
+	AvailableSpins  int64  `json:"available_spins"`
+	SpinsGranted    int64  `json:"spins_granted_today"`  // total spins earned from today's recharges
+	SpinsUsed       int64  `json:"spins_used_today"`     // spins already played today
+	Message         string `json:"message"`
+
+	// Upgrade nudge fields — only set when Eligible=false
+	NextTierName      string `json:"next_tier_name,omitempty"`
+	NextTierMinAmount int64  `json:"next_tier_min_amount,omitempty"` // in kobo
+	NextTierSpins     int    `json:"next_tier_spins,omitempty"`
 }
 
 // SpinResultResponse represents spin result
@@ -160,15 +172,40 @@ func (s *SpinService) CheckEligibility(ctx context.Context, msisdn string) (*Spi
 
 	available := totalGranted - spinsToday
 	if available <= 0 {
-		return &SpinEligibilityResponse{
-			Eligible: false,
-			Message:  fmt.Sprintf("Daily spin limit reached (%d/%d used today). Recharge more to unlock additional spins!", spinsToday, totalGranted),
-		}, nil
+		// Build upgrade nudge: find the next tier above the highest single
+		// recharge the user made today, so the suggestion is actionable.
+		var maxSingleRecharge int64
+		for _, tx := range txRows {
+			if tx.Amount > maxSingleRecharge {
+				maxSingleRecharge = tx.Amount
+			}
+		}
+
+		resp := &SpinEligibilityResponse{
+			Eligible:     false,
+			SpinsGranted: totalGranted,
+			SpinsUsed:    spinsToday,
+			Message:      fmt.Sprintf("Daily spin limit reached (%d/%d used today). Recharge more to unlock additional spins!", spinsToday, totalGranted),
+		}
+
+		// Walk tiers in ascending order to find the next tier above maxSingleRecharge
+		allTiers, _ := tierCalc.GetAllTiersFromDB()
+		for _, t := range allTiers {
+			if t.MinDailyAmount > maxSingleRecharge {
+				resp.NextTierName = t.TierDisplayName
+				resp.NextTierMinAmount = t.MinDailyAmount
+				resp.NextTierSpins = t.SpinsPerDay
+				break
+			}
+		}
+		return resp, nil
 	}
 
 	return &SpinEligibilityResponse{
 		Eligible:       true,
 		AvailableSpins: available,
+		SpinsGranted:   totalGranted,
+		SpinsUsed:      spinsToday,
 		Message:        fmt.Sprintf("You have %d spin(s) available today!", available),
 	}, nil
 }

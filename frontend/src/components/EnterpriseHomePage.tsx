@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { PremiumRechargeForm } from '@/components/recharge/PremiumRechargeForm';
 import { DrawsList } from '@/components/draws/DrawsList';
 import { SpinWheel } from '@/components/games/SpinWheel';
+import { SpinUpgradeNudge } from '@/components/games/SpinUpgradeNudge';
 import { DailySpinProgress } from '@/components/spin/DailySpinProgress';
 import { toast } from '@/components/ui/sonner';
 import { useAuthContext } from '@/contexts/AuthContext';
@@ -104,6 +105,15 @@ export const EnterpriseHomePage: React.FC = () => {
   const [recentWinners, setRecentWinners] = useState<RecentWinner[]>([]);
   const [showSpinWheel, setShowSpinWheel] = useState(false);
   const [availableSpins, setAvailableSpins] = useState(0);
+  // Upgrade nudge — shown when spins are exhausted for logged-in users
+  const [showUpgradeNudge, setShowUpgradeNudge] = useState(false);
+  const [nudgeData, setNudgeData] = useState<{
+    spinsGranted: number;
+    spinsUsed: number;
+    nextTierName?: string;
+    nextTierMinAmount?: number;
+    nextTierSpins?: number;
+  } | null>(null);
   const [userPhone, setUserPhone] = useState('');
   const [statsVisible, setStatsVisible] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState('');
@@ -156,12 +166,23 @@ export const EnterpriseHomePage: React.FC = () => {
       // Logged-in path: confirm remaining spins with the server first
       try {
         const res = await apiClient.get('/spin/eligibility');
-        const spins: number = res.data?.data?.available_spins ?? 0;
+        const d = res.data?.data ?? {};
+        const spins: number = d.available_spins ?? 0;
         if (spins > 0) {
           setAvailableSpins(spins);
           setShowSpinWheel(true);
+        } else if (d.spins_granted_today > 0 || d.spins_used_today > 0) {
+          // Spins exhausted — show upgrade nudge instead of a plain toast
+          setNudgeData({
+            spinsGranted:      d.spins_granted_today  ?? 0,
+            spinsUsed:         d.spins_used_today      ?? 0,
+            nextTierName:      d.next_tier_name,
+            nextTierMinAmount: d.next_tier_min_amount,
+            nextTierSpins:     d.next_tier_spins,
+          });
+          setShowUpgradeNudge(true);
         } else {
-          toast('No spins available', { description: res.data?.data?.message ?? 'Recharge ₦1,000+ to unlock a spin.' });
+          toast('No spins available', { description: 'Recharge ₦1,000+ to unlock a spin.' });
         }
       } catch {
         toast.error('Could not check eligibility', { description: 'Please try again shortly.' });
@@ -1072,16 +1093,43 @@ export const EnterpriseHomePage: React.FC = () => {
             // Re-check remaining spins from the server after each prize
             try {
               const res = await apiClient.get('/spin/eligibility');
-              const remaining: number = res.data?.data?.available_spins ?? 0;
+              const d = res.data?.data ?? {};
+              const remaining: number = d.available_spins ?? 0;
               setAvailableSpins(remaining);
               if (remaining <= 0) {
-                setTimeout(() => setShowSpinWheel(false), 3000);
+                setTimeout(() => {
+                  setShowSpinWheel(false);
+                  // Show upgrade nudge after the wheel closes
+                  if (d.spins_granted_today > 0 && isAuthenticated) {
+                    setNudgeData({
+                      spinsGranted:      d.spins_granted_today  ?? 0,
+                      spinsUsed:         d.spins_used_today      ?? 0,
+                      nextTierName:      d.next_tier_name,
+                      nextTierMinAmount: d.next_tier_min_amount,
+                      nextTierSpins:     d.next_tier_spins,
+                    });
+                    setTimeout(() => setShowUpgradeNudge(true), 400);
+                  }
+                }, 3000);
               }
             } catch {
               setAvailableSpins(0);
               setTimeout(() => setShowSpinWheel(false), 3000);
             }
           }}
+        />
+      )}
+
+      {/* ── Spin Upgrade Nudge ───────────────────────────────────── */}
+      {showUpgradeNudge && nudgeData && (
+        <SpinUpgradeNudge
+          isOpen={showUpgradeNudge}
+          onClose={() => { setShowUpgradeNudge(false); setNudgeData(null); }}
+          spinsGranted={nudgeData.spinsGranted}
+          spinsUsed={nudgeData.spinsUsed}
+          nextTierName={nudgeData.nextTierName}
+          nextTierMinAmount={nudgeData.nextTierMinAmount}
+          nextTierSpins={nudgeData.nextTierSpins}
         />
       )}
     </div>

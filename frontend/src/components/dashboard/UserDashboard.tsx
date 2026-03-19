@@ -274,12 +274,12 @@ export const UserDashboard: React.FC = () => {
       const result = await claimPrize(prizeId, claimData);
       if (result.success) {
         toast({
-          title: "Prize Claimed!",
-          description: prizeType === 'CASH' 
-            ? 'Your bank details have been submitted. Admin will process your payment within 24-48 hours.'
+          title: "Claim Submitted! ✅",
+          description: prizeType === 'CASH'
+            ? 'Your bank details have been submitted. Admin will process your payment within 24–48 hours.'
             : prizeType === 'AIRTIME' || prizeType === 'DATA'
-            ? 'Your prize will be credited to your phone shortly. If not received within 24 hours, our team will process it manually.'
-            : 'Prize claimed successfully!',
+            ? 'Your airtime/data claim has been submitted. It will be credited to your phone — check back in a few minutes. If not received within 24 hours, our team will process it manually.'
+            : 'Your claim has been submitted successfully!',
         });
         
         // Reset bank form
@@ -939,6 +939,48 @@ export const UserDashboard: React.FC = () => {
                               </Badge>
                             </div>
                           </div>
+
+                          {/* ── Status chips for non-PENDING states ──────────────── */}
+                          {prize?.status === 'PENDING_ADMIN_REVIEW' && (
+                            <div className="rounded-lg bg-yellow-50 border border-yellow-200 px-4 py-3 flex items-start gap-3">
+                              <span className="text-xl mt-0.5">⏳</span>
+                              <div>
+                                <p className="font-semibold text-yellow-800 text-sm">Submitted — pending admin review</p>
+                                <p className="text-xs text-yellow-700 mt-0.5">
+                                  Your claim has been received. Our team will process it within 24–48 hours and send you a confirmation.
+                                </p>
+                              </div>
+                            </div>
+                          )}
+
+                          {prize?.status === 'CLAIMED' && (
+                            <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 flex items-start gap-3">
+                              <span className="text-xl mt-0.5">✅</span>
+                              <div>
+                                <p className="font-semibold text-green-800 text-sm">Prize delivered</p>
+                                {prize?.claim_reference && (
+                                  <p className="text-xs text-green-700 mt-0.5">Reference: {prize.claim_reference}</p>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {prize?.status === 'APPROVED' && (
+                            <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 flex items-center gap-3">
+                              <span className="text-xl">✔️</span>
+                              <p className="font-semibold text-blue-800 text-sm">Approved — payment will be processed shortly</p>
+                            </div>
+                          )}
+
+                          {prize?.status === 'REJECTED' && (
+                            <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 flex items-start gap-3">
+                              <span className="text-xl mt-0.5">❌</span>
+                              <div>
+                                <p className="font-semibold text-red-800 text-sm">Claim rejected</p>
+                                <p className="text-xs text-red-700 mt-0.5">Please contact support if you believe this is an error.</p>
+                              </div>
+                            </div>
+                          )}
 
                           {/* Claim Button for Unclaimed Prizes */}
                           {prize?.status === 'PENDING' && (

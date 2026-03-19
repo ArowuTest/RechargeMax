@@ -157,42 +157,72 @@ export const EnterpriseHomePage: React.FC = () => {
     return () => clearInterval(id);
   }, [stats.activeDraw]);
 
-  // Verify eligibility with the backend before opening the spin wheel.
-  // For LOGGED-IN users: calls /spin/eligibility (auth-required) to get exact spin count.
-  // For GUEST users: shows the wheel directly — the backend will validate eligibility
-  //   at spin time (via /spin/play). We don't redirect guests to login; they can spin
-  //   freely and will be asked to log in only when they try to CLAIM their prize.
-  const openSpinWheelIfEligible = useCallback(async () => {
+  // openSpinWheelIfEligible — checks eligibility with the server.
+  //
+  // IMPORTANT INTENT: the spin wheel should NEVER auto-popup on a logged-in user
+  // without them explicitly clicking a button.  When this is called automatically
+  // after a recharge, we show a toast with an action button instead of forcing the modal open.
+  //
+  // The only time setShowSpinWheel(true) is called here is:
+  //   a) When the user already clicked an explicit "Spin Now" button (triggerByUser=true), OR
+  //   b) For guest users (no auth) where we have no dashboard banner to rely on.
+  //
+  // Why: even if the server says "you have 3 spins available", interrupting a user
+  // mid-page with a modal popup is jarring, especially right after a recharge.
+  const openSpinWheelIfEligible = useCallback(async (triggeredByUser = false) => {
     if (isAuthenticated) {
-      // Logged-in path: confirm remaining spins with the server first
       try {
         const res = await apiClient.get('/spin/eligibility');
         const d = res.data?.data ?? {};
         const spins: number = d.available_spins ?? 0;
+
         if (spins > 0) {
           setAvailableSpins(spins);
-          setShowSpinWheel(true);
+
+          if (triggeredByUser) {
+            // User explicitly clicked "Spin Now" — open the modal
+            setShowSpinWheel(true);
+          } else {
+            // Called automatically after recharge — show a non-intrusive toast
+            // with a button so the user can choose to spin on their own terms.
+            toast.success(`🎡 You have ${spins} free spin${spins > 1 ? 's' : ''}!`, {
+              description: 'Tap "Spin Now" to play — prizes include airtime, data & cash.',
+              duration: 10000,
+              action: {
+                label: 'Spin Now ⚡',
+                onClick: () => setShowSpinWheel(true),
+              },
+            });
+          }
+
         } else if (d.spins_granted_today > 0 || d.spins_used_today > 0) {
-          // Spins exhausted — show upgrade nudge instead of a plain toast
+          // All spins used today — show upgrade nudge
           setNudgeData({
             spinsGranted:      d.spins_granted_today  ?? 0,
             spinsUsed:         d.spins_used_today      ?? 0,
             nextTierName:      d.next_tier_name,
             nextTierMinAmount: d.next_tier_min_amount,
-            amountToNextTier: d.amount_to_next_tier,
+            amountToNextTier:  d.amount_to_next_tier,
             nextTierSpins:     d.next_tier_spins,
           });
-          setShowUpgradeNudge(true);
+          if (triggeredByUser) {
+            setShowUpgradeNudge(true);
+          }
+          // When auto-triggered after recharge: the recharge success toast already
+          // tells the user about points/entries — no need to immediately nag about tiers.
         } else {
-          toast('No spins available', { description: 'Recharge ₦1,000+ to unlock a spin.' });
+          if (triggeredByUser) {
+            toast('No spins available', { description: 'Recharge ₦1,000+ to unlock a spin.' });
+          }
         }
       } catch {
-        toast.error('Could not check eligibility', { description: 'Please try again shortly.' });
+        if (triggeredByUser) {
+          toast.error('Could not check eligibility', { description: 'Please try again shortly.' });
+        }
       }
     } else {
       // Guest path: show the wheel immediately.
       // /spin/play will validate the qualifying transaction (within 4 hours) server-side.
-      // After spinning, the prize result screen shows a "Log in to claim" button.
       setAvailableSpins(1);
       setShowSpinWheel(true);
     }
@@ -204,7 +234,7 @@ export const EnterpriseHomePage: React.FC = () => {
     fetchPlatformData();
     // After a successful recharge, verify eligibility server-side before showing wheel
     if (result.amount >= 1000) {
-      openSpinWheelIfEligible();
+      openSpinWheelIfEligible(false); // auto-called after form recharge, not user-initiated
     }
   };
 
@@ -285,7 +315,7 @@ export const EnterpriseHomePage: React.FC = () => {
 
                 if (spinEligible) {
                   // Always verify with the backend rather than trusting the frontend flag
-                  setTimeout(() => openSpinWheelIfEligible(), 800);
+                  setTimeout(() => openSpinWheelIfEligible(false), 800); // auto after payment callback
                 }
               } else if (txn.status === 'FAILED') {
                 setRechargeSuccess(null);
@@ -638,7 +668,7 @@ export const EnterpriseHomePage: React.FC = () => {
 
                   {availableSpins > 0 ? (
                     <Button
-                      onClick={() => openSpinWheelIfEligible()}
+                      onClick={() => openSpinWheelIfEligible(true)} // user-initiated click
                       className="w-full bg-white text-purple-700 font-bold hover:bg-yellow-50 shadow-md"
                     >
                       🎰 Spin Now! ({availableSpins} left)

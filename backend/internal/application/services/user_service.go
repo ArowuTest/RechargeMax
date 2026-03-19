@@ -117,15 +117,19 @@ type SubscriptionItem struct {
 
 // PrizeItem represents a prize won by user
 type PrizeItem struct {
-	ID          uuid.UUID `json:"id"`
-	PrizeName   string    `json:"prize_name"`
-	PrizeType   string    `json:"prize_type"`
-	PrizeValue  int64     `json:"prize_value"`
-	Status      string     `json:"status"`
-	WonAt       time.Time  `json:"won_at"`
-	WonDate     string     `json:"won_date"`
-	ClaimedAt   *time.Time `json:"claimed_at,omitempty"`
-	ClaimDate   *string    `json:"claim_date,omitempty"`
+	ID                 uuid.UUID  `json:"id"`
+	PrizeName          string     `json:"prize_name"`
+	PrizeType          string     `json:"prize_type"`
+	PrizeValue         int64      `json:"prize_value"`
+	Status             string     `json:"status"`
+	WonAt              time.Time  `json:"won_at"`
+	WonDate            string     `json:"won_date"`
+	ClaimedAt          *time.Time `json:"claimed_at,omitempty"`
+	ClaimDate          *string    `json:"claim_date,omitempty"`
+	ClaimReference     string     `json:"claim_reference,omitempty"`
+	FulfillmentMode    string     `json:"fulfillment_mode,omitempty"`
+	FulfillmentError   string     `json:"fulfillment_error,omitempty"`
+	FulfillmentAttempts int       `json:"fulfillment_attempts,omitempty"`
 }
 
 // NewUserService creates a new user service
@@ -884,15 +888,19 @@ func (s *UserService) getUserPrizes(ctx context.Context, userID uuid.UUID) []Pri
 		// fall back to the copied kobo value if sane, then regex from prize_name as last resort.
 		prizeNaira := int64(resolvePrizeValueNaira(spin.PrizeValue, spin.PrizeName, spin.Prize))
 		result = append(result, PrizeItem{
-			ID:          spin.ID,
-			PrizeName:   spin.PrizeName,
-			PrizeType:   spin.PrizeType,
-			PrizeValue:  prizeNaira,
-			Status:      spin.ClaimStatus,
-			WonAt:       spin.CreatedAt,
-			WonDate:     spin.CreatedAt.Format("2006-01-02 15:04:05"),
-			ClaimedAt:   spin.ClaimedAt,
-			ClaimDate:   func() *string { if spin.ClaimedAt != nil { s := spin.ClaimedAt.Format("2006-01-02 15:04:05"); return &s }; return nil }(),
+			ID:                  spin.ID,
+			PrizeName:           spin.PrizeName,
+			PrizeType:           spin.PrizeType,
+			PrizeValue:          prizeNaira,
+			Status:              spin.ClaimStatus,
+			WonAt:               spin.CreatedAt,
+			WonDate:             spin.CreatedAt.Format("2006-01-02 15:04:05"),
+			ClaimedAt:           spin.ClaimedAt,
+			ClaimDate:           func() *string { if spin.ClaimedAt != nil { s := spin.ClaimedAt.Format("2006-01-02 15:04:05"); return &s }; return nil }(),
+			ClaimReference:      spin.ClaimReference,
+			FulfillmentMode:     spin.FulfillmentMode,
+			FulfillmentError:    spin.FulfillmentError,
+			FulfillmentAttempts: spin.FulfillmentAttempts,
 		})
 	}
 	return result

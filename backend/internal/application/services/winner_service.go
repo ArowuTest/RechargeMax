@@ -1317,10 +1317,9 @@ func (s *WinnerService) provisionAirtimeManual(ctx context.Context, spinPrize *e
 	log.Printf("📞 [Manual] Provisioning ₦%d airtime to %s on %s network\n",
 		spinPrize.PrizeValue/100, spinPrize.MSISDN, network)
 
-	// IMPORTANT: VTPass expects amount in NAIRA, not kobo.
-	// PrizeValue is stored in kobo (e.g. ₦100 = 10000 kobo), so divide by 100.
-	amountNaira := int(spinPrize.PrizeValue / 100)
-	response, err := s.telecomService.PurchaseAirtime(ctx, network, spinPrize.MSISDN, amountNaira)
+	// PurchaseAirtime expects amountKobo — TelecomServiceIntegrated divides by 100 internally.
+	// Pass PrizeValue (kobo) directly, matching how spin_service.go provisionAirtime works.
+	response, err := s.telecomService.PurchaseAirtime(ctx, network, spinPrize.MSISDN, int(spinPrize.PrizeValue))
 	if err != nil {
 		return fmt.Errorf("VTPass airtime purchase failed: %w", err)
 	}
@@ -1349,11 +1348,9 @@ func (s *WinnerService) provisionDataManual(ctx context.Context, spinPrize *enti
 	
 	logger.Info("📱 [Manual] Provisioning data () to on network", zap.Any("variationCode", variationCode), zap.String("msisdn", spinPrize.MSISDN), zap.Any("network", network))
 	
-	// IMPORTANT: VTPass expects amount in NAIRA, not kobo.
-	// PrizeValue is stored in kobo (e.g. 1GB data prize stored as 50000 kobo).
-	// For data, the variation_code is the authoritative selector; amount is advisory.
-	amountNaira := int(spinPrize.PrizeValue / 100)
-	response, err := s.telecomService.PurchaseData(ctx, network, spinPrize.MSISDN, variationCode, amountNaira)
+	// PurchaseData expects amountKobo — TelecomServiceIntegrated divides by 100 internally.
+	// Pass PrizeValue (kobo) directly, matching how spin_service.go provisionData works.
+	response, err := s.telecomService.PurchaseData(ctx, network, spinPrize.MSISDN, variationCode, int(spinPrize.PrizeValue))
 	if err != nil {
 		return fmt.Errorf("VTPass data purchase failed: %w", err)
 	}

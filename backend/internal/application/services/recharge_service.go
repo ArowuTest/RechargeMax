@@ -1135,11 +1135,9 @@ func (s *RechargeService) createRechargeDrawEntries(ctx context.Context, tx *gor
 // and finalises its status. Called from a background goroutine.
 func (s *RechargeService) requeryVTPassTransaction(ctx context.Context, recharge *entities.Recharge) error {
 	if recharge.ProviderReference == "" {
-		// No provider reference saved — nothing we can requery.
-		logger.Warn("requeryVTPass: no provider_reference, cannot requery",
-			zap.String("transaction_id", recharge.ID.String()),
-		)
-		return nil
+		// Defensive guard — callers should handle the no-ref case before reaching here.
+		// RecoverProcessingTransactions handles this via handleFailedRechargeWithRefund.
+		return fmt.Errorf("requeryVTPass: no provider_reference for transaction %s", recharge.ID)
 	}
 	status, err := s.telecomServiceIntegrated.QueryTransactionStatus(ctx, recharge.ProviderReference)
 	if err != nil {
@@ -1209,17 +1207,32 @@ func (s *RechargeService) UpdateRecharge(ctx context.Context, recharge *entities
 }
 
 // RecoverProcessingTransactions finds all PROCESSING transactions older than 5 minutes
-// and spawns a background requery goroutine for each one.
-// Called by the reconciliation job at startup and on every hourly pass.
+// and attempts to resolve them.
+//
+// Concurrency safety:
+//   - Uses SELECT … FOR UPDATE SKIP LOCKED so multiple server instances or
+//     overlapping job runs each claim a disjoint set of rows — no double-processing.
+//   - Work is dispatched through a bounded worker pool (max 5 concurrent VTPass
+//     calls) so we never hammer the external API with 100 simultaneous requests.
+//
+// Two resolution paths:
+//   a) provider_reference present  → requery VTPass to get final status.
+//   b) provider_reference missing  → transaction was stuck before VTPass was ever
+//      called (crash, timeout before request was sent). Mark FAILED and refund;
+//      the payment was taken but the VTU call never happened.
 func (s *RechargeService) RecoverProcessingTransactions(ctx context.Context) error {
 	cutoff := time.Now().Add(-5 * time.Minute)
 
+	// FOR UPDATE SKIP LOCKED: each instance claims its own rows; overlapping runs
+	// are safe without any external distributed lock.
 	var rows []entities.Recharge
 	if err := s.db.WithContext(ctx).
-		Where("status = 'PROCESSING' AND created_at < ?", cutoff).
-		Order("created_at ASC").
-		Limit(100).
-		Find(&rows).Error; err != nil {
+		Raw(`SELECT * FROM transactions
+		     WHERE status = 'PROCESSING' AND created_at < ?
+		     ORDER BY created_at ASC
+		     LIMIT 50
+		     FOR UPDATE SKIP LOCKED`, cutoff).
+		Scan(&rows).Error; err != nil {
 		return fmt.Errorf("RecoverProcessingTransactions: query: %w", err)
 	}
 
@@ -1228,14 +1241,49 @@ func (s *RechargeService) RecoverProcessingTransactions(ctx context.Context) err
 		return nil
 	}
 
+	withRef  := 0
+	withoutRef := 0
+	for _, r := range rows {
+		if r.ProviderReference == "" { withoutRef++ } else { withRef++ }
+	}
 	logger.Info("RecoverProcessingTransactions: found stuck transactions",
-		zap.Int("count", len(rows)),
+		zap.Int("total",       len(rows)),
+		zap.Int("with_ref",    withRef),
+		zap.Int("without_ref", withoutRef),
 	)
+
+	// Bounded worker pool — at most 5 concurrent external API calls.
+	const maxWorkers = 5
+	sem := make(chan struct{}, maxWorkers)
 
 	for i := range rows {
 		recharge := &rows[i]
+		sem <- struct{}{} // acquire slot
 		go func(r *entities.Recharge) {
+			defer func() { <-sem }() // release slot
 			bgCtx := context.Background()
+
+			if r.ProviderReference == "" {
+				// ── Path B: VTPass was never called ──────────────────────
+				// The transaction was claimed (PROCESSING) but the process
+				// died before the VTPass request was sent.  The customer's
+				// payment was taken but no airtime was delivered.
+				// Mark FAILED and trigger a refund.
+				logger.Warn("RecoverProcessingTransactions: no provider_reference — marking FAILED and refunding",
+					zap.String("transaction_id", r.ID.String()),
+					zap.String("payment_ref",    r.PaymentReference),
+				)
+				if err := s.handleFailedRechargeWithRefund(bgCtx, r,
+					"Transaction stuck in PROCESSING with no VTPass reference — auto-recovered"); err != nil {
+					logger.Error("RecoverProcessingTransactions: refund failed",
+						zap.String("transaction_id", r.ID.String()),
+						zap.Error(err),
+					)
+				}
+				return
+			}
+
+			// ── Path A: requery VTPass ────────────────────────────────────
 			if reqErr := s.requeryVTPassTransaction(bgCtx, r); reqErr != nil {
 				logger.Error("RecoverProcessingTransactions: requery failed",
 					zap.String("transaction_id", r.ID.String()),
@@ -1243,6 +1291,11 @@ func (s *RechargeService) RecoverProcessingTransactions(ctx context.Context) err
 				)
 			}
 		}(recharge)
+	}
+
+	// Wait for all workers to finish before returning.
+	for i := 0; i < maxWorkers; i++ {
+		sem <- struct{}{}
 	}
 
 	return nil

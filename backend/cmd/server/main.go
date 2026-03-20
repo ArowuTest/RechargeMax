@@ -780,5 +780,25 @@ ON CONFLICT (id) DO NOTHING`
 		}
 	}
 
+	// 5. Seed daily_subscription_config (must always have exactly one row)
+	{
+		var cfgCount int64
+		_ = db.Table("daily_subscription_config").Count(&cfgCount)
+		if cfgCount == 0 {
+			sql := `INSERT INTO daily_subscription_config
+			    (id, amount, draw_entries_earned, is_paid, description, terms_and_conditions, created_at, updated_at)
+			VALUES
+			    (uuid_generate_v4(), 20.00, 1, true,
+			     'Daily ₦20 subscription — earn 1 point and 1 draw entry per day',
+			     'Subscription renews automatically every 24 hours. Cancel anytime.',
+			     NOW(), NOW())`
+			if err := db.Exec(sql).Error; err != nil {
+				log.Printf("⚠️  daily_subscription_config seed warning: %v", err)
+			} else {
+				log.Println("  ✅ daily_subscription_config seeded (₦20/day, 1 entry)")
+			}
+		}
+	}
+
 	log.Println("🌱 Seed check complete")
 }

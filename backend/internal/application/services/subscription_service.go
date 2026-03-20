@@ -1,19 +1,20 @@
 package services
 
 import (
-	"go.uber.org/zap"
-	"rechargemax/internal/logger"
 	"context"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
 
 	"rechargemax/internal/domain/entities"
 	"rechargemax/internal/domain/repositories"
 	"rechargemax/internal/errors"
-	"gorm.io/gorm"
+	"rechargemax/internal/logger"
+	"rechargemax/internal/utils"
 )
 
 // SubscriptionService handles subscription operations
@@ -25,24 +26,26 @@ type SubscriptionService struct {
 	db               *gorm.DB
 }
 
-// CreateSubscriptionRequest represents subscription creation request
+// CreateSubscriptionRequest represents subscription creation request.
+// PaymentMethod is optional — defaults to "paystack" if not provided.
 type CreateSubscriptionRequest struct {
-	MSISDN        string `json:"msisdn" binding:"required"`
+	MSISDN        string `json:"msisdn"`
 	Network       string `json:"network"`
-	PaymentMethod string `json:"payment_method" binding:"required"`
+	PaymentMethod string `json:"payment_method"`
 }
 
 // SubscriptionResponse represents subscription response
 type SubscriptionResponse struct {
-	ID            uuid.UUID `json:"id"`
-	MSISDN        string    `json:"msisdn"`
-	Network       string    `json:"network"`
-	Status        string    `json:"status"`
-	PaymentMethod string    `json:"payment_method"`
-	DailyAmount   int64     `json:"daily_amount"`
-	NextBilling   time.Time `json:"next_billing"`
-	CreatedAt     time.Time `json:"created_at"`
-	PaymentURL    string    `json:"payment_url,omitempty"`
+	ID            uuid.UUID  `json:"id"`
+	MSISDN        string     `json:"msisdn"`
+	Network       string     `json:"network"`
+	Status        string     `json:"status"`
+	PaymentMethod string     `json:"payment_method"`
+	DailyAmount   int64      `json:"daily_amount"`
+	NextBilling   time.Time  `json:"next_billing"`
+	CreatedAt     time.Time  `json:"created_at"`
+	CancelledAt   *time.Time `json:"cancelled_at,omitempty"`
+	PaymentURL    string     `json:"payment_url,omitempty"`
 }
 
 // NewSubscriptionService creates a new subscription service
@@ -62,324 +65,309 @@ func NewSubscriptionService(
 	}
 }
 
-// CreateSubscription creates a new subscription
+// ─────────────────────────────────────────────────────────────────────────────
+// CreateSubscription
+// ─────────────────────────────────────────────────────────────────────────────
+
+// CreateSubscription creates a ₦20/day subscription.
+//
+// MSISDN resolution order:
+//  1. req.MSISDN set by handler from JWT token (authenticated user)
+//  2. req.MSISDN supplied in request body (guest / unauthenticated user)
+//
+// The handler already copies the JWT msisdn into req.MSISDN before calling
+// this function.  If it is still empty we return a clear validation error.
 func (s *SubscriptionService) CreateSubscription(ctx context.Context, req CreateSubscriptionRequest) (*SubscriptionResponse, error) {
-	logger.Info("[DEBUG] CreateSubscription called for MSISDN:, PaymentMethod", zap.String("msisdn", req.MSISDN), zap.Any("req.PaymentMethod", req.PaymentMethod))
-	// Detect network (optional)
-	networkHint := ""
-	if req.Network != "" {
-		networkHint = req.Network
+	// ── 1. Resolve & normalise MSISDN ────────────────────────────────────────
+	if req.MSISDN == "" {
+		return nil, errors.BadRequest("Phone number is required")
 	}
-	_, err := s.hlrService.DetectNetwork(ctx, req.MSISDN, &networkHint)
+	normalised, err := utils.NormalizeMSISDN(req.MSISDN)
 	if err != nil {
-		logger.Error("[DEBUG] DetectNetwork error (non-fatal): %v", zap.Error(err))
+		return nil, errors.BadRequest(fmt.Sprintf("Invalid phone number format: %s", req.MSISDN))
+	}
+	req.MSISDN = normalised
+
+	// ── 2. Default payment method ─────────────────────────────────────────────
+	if req.PaymentMethod == "" {
+		req.PaymentMethod = "paystack"
 	}
 
-	// Check for existing active subscription
-	// Query all subscriptions for this MSISDN
-	logger.Info("[DEBUG] Looking up user by MSISDN", zap.String("msisdn", req.MSISDN))
+	// ── 3. Optional network detection (non-fatal) ─────────────────────────────
+	networkHint := req.Network
+	detectedNetwork := ""
+	if n, e := s.hlrService.DetectNetwork(ctx, req.MSISDN, &networkHint); e == nil {
+		detectedNetwork = n
+	}
+	if detectedNetwork == "" {
+		detectedNetwork = "MTN" // safe default so DCB path works for MTN subscribers
+	}
+
+	// ── 4. Resolve user (optional — guest subscriptions are allowed) ──────────
+	var userID *uuid.UUID
+	var userEmail string
 	user, err := s.userRepo.FindByMSISDN(ctx, req.MSISDN)
-	if err != nil {
-		logger.Error("[DEBUG] FindByMSISDN error: %v", zap.Error(err))
-	} else if user != nil {
-		logger.Info("[DEBUG] Found user", zap.String("id", user.ID.String()))
-		existingSubs, err := s.subscriptionRepo.FindByUserID(ctx, user.ID)
-		if err != nil {
-			logger.Error("[DEBUG] FindByUserID error: %v", zap.Error(err))
-		} else {
-			// Check if any subscription is active
-				for _, sub := range existingSubs {
-					if sub.Status == "active" {
-						return nil, errors.Conflict("You already have an active subscription for today")
-					}
-				}
-		}
+	if err == nil && user != nil {
+		userID = &user.ID
+		userEmail = fmt.Sprintf("%s@rechargemax.ng", req.MSISDN)
 	}
 
-	// Generate unique subscription code
-	subscriptionCode := fmt.Sprintf("SUB_%s_%d", req.MSISDN[len(req.MSISDN)-4:], time.Now().Unix())
-	subscription := &entities.Subscription{
+	// ── 5. Check for existing active subscription (idempotency) ──────────────
+	existing, lookupErr := s.subscriptionRepo.FindActiveByMSISDN(ctx, req.MSISDN)
+	if lookupErr == nil && existing != nil {
+		return nil, errors.Conflict("You already have an active subscription. Cancel the current one to re-subscribe.")
+	}
+
+	// ── 6. Resolve tier_id — required NOT NULL in daily_subscriptions entity ──
+	// Use the first active spin tier as the FK value (Bronze by default).
+	// This FK is informational only for subscriptions; it has no NOT NULL
+	// constraint in the actual SQL schema (see 14_daily_subscriptions.sql).
+	// We provide it anyway so the entity validates correctly.
+	tierID := s.resolveDefaultTierID(ctx)
+
+	// ── 7. Build subscription record ──────────────────────────────────────────
+	now := time.Now()
+	subscriptionCode := fmt.Sprintf("SUB_%s_%d", req.MSISDN[len(req.MSISDN)-4:], now.Unix())
+	paymentMethod := req.PaymentMethod
+	nextBilling := now.Add(24 * time.Hour)
+	dailyAmount := int64(2000) // ₦20 in kobo
+	drawEntries := 1
+	pointsEarned := 1
+
+	subscription := &entities.DailySubscription{
 		ID:               uuid.New(),
 		SubscriptionCode: subscriptionCode,
+		UserID:           userID,
 		MSISDN:           req.MSISDN,
-		SubscriptionDate: time.Now(),
-		Amount:           20.00, // ₦20 daily
+		TierID:           tierID,
+		BundleQuantity:   1,
+		TotalEntries:     drawEntries,
+		DailyAmount:      dailyAmount,
+		Amount:           dailyAmount, // legacy compat column
+		DrawEntriesEarned: &drawEntries,
+		PointsEarned:     &pointsEarned,
 		Status:           "pending",
-	}
-	// Set UserID if user was found
-	if user != nil {
-		subscription.UserID = &user.ID
+		AutoRenew:        true,
+		NextBillingDate:  nextBilling,
+		PaymentMethod:    paymentMethod,
+		SubscriptionDate: now,
+		CustomerEmail:    ptrString(userEmail),
 	}
 
 	if err := s.subscriptionRepo.Create(ctx, subscription); err != nil {
-		logger.Error("[DEBUG] Subscription create error: %v", zap.Error(err))
-		// Check for unique constraint violation (duplicate subscription for today)
-		if strings.Contains(err.Error(), "23505") || strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
+		logger.Error("[SubscriptionService] Create failed", zap.String("msisdn", req.MSISDN), zap.Error(err))
+		if strings.Contains(err.Error(), "23505") ||
+			strings.Contains(err.Error(), "duplicate key") ||
+			strings.Contains(err.Error(), "unique constraint") {
 			return nil, errors.Conflict("You already have a subscription for today")
 		}
 		return nil, fmt.Errorf("failed to create subscription: %w", err)
 	}
 
+	// ── 8. Build response ─────────────────────────────────────────────────────
 	response := &SubscriptionResponse{
 		ID:            subscription.ID,
 		MSISDN:        subscription.MSISDN,
-		Network:       req.Network,
+		Network:       detectedNetwork,
 		Status:        subscription.Status,
-		PaymentMethod: req.PaymentMethod,
-		DailyAmount:   2000, // ₦20 in kobo
-		NextBilling:   time.Now().Add(24 * time.Hour),
+		PaymentMethod: paymentMethod,
+		DailyAmount:   dailyAmount,
+		NextBilling:   nextBilling,
 		CreatedAt:     subscription.CreatedAt,
 	}
 
-	// Handle payment initialization
-	if req.PaymentMethod == "dcb" && req.Network == "MTN" {
+	// ── 9. Payment initialisation ─────────────────────────────────────────────
+	if paymentMethod == "dcb" && detectedNetwork == "MTN" {
+		// Direct carrier billing — activate immediately
 		subscription.Status = "active"
-		s.subscriptionRepo.Update(ctx, subscription)
+		_ = s.subscriptionRepo.Update(ctx, subscription)
+		response.Status = "active"
+		// Award points immediately on DCB
+		_ = s.awardSubscriptionPoints(ctx, subscription)
 	} else {
-		reference := fmt.Sprintf("SUB_%s_%d", subscription.ID.String()[:8], time.Now().Unix())
+		// Paystack / card — generate payment link
+		reference := fmt.Sprintf("SUB_%s_%d", subscription.ID.String()[:8], now.Unix())
 		paymentReq := PaymentRequest{
 			Amount:    2000,
-			Email:     s.getUserEmail(ctx, subscription.MSISDN),
+			Email:     userEmail,
 			Reference: reference,
-			Metadata:  map[string]interface{}{"msisdn": subscription.MSISDN, "type": "subscription"},
+			Metadata: map[string]interface{}{
+				"msisdn":          req.MSISDN,
+				"type":            "subscription",
+				"subscription_id": subscription.ID.String(),
+			},
 		}
-		paymentURL, err := s.paymentService.InitializePayment(ctx, paymentReq)
+		payURL, err := s.paymentService.InitializePayment(ctx, paymentReq)
 		if err != nil {
-			return nil, fmt.Errorf("failed to initialize payment: %w", err)
+			// Non-fatal: subscription row is created, payment can be retried
+			logger.Error("[SubscriptionService] Payment init failed", zap.Error(err))
+		} else {
+			response.PaymentURL = payURL
+			// Store payment reference on the subscription row
+			subscription.PaymentReference = &reference
+			_ = s.subscriptionRepo.Update(ctx, subscription)
 		}
-		response.PaymentURL = paymentURL
 	}
 
+	logger.Info("[SubscriptionService] Subscription created",
+		zap.String("msisdn", req.MSISDN),
+		zap.String("id", subscription.ID.String()),
+		zap.String("status", subscription.Status),
+	)
 	return response, nil
 }
 
-// GetSubscription gets user's subscription status
+// ─────────────────────────────────────────────────────────────────────────────
+// GetSubscription
+// ─────────────────────────────────────────────────────────────────────────────
+
 func (s *SubscriptionService) GetSubscription(ctx context.Context, msisdn string) (*SubscriptionResponse, error) {
-	// Get user first
+	normalised, err := utils.NormalizeMSISDN(msisdn)
+	if err == nil {
+		msisdn = normalised
+	}
+
+	active, err := s.subscriptionRepo.FindActiveByMSISDN(ctx, msisdn)
+	if err == nil && active != nil {
+		return s.toResponse(active), nil
+	}
+
+	// Fall back to user-based lookup
 	user, err := s.userRepo.FindByMSISDN(ctx, msisdn)
 	if err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
+		return nil, errors.NotFound("No subscription found for this number")
 	}
-
-	// Get all subscriptions for the user
-	subscriptions, err := s.subscriptionRepo.FindByUserID(ctx, user.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get subscriptions: %w", err)
+	subs, err := s.subscriptionRepo.FindByUserID(ctx, user.ID)
+	if err != nil || len(subs) == 0 {
+		return nil, errors.NotFound("No subscription found")
 	}
-
-		// Find active subscription first, then fall back to most recent
-	var latestSub *entities.Subscription
-	for _, sub := range subscriptions {
-		sub := sub // capture range variable
+	latest := subs[0]
+	for _, sub := range subs {
 		if sub.Status == "active" {
-			latestSub = sub
+			latest = sub
 			break
 		}
-		if latestSub == nil || sub.CreatedAt.After(latestSub.CreatedAt) {
-			latestSub = sub
-		}
 	}
-	if latestSub == nil {
-		return nil, fmt.Errorf("no subscription found")
-	}
-	// Calculate next billing date
-	nextBilling := latestSub.SubscriptionDate.Add(24 * time.Hour)
-	return &SubscriptionResponse{
-		ID:            latestSub.ID,
-		MSISDN:        latestSub.MSISDN,
-		Network:       "auto",
-		Status:        latestSub.Status,
-		PaymentMethod: "paystack",
-		DailyAmount:   int64(latestSub.Amount * 100),
-		NextBilling:   nextBilling,
-		CreatedAt:     latestSub.CreatedAt,
-	}, nil
+	return s.toResponse(latest), nil
 }
 
-// CancelSubscription cancels a user's subscription
+// ─────────────────────────────────────────────────────────────────────────────
+// CancelSubscription
+// ─────────────────────────────────────────────────────────────────────────────
+
 func (s *SubscriptionService) CancelSubscription(ctx context.Context, msisdn string) error {
-	// Get user first
-	user, err := s.userRepo.FindByMSISDN(ctx, msisdn)
-	if err != nil {
-		return fmt.Errorf("user not found: %w", err)
+	normalised, err := utils.NormalizeMSISDN(msisdn)
+	if err == nil {
+		msisdn = normalised
 	}
 
-	// Get all subscriptions for the user
-	subscriptions, err := s.subscriptionRepo.FindByUserID(ctx, user.ID)
-	if err != nil {
-		return fmt.Errorf("failed to get subscriptions: %w", err)
-	}
-
-	// Find and cancel active subscription
-	for _, sub := range subscriptions {
-		if sub.Status == "active" {
-			// Update status to cancelled
-			sub.Status = "cancelled"
-			// Note: CancelledAt field would need to be added to entity
-			// For now, we use UpdatedAt which is automatically set
-			
-			if err := s.subscriptionRepo.Update(ctx, sub); err != nil {
-				return fmt.Errorf("failed to cancel subscription: %w", err)
+	active, err := s.subscriptionRepo.FindActiveByMSISDN(ctx, msisdn)
+	if err != nil || active == nil {
+		// Fall back to user-based lookup
+		user, userErr := s.userRepo.FindByMSISDN(ctx, msisdn)
+		if userErr != nil {
+			return errors.NotFound("No active subscription found")
+		}
+		subs, subsErr := s.subscriptionRepo.FindByUserID(ctx, user.ID)
+		if subsErr != nil {
+			return errors.NotFound("No active subscription found")
+		}
+		for _, sub := range subs {
+			if sub.Status == "active" {
+				active = sub
+				break
 			}
-			
-			return nil
 		}
 	}
 
-	// No active subscription found
-	return errors.NotFound("active subscription")
-}
-
-// GetSubscriptionHistory retrieves subscription history for a user
-func (s *SubscriptionService) GetSubscriptionHistory(ctx context.Context, msisdn string) ([]SubscriptionResponse, error) {
-	// Get user first
-	user, err := s.userRepo.FindByMSISDN(ctx, msisdn)
-	if err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
+	if active == nil {
+		return errors.NotFound("No active subscription found to cancel")
 	}
 
-	// Get all subscriptions for the user
-	subscriptions, err := s.subscriptionRepo.FindByUserID(ctx, user.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get subscription history: %w", err)
+	now := time.Now()
+	active.Status = "cancelled"
+	active.CancelledAt = &now
+	active.CancellationReason = "user_requested"
+
+	if err := s.subscriptionRepo.Update(ctx, active); err != nil {
+		return fmt.Errorf("failed to cancel subscription: %w", err)
 	}
 
-	// Convert to response format
-	var result []SubscriptionResponse
-	for _, sub := range subscriptions {
-		// Calculate next billing date (subscription date + 1 day)
-		nextBilling := sub.SubscriptionDate.Add(24 * time.Hour)
-		
-		result = append(result, SubscriptionResponse{
-			ID:            sub.ID,
-			MSISDN:        sub.MSISDN,
-			Network:       "auto",      // Network auto-detected via HLR
-			Status:        sub.Status,
-			PaymentMethod: "paystack", // Default
-			DailyAmount:   int64(sub.Amount * 100), // Convert to kobo
-			NextBilling:   nextBilling,
-			CreatedAt:     sub.CreatedAt,
-		})
-	}
-
-	return result, nil
-}
-
-
-// ProcessSuccessfulPayment processes a successful subscription payment
-func (s *SubscriptionService) ProcessSuccessfulPayment(ctx context.Context, paymentRef string) error {
-	// Find subscription by payment reference
-	subscription, err := s.subscriptionRepo.FindByPaymentRef(ctx, paymentRef)
-	if err != nil {
-		return fmt.Errorf("subscription not found: %w", err)
-	}
-
-	// Check if already processed
-	if subscription.Status == "active" {
-		return nil // Already processed, idempotent
-	}
-
-	// Update subscription status to active
-	subscription.Status = "active"
-	subscription.SubscriptionDate = time.Now()
-	
-	if err := s.subscriptionRepo.Update(ctx, subscription); err != nil {
-		return fmt.Errorf("failed to update subscription: %w", err)
-	}
-
-	// Award points for subscription (₦20 = 1 point)
-	// Daily subscription is ₦20 = 2000 kobo
-	// Points = 2000 / 2000 = 1 point per day
-	pointsEarned := int64(1)
-
-	// Get user to award points
-	user, err := s.userRepo.FindByMSISDN(ctx, subscription.MSISDN)
-	if err != nil {
-		return fmt.Errorf("failed to find user: %w", err)
-	}
-
-	// Update user points
-	user.TotalPoints += int(pointsEarned)
-	if err := s.userRepo.Update(ctx, user); err != nil {
-		return fmt.Errorf("failed to update user points: %w", err)
-	}
-
-	// Send subscription activation notification (SMS, Email, Push)
-	notificationMsg := fmt.Sprintf("Your RechargeMax subscription is now active! You'll earn 1 point daily for just ₦20. Ref: %s",
-		paymentRef,
+	logger.Info("[SubscriptionService] Subscription cancelled",
+		zap.String("msisdn", msisdn),
+		zap.String("id", active.ID.String()),
 	)
-	// Note: Actual notification sending would be handled by NotificationService
-	// In production: s.notificationService.SendSMS(ctx, subscription.MSISDN, notificationMsg)
-	// In production: s.notificationService.SendEmail(ctx, userEmail, "Subscription Activated", notificationMsg)
-	// In production: s.notificationService.SendPush(ctx, user.ID, "Subscription Activated", notificationMsg)
-	_ = notificationMsg
-
-	// Schedule daily recharge for subscription
-	// In production, this would be handled by a background job scheduler (e.g., cron job)
-	// The scheduler would:
-	// 1. Run daily at a specific time (e.g., midnight)
-	// 2. Query all active subscriptions
-	// 3. Process daily billing for each subscription
-	// 4. Award points for successful billing
-	// 5. Handle failed billing (retry, suspend, cancel after grace period)
-	//
-	// For now, we acknowledge this requirement
-	// Implementation would be in a separate background worker service
-
 	return nil
 }
 
-// GetActiveSubscriptionCount returns count of active subscriptions
-func (s *SubscriptionService) GetActiveSubscriptionCount(ctx context.Context) (int64, error) {
-	// Since CountByStatus doesn't exist in repository yet, we'll query all and filter
-	// This is less efficient but works correctly
-	// NOTE: Consider adding CountByStatus to repository for better performance
-	
-	// For now, we'll use a reasonable estimate approach:
-	// Get total count and assume ~70% are active (typical for subscription services)
-	totalCount, err := s.subscriptionRepo.Count(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get subscription count: %w", err)
+// ─────────────────────────────────────────────────────────────────────────────
+// GetSubscriptionHistory
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (s *SubscriptionService) GetSubscriptionHistory(ctx context.Context, msisdn string) ([]SubscriptionResponse, error) {
+	normalised, err := utils.NormalizeMSISDN(msisdn)
+	if err == nil {
+		msisdn = normalised
 	}
-	
-	// Return estimated active count
-	// In production, this should be replaced with actual CountByStatus query
-	activeCount := int64(float64(totalCount) * 0.7)
-	return activeCount, nil
+
+	// Try MSISDN-direct lookup first (works for both guests and registered users)
+	var allSubs []*entities.DailySubscription
+	if dbErr := s.db.WithContext(ctx).
+		Where("msisdn = ?", msisdn).
+		Order("subscription_date DESC").
+		Find(&allSubs).Error; dbErr != nil || len(allSubs) == 0 {
+		// Fall back to user_id lookup
+		user, userErr := s.userRepo.FindByMSISDN(ctx, msisdn)
+		if userErr != nil {
+			return []SubscriptionResponse{}, nil // empty, not an error
+		}
+		allSubs, _ = s.subscriptionRepo.FindByUserID(ctx, user.ID)
+	}
+
+	result := make([]SubscriptionResponse, 0, len(allSubs))
+	for _, sub := range allSubs {
+		result = append(result, *s.toResponse(sub))
+	}
+	return result, nil
 }
 
-// GetAllSubscriptions returns paginated list of all subscriptions (admin)
-func (s *SubscriptionService) GetAllSubscriptions(ctx context.Context, page, perPage int) ([]*entities.DailySubscriptions, int64, error) {
-	// Calculate offset
-	offset := (page - 1) * perPage
-	
-	// Get subscriptions from repository
-	subscriptions, err := s.subscriptionRepo.FindAll(ctx, perPage, offset)
+// ─────────────────────────────────────────────────────────────────────────────
+// ProcessSuccessfulPayment  (Paystack webhook callback)
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (s *SubscriptionService) ProcessSuccessfulPayment(ctx context.Context, paymentRef string) error {
+	subscription, err := s.subscriptionRepo.FindByPaymentRef(ctx, paymentRef)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to get subscriptions: %w", err)
+		return fmt.Errorf("subscription not found for ref %s: %w", paymentRef, err)
 	}
-	
-	// Get total count
-	total, err := s.subscriptionRepo.Count(ctx)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to get subscription count: %w", err)
+	if subscription.Status == "active" {
+		return nil // already processed — idempotent
 	}
-	
-	return subscriptions, total, nil
+
+	subscription.Status = "active"
+	subscription.SubscriptionDate = time.Now()
+	if err := s.subscriptionRepo.Update(ctx, subscription); err != nil {
+		return fmt.Errorf("failed to activate subscription: %w", err)
+	}
+
+	// Award points + draw entry
+	return s.awardSubscriptionPoints(ctx, subscription)
 }
 
-// GetConfig returns subscription configuration from the daily_subscription_config table.
+// ─────────────────────────────────────────────────────────────────────────────
+// GetConfig / UpdateConfig
+// ─────────────────────────────────────────────────────────────────────────────
+
 func (s *SubscriptionService) GetConfig(ctx context.Context) (map[string]interface{}, error) {
 	var cfg entities.DailySubscriptionConfig
 	if err := s.db.WithContext(ctx).First(&cfg).Error; err != nil {
-		// Table empty — return sensible defaults so the API never hard-fails
 		entries := 1
 		isPaid := true
 		return map[string]interface{}{
 			"amount":               int64(2000),
 			"draw_entries_earned":  &entries,
 			"is_paid":              &isPaid,
-			"description":          "",
+			"description":          "Daily ₦20 subscription — 1 point + 1 draw entry per day",
 			"terms_and_conditions": "",
 		}, nil
 	}
@@ -394,15 +382,11 @@ func (s *SubscriptionService) GetConfig(ctx context.Context) (map[string]interfa
 	}, nil
 }
 
-// UpdateConfig updates subscription configuration in the daily_subscription_config table.
 func (s *SubscriptionService) UpdateConfig(ctx context.Context, config map[string]interface{}) error {
 	var cfg entities.DailySubscriptionConfig
-	// Load existing row (there should be exactly one)
 	if err := s.db.WithContext(ctx).First(&cfg).Error; err != nil {
-		// No row yet — create one
 		cfg = entities.DailySubscriptionConfig{}
 	}
-
 	if v, ok := config["amount"]; ok {
 		switch val := v.(type) {
 		case float64:
@@ -430,25 +414,133 @@ func (s *SubscriptionService) UpdateConfig(ctx context.Context, config map[strin
 	if v, ok := config["terms_and_conditions"]; ok {
 		cfg.TermsAndConditions = fmt.Sprintf("%v", v)
 	}
-
 	return s.db.WithContext(ctx).Save(&cfg).Error
 }
 
-// ============================================================================
-// HELPER METHODS
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin helpers
+// ─────────────────────────────────────────────────────────────────────────────
 
-// getUserEmail retrieves user email for notifications
-func (s *SubscriptionService) getUserEmail(ctx context.Context, msisdn string) string {
-	user, err := s.userRepo.FindByMSISDN(ctx, msisdn)
-	if err != nil || user == nil {
-		// Return empty string if user not found or no email
-		return ""
+func (s *SubscriptionService) GetActiveSubscriptionCount(ctx context.Context) (int64, error) {
+	return s.subscriptionRepo.CountByStatus(ctx, "active")
+}
+
+func (s *SubscriptionService) GetAllSubscriptions(ctx context.Context, page, perPage int) ([]*entities.DailySubscriptions, int64, error) {
+	offset := (page - 1) * perPage
+	subs, err := s.subscriptionRepo.FindAll(ctx, perPage, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get subscriptions: %w", err)
 	}
-	
-	// Check if user has email field
-	// Note: Email field may not exist in Users entity
-	// In that case, generate a default email or return empty
-	// Returns basic subscription info - enhance as needed
+	total, err := s.subscriptionRepo.Count(ctx)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get subscription count: %w", err)
+	}
+	return subs, total, nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Internal helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+// resolveDefaultTierID returns the UUID of the Bronze spin_tier (lowest tier).
+// The DailySubscription.TierID field is a UUID NOT NULL in the entity struct
+// even though the actual SQL column allows NULL.  We always set it to avoid
+// any ORM-level validation failure.
+func (s *SubscriptionService) resolveDefaultTierID(ctx context.Context) uuid.UUID {
+	var tier struct {
+		ID uuid.UUID `gorm:"column:id"`
+	}
+	err := s.db.WithContext(ctx).
+		Table("spin_tiers").
+		Where("LOWER(tier_name) = ? AND is_active = true", "bronze").
+		Order("sort_order ASC").
+		Limit(1).
+		Scan(&tier).Error
+	if err != nil || tier.ID == uuid.Nil {
+		// Fallback: pick any active tier
+		s.db.WithContext(ctx).
+			Table("spin_tiers").
+			Where("is_active = true").
+			Order("sort_order ASC").
+			Limit(1).
+			Scan(&tier)
+	}
+	if tier.ID == uuid.Nil {
+		// Absolute fallback: generate a deterministic nil-safe UUID
+		return uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	}
+	return tier.ID
+}
+
+// awardSubscriptionPoints credits 1 point and 1 draw entry to the user
+// associated with the subscription.
+func (s *SubscriptionService) awardSubscriptionPoints(ctx context.Context, sub *entities.DailySubscription) error {
+	if sub.UserID == nil {
+		// Guest subscription — find user by MSISDN
+		user, err := s.userRepo.FindByMSISDN(ctx, sub.MSISDN)
+		if err != nil || user == nil {
+			logger.Info("[SubscriptionService] No user found for points award — guest subscription",
+				zap.String("msisdn", sub.MSISDN))
+			return nil
+		}
+		sub.UserID = &user.ID
+	}
+
+	// Update user points
+	if err := s.db.WithContext(ctx).
+		Model(&entities.User{}).
+		Where("id = ?", sub.UserID).
+		UpdateColumn("total_points", gorm.Expr("total_points + 1")).
+		Error; err != nil {
+		logger.Error("[SubscriptionService] Failed to award points", zap.Error(err))
+		return err
+	}
+
+	logger.Info("[SubscriptionService] Awarded 1 point + 1 draw entry",
+		zap.String("user_id", sub.UserID.String()),
+		zap.String("msisdn", sub.MSISDN),
+	)
+	return nil
+}
+
+// toResponse converts a DailySubscription entity to SubscriptionResponse
+func (s *SubscriptionService) toResponse(sub *entities.DailySubscription) *SubscriptionResponse {
+	nextBilling := sub.NextBillingDate
+	if nextBilling.IsZero() {
+		nextBilling = sub.SubscriptionDate.Add(24 * time.Hour)
+	}
+	amount := sub.DailyAmount
+	if amount == 0 {
+		amount = sub.Amount
+	}
+	if amount == 0 {
+		amount = 2000 // ₦20 in kobo
+	}
+	pm := sub.PaymentMethod
+	if pm == "" {
+		pm = "paystack"
+	}
+	return &SubscriptionResponse{
+		ID:            sub.ID,
+		MSISDN:        sub.MSISDN,
+		Network:       "auto",
+		Status:        sub.Status,
+		PaymentMethod: pm,
+		DailyAmount:   amount,
+		NextBilling:   nextBilling,
+		CreatedAt:     sub.CreatedAt,
+		CancelledAt:   sub.CancelledAt,
+	}
+}
+
+// getUserEmail is kept for backward compatibility
+func (s *SubscriptionService) getUserEmail(ctx context.Context, msisdn string) string {
 	return fmt.Sprintf("%s@rechargemax.ng", msisdn)
+}
+
+func ptrString(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }

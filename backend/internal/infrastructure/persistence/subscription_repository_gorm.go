@@ -121,7 +121,7 @@ func (r *subscriptionRepositoryGORM) CountByStatus(ctx context.Context, status s
 func (r *subscriptionRepositoryGORM) FindActiveByMSISDN(ctx context.Context, msisdn string) (*entities.DailySubscriptions, error) {
 	var subscription entities.DailySubscriptions
 	err := r.db.WithContext(ctx).
-		Where("msisdn = ? AND status = ?", msisdn, "ACTIVE").
+		Where("msisdn = ? AND LOWER(status) = 'active'", msisdn).
 		Order("created_at DESC").
 		First(&subscription).Error
 	if err != nil {

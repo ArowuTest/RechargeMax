@@ -139,8 +139,28 @@ func registerPublic(v1 *gin.RouterGroup, hdlrs *handlers.Registry, db *gorm.DB) 
 	v1.GET("/platform/statistics", hdlrs.Platform.GetStatistics)
 	v1.GET("/winners/recent",       hdlrs.Platform.GetRecentWinners)
 
-	// Subscription pricing (public — shown before sign-up)
+	// Subscription — public & guest-accessible
+	// Config is always public (pricing display before sign-up).
+	// Create / status / cancel / history use OptionalAuth: if a JWT is present the
+	// user's MSISDN is taken from the token; otherwise the request body MSISDN is used.
 	v1.GET("/subscription/config", hdlrs.Subscription.GetConfig)
+
+	subPublic := v1.Group("/subscription", middleware.OptionalAuthMiddleware())
+	{
+		subPublic.POST("/create",  hdlrs.Subscription.CreateSubscription)
+		subPublic.GET("/status",   hdlrs.Subscription.GetSubscription)
+		subPublic.POST("/cancel",  hdlrs.Subscription.CancelSubscription)
+		subPublic.GET("/history",  hdlrs.Subscription.GetHistory)
+	}
+
+	// /subscriptions/daily/* aliases — frontend api.ts also calls these paths
+	subDailyPublic := v1.Group("/subscriptions/daily", middleware.OptionalAuthMiddleware())
+	{
+		subDailyPublic.POST("",                        hdlrs.Subscription.CreateSubscription)
+		subDailyPublic.GET("/status",                  hdlrs.Subscription.GetSubscription)
+		subDailyPublic.POST("/:subscriptionId/cancel", hdlrs.Subscription.CancelSubscription)
+		subDailyPublic.GET("/history",                 hdlrs.Subscription.GetHistory)
+	}
 
 	// Draws (public browsing)
 	draws := v1.Group("/draws")
@@ -198,21 +218,15 @@ func registerProtected(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *serv
 		recharge.GET("/history",   hdlrs.Recharge.GetHistory)
 	}
 
-	// Subscription management
-	subscription := protected.Group("/subscription")
+	// Subscription routes are registered in registerPublic with OptionalAuth.
+	// The protected versions below remain as aliases so callers with a valid JWT
+	// hitting these paths still work (protected middleware runs first, sets msisdn).
+	subProtected := protected.Group("/subscription")
 	{
-		subscription.POST("/create", hdlrs.Subscription.CreateSubscription)
-		subscription.GET("/status",  hdlrs.Subscription.GetSubscription)
-		subscription.POST("/cancel", hdlrs.Subscription.CancelSubscription)
-		subscription.GET("/history", hdlrs.Subscription.GetHistory)
-	}
-
-	// /subscriptions/daily/* aliases — frontend api.ts calls these paths
-	subscriptionsDaily := protected.Group("/subscriptions/daily")
-	{
-		subscriptionsDaily.POST("",                          hdlrs.Subscription.CreateSubscription)
-		subscriptionsDaily.GET("/status",                    hdlrs.Subscription.GetSubscription)
-		subscriptionsDaily.POST("/:subscriptionId/cancel",   hdlrs.Subscription.CancelSubscription)
+		subProtected.POST("/create", hdlrs.Subscription.CreateSubscription)
+		subProtected.GET("/status",  hdlrs.Subscription.GetSubscription)
+		subProtected.POST("/cancel", hdlrs.Subscription.CancelSubscription)
+		subProtected.GET("/history", hdlrs.Subscription.GetHistory)
 	}
 
 	// Affiliate programme

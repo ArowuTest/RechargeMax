@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 import { getUserDashboard, claimPrize } from '@/lib/api';
 import { apiClient } from '@/lib/api-client';
@@ -45,25 +46,10 @@ import { useNavigate } from 'react-router-dom';
 import { SpinWheel } from '@/components/games/SpinWheel';
 import { SpinUpgradeNudge } from '@/components/games/SpinUpgradeNudge';
 import {
-  CreditCard,
-  Gift,
-  TrendingUp,
-  Calendar,
-  Smartphone,
-  Trophy,
-  User,
-  Loader2,
-  CheckCircle,
-  Clock,
-  AlertCircle,
-  ArrowLeft,
-  DollarSign,
-  Phone,
-  Download,
-  Search,
-  Copy,
-  RefreshCw,
-  Award
+  CreditCard, Gift, TrendingUp, Calendar, Smartphone, Trophy,
+  User, Loader2, CheckCircle, Clock, AlertCircle, ArrowLeft,
+  DollarSign, Phone, Download, Search, Copy, RefreshCw, Award,
+  Zap, Star, ChevronRight, Sparkles, Wallet
 } from 'lucide-react';
 
 interface DashboardData {
@@ -416,775 +402,765 @@ export const UserDashboard: React.FC = () => {
     tx.status?.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
 
+  const TIER_STYLES: Record<string, { badge: string; glow: string; label: string }> = {
+    BRONZE:   { badge: 'tier-bronze',   glow: 'rgba(205,127,50,0.3)',  label: '🥉 Bronze'   },
+    SILVER:   { badge: 'tier-silver',   glow: 'rgba(168,169,173,0.3)', label: '🥈 Silver'   },
+    GOLD:     { badge: 'tier-gold',     glow: 'rgba(255,215,0,0.4)',   label: '🥇 Gold'     },
+    PLATINUM: { badge: 'tier-platinum', glow: 'rgba(229,228,226,0.3)', label: '💎 Platinum' },
+  };
+
+  const tierKey = (dashboardData?.user?.loyalty_tier || 'BRONZE').toUpperCase();
+  const tierStyle = TIER_STYLES[tierKey] ?? TIER_STYLES["BRONZE"]!;
+
+  const greetingHour = new Date().getHours();
+  const greeting = greetingHour < 12 ? 'Good morning' : greetingHour < 17 ? 'Good afternoon' : 'Good evening';
+
+  const TABS = ['overview', 'transactions', 'subscriptions', 'prizes', 'profile'];
+
+  /* stagger animation helper */
+  const fadeUp = (delay = 0) => ({
+    initial: { opacity: 0, y: 16 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.4, delay, ease: [0.16, 1, 0.3, 1] },
+  });
+
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-          <p className="text-gray-600">Welcome back, {fullName}!</p>
+    <div className="min-h-screen" style={{ background: 'linear-gradient(160deg, #f5f3ff 0%, #faf5ff 40%, #fff7ed 100%)' }}>
+      <div className="max-w-screen-xl mx-auto px-4 py-6 space-y-6">
+
+        {/* ── Hero greeting bar ─────────────────────────────────────────── */}
+        <motion.div
+          className="relative overflow-hidden rounded-3xl p-6 text-white shadow-xl"
+          style={{ background: 'linear-gradient(135deg, #1a0b3b 0%, #3b0764 50%, #7c3aed 100%)' }}
+          {...fadeUp(0)}
+        >
+          {/* bg decoration */}
+          <div className="absolute top-0 right-0 w-64 h-64 rounded-full opacity-10"
+               style={{ background: 'radial-gradient(circle, #f59e0b, transparent)', transform: 'translate(30%, -30%)' }} />
+          <div className="absolute bottom-0 left-0 w-48 h-48 rounded-full opacity-10"
+               style={{ background: 'radial-gradient(circle, #a855f7, transparent)', transform: 'translate(-30%, 30%)' }} />
+
+          <div className="relative flex items-start justify-between flex-wrap gap-4">
+            <div className="space-y-1">
+              <p className="text-purple-300 text-sm font-medium">{greeting} 👋</p>
+              <h1 className="text-2xl font-extrabold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                {fullName}
+              </h1>
+              <p className="text-purple-200 text-sm">{dashboardData.user.msisdn}</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <motion.span
+                className={`text-xs font-bold px-3 py-1.5 rounded-full shadow-md ${tierStyle.badge}`}
+                initial={{ scale: 0.7, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ delay: 0.2, type: 'spring', stiffness: 300 }}
+              >
+                {tierStyle.label}
+              </motion.span>
+              <motion.button
+                onClick={fetchDashboardData}
+                className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/80 hover:text-white transition-colors"
+                whileHover={{ scale: 1.1, rotate: 180 }}
+                whileTap={{ scale: 0.9 }}
+                transition={{ duration: 0.3 }}
+              >
+                <RefreshCw className="w-4 h-4" />
+              </motion.button>
+            </div>
+          </div>
+
+          {/* points + progress */}
+          <div className="relative mt-5 pt-4 border-t border-white/10">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-purple-300 text-xs font-semibold uppercase tracking-wider flex items-center gap-1">
+                <Star className="w-3 h-3" /> Loyalty Points
+              </span>
+              <span className="text-yellow-300 font-black text-lg">{(dashboardData.user.total_points || 0).toLocaleString()} pts</span>
+            </div>
+            <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
+              <motion.div
+                className="h-full rounded-full gradient-gold"
+                initial={{ width: 0 }}
+                animate={{ width: `${Math.min(100, ((dashboardData.user.total_points || 0) % 500) / 5)}%` }}
+                transition={{ duration: 1, delay: 0.4, ease: 'easeOut' }}
+              />
+            </div>
+            <p className="text-purple-400 text-xs mt-1">
+              {500 - ((dashboardData.user.total_points || 0) % 500)} pts to next tier milestone
+            </p>
+          </div>
+        </motion.div>
+
+        {/* ── Stat cards ───────────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            {
+              label: 'Total Points',
+              value: (dashboardData.user.total_points || 0).toLocaleString(),
+              sub: tierStyle.label,
+              icon: Award,
+              gradient: 'from-violet-500 to-purple-600',
+              glow: 'rgba(124,58,237,0.25)',
+              delay: 0.05,
+            },
+            {
+              label: 'Total Recharges',
+              value: (dashboardData.stats?.total_recharges || 0).toString(),
+              sub: formatCurrency(dashboardData.summary?.total_amount_recharged || 0) + ' total',
+              icon: Smartphone,
+              gradient: 'from-blue-500 to-cyan-500',
+              glow: 'rgba(59,130,246,0.25)',
+              delay: 0.1,
+            },
+            {
+              label: 'Prizes Won',
+              value: (dashboardData.summary?.total_prizes || 0).toString(),
+              sub: `${dashboardData.summary?.pending_prizes || 0} pending`,
+              icon: Trophy,
+              gradient: 'from-amber-400 to-orange-500',
+              glow: 'rgba(245,158,11,0.25)',
+              delay: 0.15,
+            },
+            {
+              label: 'Subscriptions',
+              value: (dashboardData.summary?.total_subscriptions || 0).toString(),
+              sub: `${dashboardData.summary?.total_subscription_entries || 0} entries`,
+              icon: Calendar,
+              gradient: 'from-emerald-400 to-teal-500',
+              glow: 'rgba(16,185,129,0.25)',
+              delay: 0.2,
+            },
+          ].map(({ label, value, sub, icon: Icon, gradient, glow, delay }) => (
+            <motion.div
+              key={label}
+              className="stat-card relative overflow-hidden rounded-2xl bg-white p-4 shadow-sm border border-gray-100"
+              style={{ boxShadow: `0 4px 20px ${glow}` }}
+              {...fadeUp(delay)}
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide">{label}</p>
+                  <motion.p
+                    className="text-3xl font-black text-gray-900"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: delay + 0.15, duration: 0.4 }}
+                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  >
+                    {value}
+                  </motion.p>
+                  <p className="text-xs text-gray-400">{sub}</p>
+                </div>
+                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md flex-shrink-0`}>
+                  <Icon className="w-5 h-5 text-white" />
+                </div>
+              </div>
+              {/* colour accent bar */}
+              <div className={`absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r ${gradient} opacity-40`} />
+            </motion.div>
+          ))}
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => navigate('/')}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Home
-          </Button>
-          <Button variant="outline" onClick={fetchDashboardData}>
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Refresh
-          </Button>
-        </div>
-      </div>
 
-      {/* Quick Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Points</CardTitle>
-            <Award className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{dashboardData.user.total_points || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              Tier: {dashboardData.user.loyalty_tier}
-            </p>
-          </CardContent>
-        </Card>
+        {/* ── Spin banner ──────────────────────────────────────────────── */}
+        <AnimatePresence>
+          {availableSpins > 0 && (
+            <motion.div
+              className="relative overflow-hidden rounded-2xl p-[2px] shadow-lg"
+              style={{ background: 'linear-gradient(90deg, #7c3aed, #f59e0b, #7c3aed)', backgroundSize: '200% 100%' }}
+              initial={{ opacity: 0, scale: 0.97 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.97 }}
+              transition={{ duration: 0.3 }}
+            >
+              <div className="rounded-[14px] px-5 py-4 flex items-center justify-between gap-4"
+                   style={{ background: 'linear-gradient(135deg, #faf5ff, #fffbeb)' }}>
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <div className="w-12 h-12 rounded-xl gradient-brand flex items-center justify-center">
+                      <Zap className="w-6 h-6 text-white" />
+                    </div>
+                    <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-yellow-400 text-[10px] font-black text-gray-900 flex items-center justify-center">
+                      {availableSpins}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="font-bold text-gray-900 text-sm sm:text-base">
+                      {availableSpins} free spin{availableSpins > 1 ? 's' : ''} waiting!
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Earned from today's recharge — spin to win airtime, data or cash
+                    </p>
+                  </div>
+                </div>
+                <motion.button
+                  onClick={() => setShowSpinWheel(true)}
+                  className="flex-shrink-0 btn-claim px-5 py-2.5 rounded-xl text-sm font-bold"
+                  whileHover={{ scale: 1.04 }}
+                  whileTap={{ scale: 0.97 }}
+                >
+                  Spin Now ⚡
+                </motion.button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Recharges</CardTitle>
-            <Smartphone className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{dashboardData.stats?.total_recharges || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              {formatCurrency(dashboardData.summary?.total_amount_recharged || 0)} total
-            </p>
-          </CardContent>
-        </Card>
+        {/* ── Exhausted spins nudge ─────────────────────────────────── */}
+        {availableSpins === 0 && nudgeData && (nudgeData.spinsGranted > 0 || nudgeData.spinsUsed > 0) && (
+          <motion.div
+            className="rounded-2xl border border-purple-200 bg-gradient-to-r from-purple-50 to-violet-50 px-5 py-4 flex items-center justify-between gap-4"
+            {...fadeUp(0.1)}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center flex-shrink-0">
+                <CheckCircle className="w-5 h-5 text-purple-600" />
+              </div>
+              <div>
+                <p className="font-bold text-purple-900 text-sm">
+                  All {nudgeData.spinsGranted} spin{nudgeData.spinsGranted > 1 ? 's' : ''} used today
+                </p>
+                <p className="text-xs text-purple-600 mt-0.5">
+                  {nudgeData.nextTierName && nudgeData.amountToNextTier
+                    ? `Recharge ₦${Math.ceil(nudgeData.amountToNextTier / 100).toLocaleString()} more to unlock ${nudgeData.nextTierSpins} spins (${nudgeData.nextTierName})`
+                    : 'Come back tomorrow for fresh spins!'}
+                </p>
+              </div>
+            </div>
+            {nudgeData.nextTierName && (
+              <motion.button
+                onClick={() => setShowUpgradeNudge(true)}
+                className="flex-shrink-0 text-xs border border-purple-300 text-purple-700 hover:bg-purple-100 font-bold px-3 py-2 rounded-xl transition-all"
+                whileHover={{ scale: 1.04 }}
+                whileTap={{ scale: 0.97 }}
+              >
+                See how
+              </motion.button>
+            )}
+          </motion.div>
+        )}
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Prizes Won</CardTitle>
-            <Trophy className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{dashboardData.summary?.total_prizes || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              {dashboardData.summary?.pending_prizes || 0} pending
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Subscriptions</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{dashboardData.summary?.total_subscriptions || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              {dashboardData.summary?.total_subscription_entries || 0} entries earned
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Custom Tabs */}
-      <div className="space-y-4">
-        {/* Tab Navigation */}
-        <div className="border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8">
-            {['overview', 'transactions', 'subscriptions', 'prizes', 'profile'].map((tab) => (
+        {/* ── Tab navigation ───────────────────────────────────────────── */}
+        <motion.div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden" {...fadeUp(0.15)}>
+          <div className="flex overflow-x-auto scrollbar-none">
+            {TABS.map((tab, i) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`
-                  whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm
-                  ${activeTab === tab
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }
-                `}
+                className={`relative flex-shrink-0 px-5 py-4 text-sm font-semibold capitalize transition-colors whitespace-nowrap ${
+                  activeTab === tab ? 'text-purple-700' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'
+                }`}
               >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {tab}
+                {activeTab === tab && (
+                  <motion.div
+                    layoutId="tab-indicator"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 gradient-brand rounded-full"
+                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                  />
+                )}
               </button>
             ))}
-          </nav>
-        </div>
+          </div>
+        </motion.div>
 
-        {/* Tab Content */}
-        <div className="mt-4">
-          {/* Overview Tab */}
-          {activeTab === 'overview' && (
-            <div className="space-y-4">
+        {/* ── Tab content ──────────────────────────────────────────────── */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+          >
 
-              {/* ── Spin Banner — shown when spins are available ──────────────── */}
-              {availableSpins > 0 && (
-                <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-yellow-400 via-orange-400 to-pink-500 p-[2px] shadow-lg">
-                  <div className="rounded-[10px] bg-gradient-to-r from-yellow-50 to-orange-50 px-5 py-4 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <span className="text-3xl">🎡</span>
-                      <div>
-                        <p className="font-bold text-gray-900 text-sm sm:text-base">
-                          You have {availableSpins} free spin{availableSpins > 1 ? 's' : ''} waiting!
-                        </p>
-                        <p className="text-xs text-gray-600 mt-0.5">
-                          Earned from today's recharge{availableSpins > 1 ? 's' : ''} — spin to win airtime, data or cash
-                        </p>
+            {/* ════════ OVERVIEW ════════ */}
+            {activeTab === 'overview' && (
+              <div className="space-y-5">
+                <div className="grid gap-5 md:grid-cols-2">
+                  {/* Account summary */}
+                  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-3">
+                    <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                      <User className="w-4 h-4 text-purple-600" /> Account Summary
+                    </h3>
+                    {[
+                      { label: 'Phone', value: dashboardData.user.msisdn },
+                      { label: 'Email', value: dashboardData.user.email || 'Not set' },
+                      { label: 'Points', value: (dashboardData.user.total_points || 0).toLocaleString() },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
+                        <span className="text-sm text-gray-500">{label}</span>
+                        <span className="text-sm font-semibold text-gray-900">{value}</span>
                       </div>
-                    </div>
-                    <button
-                      onClick={() => setShowSpinWheel(true)}
-                      className="flex-shrink-0 bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 text-white font-bold text-sm px-4 py-2.5 rounded-lg shadow transition-all active:scale-95"
-                    >
-                      Spin Now ⚡
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Nudge Banner — shown when spins are exhausted today ───────── */}
-              {availableSpins === 0 && nudgeData && (nudgeData.spinsGranted > 0 || nudgeData.spinsUsed > 0) && (
-                <div className="rounded-xl border border-indigo-200 bg-gradient-to-r from-indigo-50 to-purple-50 px-5 py-4 flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">✅</span>
-                    <div>
-                      <p className="font-bold text-indigo-900 text-sm">
-                        All {nudgeData.spinsGranted} spin{nudgeData.spinsGranted > 1 ? 's' : ''} used today
-                      </p>
-                      <p className="text-xs text-indigo-600 mt-0.5">
-                        {nudgeData.nextTierName && nudgeData.amountToNextTier
-                          ? `Recharge ₦${Math.ceil(nudgeData.amountToNextTier / 100).toLocaleString()} more → unlock ${nudgeData.nextTierSpins} spins (${nudgeData.nextTierName})`
-                          : 'Come back tomorrow for fresh spins!'}
-                      </p>
+                    ))}
+                    <div className="flex justify-between items-center py-2">
+                      <span className="text-sm text-gray-500">Loyalty Tier</span>
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${tierStyle.badge}`}>{tierStyle.label}</span>
                     </div>
                   </div>
-                  {nudgeData.nextTierName && (
-                    <button
-                      onClick={() => setShowUpgradeNudge(true)}
-                      className="flex-shrink-0 text-xs border border-indigo-300 text-indigo-700 hover:bg-indigo-100 font-semibold px-3 py-2 rounded-lg transition-all"
-                    >
-                      See how
-                    </button>
-                  )}
+
+                  {/* Referral program */}
+                  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-3">
+                    <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-amber-500" /> Referral Program
+                    </h3>
+                    <p className="text-xs text-gray-500">Share your code and earn commission when friends recharge</p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <div className="flex-1 bg-purple-50 border border-purple-200 rounded-xl px-4 py-2.5 font-mono text-sm font-bold text-purple-700 tracking-widest">
+                        {dashboardData.user.referral_code || 'N/A'}
+                      </div>
+                      <motion.button
+                        onClick={copyReferralCode}
+                        className="w-10 h-10 rounded-xl gradient-brand flex items-center justify-center text-white flex-shrink-0"
+                        whileHover={{ scale: 1.08 }}
+                        whileTap={{ scale: 0.9 }}
+                      >
+                        <Copy className="w-4 h-4" />
+                      </motion.button>
+                    </div>
+                  </div>
                 </div>
-              )}
-              <div className="grid gap-4 md:grid-cols-2">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Account Summary</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">Phone Number</span>
-                      <span className="font-semibold">{dashboardData.user.msisdn}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">Email</span>
-                      <span className="font-semibold">{dashboardData.user.email || 'Not set'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">Loyalty Tier</span>
-                      <Badge variant="secondary">{dashboardData.user.loyalty_tier}</Badge>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">Total Points</span>
-                      <span className="font-semibold">{dashboardData.user.total_points}</span>
-                    </div>
-                  </CardContent>
-                </Card>
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Referral Program</CardTitle>
-                    <CardDescription>Share your code and earn rewards</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        value={dashboardData.user.referral_code || 'N/A'}
-                        readOnly
-                        className="font-mono"
-                      />
-                      <Button size="icon" onClick={copyReferralCode}>
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <p className="text-sm text-gray-600 mt-2">
-                      Earn commission when friends use your code!
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Recent Activity</CardTitle>
-                </CardHeader>
-                <CardContent>
+                {/* Recent activity */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-bold text-gray-900">Recent Activity</h3>
+                    <button onClick={() => setActiveTab('transactions')} className="text-xs text-purple-600 hover:text-purple-800 font-semibold flex items-center gap-1">
+                      View all <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </div>
                   {dashboardData.recent_transactions && dashboardData.recent_transactions.length > 0 ? (
                     <div className="space-y-2">
-                      {dashboardData.recent_transactions.slice(0, 5).map((tx) => (
-                        <div key={tx.id} className="flex justify-between items-center p-3 border rounded">
+                      {dashboardData.recent_transactions.slice(0, 5).map((tx, i) => (
+                        <motion.div
+                          key={tx.id}
+                          className="flex justify-between items-center p-3 rounded-xl hover:bg-gray-50 transition-colors"
+                          initial={{ opacity: 0, x: -12 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.06, duration: 0.3 }}
+                        >
                           <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${getNetworkColor(tx.network_provider)}`}>
-                              <Phone className="w-5 h-5 text-white" />
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${getNetworkColor(tx.network_provider)}`}>
+                              <Phone className="w-4 h-4 text-white" />
                             </div>
                             <div>
-                              <p className="font-semibold">{tx.network_provider} {tx.recharge_type}</p>
-                              <p className="text-sm text-gray-600">{formatDate(tx.created_at)}</p>
+                              <p className="text-sm font-semibold text-gray-900">{tx.network_provider} {tx.recharge_type}</p>
+                              <p className="text-xs text-gray-400">{formatDate(tx.created_at)}</p>
                             </div>
                           </div>
                           <div className="text-right">
-                            <p className="font-semibold">{formatCurrency(tx.amount)}</p>
-                            <div className="flex items-center gap-2">
-                              <Badge variant={tx.status === 'SUCCESS' ? 'default' : 'secondary'}>
-                                {tx.status}
-                              </Badge>
+                            <p className="text-sm font-bold text-gray-900">{formatCurrency(tx.amount)}</p>
+                            <div className="flex items-center gap-1.5 justify-end">
+                              <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${
+                                tx.status === 'SUCCESS'
+                                  ? 'bg-emerald-100 text-emerald-700'
+                                  : 'bg-gray-100 text-gray-600'
+                              }`}>{tx.status}</span>
                               {tx.points_earned > 0 && (
-                                <span className="text-xs text-green-600">+{tx.points_earned} pts</span>
+                                <span className="text-xs text-amber-600 font-bold">+{tx.points_earned}pts</span>
                               )}
                             </div>
                           </div>
-                        </div>
+                        </motion.div>
                       ))}
                     </div>
                   ) : (
-                    <p className="text-gray-600">No recent transactions</p>
+                    <div className="text-center py-10 space-y-3">
+                      <Smartphone className="w-10 h-10 text-gray-300 mx-auto" />
+                      <p className="text-gray-400 text-sm">No recharges yet</p>
+                      <motion.button
+                        onClick={() => window.location.href = '/recharge'}
+                        className="btn-claim px-5 py-2.5 rounded-xl text-sm font-bold text-white"
+                        whileHover={{ scale: 1.04 }}
+                        whileTap={{ scale: 0.97 }}
+                      >
+                        Recharge Now
+                      </motion.button>
+                    </div>
                   )}
-                </CardContent>
-              </Card>
-            </div>
-          )}
+                </div>
+              </div>
+            )}
 
-          {/* Transactions Tab */}
-          {activeTab === 'transactions' && (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Transaction History</CardTitle>
+            {/* ════════ TRANSACTIONS ════════ */}
+            {activeTab === 'transactions' && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="p-5 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="font-bold text-gray-900">Transaction History</h3>
                   <div className="flex gap-2">
                     <div className="relative">
-                      <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
-                      <Input
-                        placeholder="Search transactions..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-8 w-64"
-                      />
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Input placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9 h-9 w-52 text-sm rounded-xl" />
                     </div>
-                    <Button variant="outline" size="sm">
-                      <Download className="h-4 w-4 mr-2" />
-                      Export
+                    <Button variant="outline" size="sm" className="h-9 rounded-xl gap-1.5">
+                      <Download className="h-3.5 w-3.5" /> Export
                     </Button>
                   </div>
                 </div>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Network</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Points</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredTransactions.length > 0 ? (
-                      filteredTransactions.map((tx) => (
-                        <TableRow key={tx.id}>
-                          <TableCell>{formatDate(tx.created_at)}</TableCell>
-                          <TableCell>
-                            <Badge className={getNetworkColor(tx.network_provider)}>
-                              {tx.network_provider}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>{tx.recharge_type}</TableCell>
-                          <TableCell>{formatCurrency(tx.amount)}</TableCell>
-                          <TableCell>
-                            {tx.points_earned > 0 ? (
-                              <span className="text-green-600">+{tx.points_earned}</span>
-                            ) : (
-                              <span className="text-gray-400">0</span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={tx.status === 'SUCCESS' ? 'default' : 'secondary'}>
-                              {tx.status}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center text-gray-600">
-                          No transactions found
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Subscriptions Tab */}
-          {activeTab === 'subscriptions' && (
-            <div className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-3">
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Total Subscriptions</CardTitle>
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{dashboardData.summary?.total_subscriptions || 0}</div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Total Entries</CardTitle>
-                    <Trophy className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{dashboardData.summary?.total_subscription_entries || 0}</div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Points Earned</CardTitle>
-                    <Award className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{dashboardData.summary?.total_subscription_points || 0}</div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Subscription History</CardTitle>
-                </CardHeader>
-                <CardContent>
+                <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Code</TableHead>
-                        <TableHead>Amount</TableHead>
-                        <TableHead>Entries</TableHead>
-                        <TableHead>Points</TableHead>
-                        <TableHead>Status</TableHead>
+                      <TableRow className="bg-gray-50">
+                        <TableHead className="font-semibold text-xs uppercase tracking-wide">Date</TableHead>
+                        <TableHead className="font-semibold text-xs uppercase tracking-wide">Network</TableHead>
+                        <TableHead className="font-semibold text-xs uppercase tracking-wide">Type</TableHead>
+                        <TableHead className="font-semibold text-xs uppercase tracking-wide">Amount</TableHead>
+                        <TableHead className="font-semibold text-xs uppercase tracking-wide">Points</TableHead>
+                        <TableHead className="font-semibold text-xs uppercase tracking-wide">Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {dashboardData.subscriptions && dashboardData.subscriptions.length > 0 ? (
-                        dashboardData.subscriptions.map((sub) => (
-                          <TableRow key={sub.id}>
-                            <TableCell>{formatDate(sub.transaction_date)}</TableCell>
-                            <TableCell className="font-mono text-sm">{sub.subscription_code}</TableCell>
-                            <TableCell>{formatCurrency(sub.amount)}</TableCell>
-                            <TableCell>{sub.entries}</TableCell>
-                            <TableCell className="text-green-600">+{sub.points_earned}</TableCell>
-                            <TableCell>
-                              <Badge variant={sub.status === 'active' ? 'default' : 'secondary'}>
-                                {sub.status}
-                              </Badge>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      ) : (
-                        <TableRow>
-                          <TableCell colSpan={6} className="text-center text-gray-600">
-                            No subscriptions yet
+                      {filteredTransactions.length > 0 ? filteredTransactions.map((tx) => (
+                        <TableRow key={tx.id} className="hover:bg-purple-50/30 transition-colors">
+                          <TableCell className="text-sm text-gray-600">{formatDate(tx.created_at)}</TableCell>
+                          <TableCell>
+                            <span className={`text-xs font-bold px-2 py-1 rounded-lg ${getNetworkColor(tx.network_provider)} text-white`}>{tx.network_provider}</span>
                           </TableCell>
+                          <TableCell className="text-sm">{tx.recharge_type}</TableCell>
+                          <TableCell className="font-semibold text-sm">{formatCurrency(tx.amount)}</TableCell>
+                          <TableCell>
+                            {tx.points_earned > 0
+                              ? <span className="text-xs font-bold text-amber-600">+{tx.points_earned}</span>
+                              : <span className="text-gray-300">—</span>
+                            }
+                          </TableCell>
+                          <TableCell>
+                            <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                              tx.status === 'SUCCESS' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'
+                            }`}>{tx.status}</span>
+                          </TableCell>
+                        </TableRow>
+                      )) : (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center py-12 text-gray-400">No transactions found</TableCell>
                         </TableRow>
                       )}
                     </TableBody>
                   </Table>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
+            )}
 
-              {/* Quick Subscribe CTA */}
-              <Card className="bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-semibold text-gray-900 text-lg">Add More Entries</h4>
-                      <p className="text-sm text-gray-600">Subscribe for more daily draw entries</p>
+            {/* ════════ SUBSCRIPTIONS ════════ */}
+            {activeTab === 'subscriptions' && (
+              <div className="space-y-5">
+                <div className="grid gap-4 md:grid-cols-3">
+                  {[
+                    { label: 'Total Subscriptions', value: dashboardData.summary?.total_subscriptions || 0, icon: Calendar, color: 'from-blue-500 to-cyan-500' },
+                    { label: 'Total Entries', value: dashboardData.summary?.total_subscription_entries || 0, icon: Trophy, color: 'from-amber-400 to-orange-500' },
+                    { label: 'Points Earned', value: dashboardData.summary?.total_subscription_points || 0, icon: Award, color: 'from-violet-500 to-purple-600' },
+                  ].map(({ label, value, icon: Icon, color }) => (
+                    <div key={label} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex items-center gap-4">
+                      <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${color} flex items-center justify-center flex-shrink-0`}>
+                        <Icon className="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 font-medium">{label}</p>
+                        <p className="text-2xl font-black text-gray-900" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{value}</p>
+                      </div>
                     </div>
-                    <Button 
-                      onClick={() => navigate('/subscription')}
-                      className="bg-blue-600 hover:bg-blue-700"
-                    >
-                      Subscribe
-                    </Button>
+                  ))}
+                </div>
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="p-5 border-b border-gray-100">
+                    <h3 className="font-bold text-gray-900">Subscription History</h3>
                   </div>
-                </CardContent>
-              </Card>
-
-              {/* Benefits Section */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card>
-                  <CardContent className="p-6 text-center">
-                    <CheckCircle className="w-8 h-8 text-green-600 mx-auto mb-2" />
-                    <h4 className="font-semibold mb-1">Guaranteed Entry</h4>
-                    <p className="text-sm text-gray-600">1 draw entry every day</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-6 text-center">
-                    <Trophy className="w-8 h-8 text-yellow-600 mx-auto mb-2" />
-                    <h4 className="font-semibold mb-1">Win Big</h4>
-                    <p className="text-sm text-gray-600">Up to ₦500,000 prizes</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-6 text-center">
-                    <Clock className="w-8 h-8 text-blue-600 mx-auto mb-2" />
-                    <h4 className="font-semibold mb-1">Daily Draws</h4>
-                    <p className="text-sm text-gray-600">Multiple draws every day</p>
-                  </CardContent>
-                </Card>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-gray-50">
+                          <TableHead className="text-xs font-semibold uppercase tracking-wide">Date</TableHead>
+                          <TableHead className="text-xs font-semibold uppercase tracking-wide">Code</TableHead>
+                          <TableHead className="text-xs font-semibold uppercase tracking-wide">Amount</TableHead>
+                          <TableHead className="text-xs font-semibold uppercase tracking-wide">Entries</TableHead>
+                          <TableHead className="text-xs font-semibold uppercase tracking-wide">Points</TableHead>
+                          <TableHead className="text-xs font-semibold uppercase tracking-wide">Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {dashboardData.subscriptions && dashboardData.subscriptions.length > 0
+                          ? dashboardData.subscriptions.map((sub) => (
+                            <TableRow key={sub.id} className="hover:bg-purple-50/30">
+                              <TableCell className="text-sm">{formatDate(sub.transaction_date)}</TableCell>
+                              <TableCell className="font-mono text-xs text-purple-700">{sub.subscription_code}</TableCell>
+                              <TableCell className="font-semibold">{formatCurrency(sub.amount)}</TableCell>
+                              <TableCell>{sub.entries}</TableCell>
+                              <TableCell className="text-amber-600 font-bold">+{sub.points_earned}</TableCell>
+                              <TableCell>
+                                <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                                  sub.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'
+                                }`}>{sub.status}</span>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                          : (
+                            <TableRow>
+                              <TableCell colSpan={6} className="text-center py-12 text-gray-400">No subscriptions yet</TableCell>
+                            </TableRow>
+                          )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+                <div className="rounded-2xl p-6 text-white flex items-center justify-between"
+                     style={{ background: 'linear-gradient(135deg, #7c3aed, #a855f7)' }}>
+                  <div>
+                    <h4 className="font-bold text-lg" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Add More Entries</h4>
+                    <p className="text-purple-200 text-sm mt-0.5">Subscribe for more daily draw entries</p>
+                  </div>
+                  <motion.button
+                    onClick={() => window.location.href = '/subscription'}
+                    className="bg-white text-purple-700 font-bold px-5 py-2.5 rounded-xl text-sm"
+                    whileHover={{ scale: 1.04 }}
+                    whileTap={{ scale: 0.97 }}
+                  >
+                    Subscribe
+                  </motion.button>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Prizes Tab */}
-          {activeTab === 'prizes' && dashboardData && (
-            <div className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-3">
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Total Prizes</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{dashboardData?.summary?.total_prizes || 0}</div>
-                  </CardContent>
-                </Card>
+            {/* ════════ PRIZES ════════ */}
+            {activeTab === 'prizes' && dashboardData && (
+              <div className="space-y-5">
+                <div className="grid gap-4 md:grid-cols-3">
+                  {[
+                    { label: 'Total Prizes', value: dashboardData?.summary?.total_prizes || 0, color: 'from-violet-500 to-purple-600' },
+                    { label: 'Pending', value: dashboardData?.summary?.pending_prizes || 0, color: 'from-amber-400 to-orange-500' },
+                    { label: 'Claimed', value: (dashboardData?.summary?.total_prizes || 0) - (dashboardData?.summary?.pending_prizes || 0), color: 'from-emerald-400 to-teal-500' },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-gray-500 font-medium">{label}</p>
+                        <p className="text-3xl font-black text-gray-900 mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{value}</p>
+                      </div>
+                      <div className={`w-2 h-12 rounded-full bg-gradient-to-b ${color}`} />
+                    </div>
+                  ))}
+                </div>
 
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Pending</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{dashboardData?.summary?.pending_prizes || 0}</div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Claimed</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{(dashboardData?.summary?.total_prizes || 0) - (dashboardData?.summary?.pending_prizes || 0)}</div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Prize History</CardTitle>
-                </CardHeader>
-                <CardContent>
+                <div className="space-y-3">
+                  <h3 className="font-bold text-gray-900 px-1">Prize History</h3>
                   {dashboardData?.prizes && dashboardData.prizes.length > 0 ? (
-                    <div className="space-y-2">
-                      {dashboardData.prizes.map((prize, index) => (
-                        <div key={prize?.id || index} className="border rounded p-4 space-y-3">
+                    dashboardData.prizes.map((prize, index) => (
+                      <motion.div
+                        key={prize?.id || index}
+                        className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.06, duration: 0.3 }}
+                      >
+                        <div className="p-4 space-y-3">
+                          {/* Prize header */}
                           <div className="flex justify-between items-start">
-                            <div className="flex-1">
-                              <p className="font-semibold text-lg">{prize?.prize_name || 'Unknown Prize'}</p>
-                              <p className="text-sm text-gray-600">Won on {prize?.won_date ? formatDate(prize.won_date) : 'N/A'}</p>
-                              {prize?.claim_date && (
-                                <p className="text-sm text-green-600">Claimed on {formatDate(prize.claim_date)}</p>
-                              )}
-                              
-                              {/* Fulfillment Status for Airtime/Data */}
-                              {(prize?.prize_type === 'AIRTIME' || prize?.prize_type === 'DATA') && (
-                                <div className="mt-2 space-y-1">
-                                  {prize?.fulfillment_mode && (
-                                    <p className="text-xs text-gray-500">
-                                      Mode: <span className="font-medium">{prize.fulfillment_mode}</span>
-                                    </p>
-                                  )}
-                                  {(prize?.fulfillment_attempts ?? 0) > 0 && (
-                                    <p className="text-xs text-gray-500">
-                                      Provisioning attempts: <span className="font-medium">{prize.fulfillment_attempts}</span>
-                                    </p>
-                                  )}
-                                  {prize?.fulfillment_error && (
-                                    <p className="text-xs text-red-600 bg-red-50 p-2 rounded">
-                                      ⚠️ {prize.fulfillment_error}
-                                    </p>
-                                  )}
-                                  {prize?.claim_reference && (
-                                    <p className="text-xs text-green-600">
-                                      Ref: {prize.claim_reference}
-                                    </p>
-                                  )}
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
+                                  <Gift className="w-4 h-4 text-white" />
                                 </div>
-                              )}
+                                <p className="font-bold text-gray-900">{prize?.prize_name || 'Unknown Prize'}</p>
+                              </div>
+                              <p className="text-xs text-gray-400 mt-1 ml-10">
+                                Won {prize?.won_date ? formatDate(prize.won_date) : 'N/A'}
+                                {prize?.claim_date && <span className="text-emerald-600"> · Claimed {formatDate(prize.claim_date)}</span>}
+                              </p>
                             </div>
-                            <div className="text-right">
-                              <p className="font-semibold text-lg">{prize?.prize_value ? formatCurrency(prize.prize_value) : 'N/A'}</p>
-                              <Badge variant={prize?.status === 'CLAIMED' ? 'default' : 'secondary'}>
-                                {prize?.status || 'PENDING'}
-                              </Badge>
+                            <div className="text-right flex-shrink-0">
+                              <p className="font-black text-gray-900 text-lg" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                                {prize?.prize_value ? formatCurrency(prize.prize_value) : 'N/A'}
+                              </p>
+                              <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mt-1 ${
+                                prize?.status === 'PENDING'              ? 'bg-amber-100 text-amber-700' :
+                                prize?.status === 'PENDING_ADMIN_REVIEW' ? 'bg-yellow-100 text-yellow-800' :
+                                prize?.status === 'CLAIMED'              ? 'bg-emerald-100 text-emerald-700' :
+                                prize?.status === 'APPROVED'             ? 'bg-blue-100 text-blue-700' :
+                                prize?.status === 'REJECTED'             ? 'bg-red-100 text-red-700' :
+                                'bg-gray-100 text-gray-600'
+                              }`}>{prize?.status || 'PENDING'}</span>
                             </div>
                           </div>
 
-                          {/* ── Status chips for non-PENDING states ──────────────── */}
+                          {/* Fulfillment info for airtime/data */}
+                          {(prize?.prize_type === 'AIRTIME' || prize?.prize_type === 'DATA') && (
+                            <div className="ml-10 space-y-1">
+                              {prize?.fulfillment_mode && (
+                                <p className="text-xs text-gray-400">Mode: <span className="font-medium text-gray-600">{prize.fulfillment_mode}</span></p>
+                              )}
+                              {prize?.claim_reference && (
+                                <p className="text-xs text-emerald-600 font-mono">Ref: {prize.claim_reference}</p>
+                              )}
+                              {prize?.fulfillment_error && (
+                                <p className="text-xs text-red-500 bg-red-50 rounded-lg px-3 py-2">⚠️ {prize.fulfillment_error}</p>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Status chips */}
                           {prize?.status === 'PENDING_ADMIN_REVIEW' && (
-                            <div className="rounded-lg bg-yellow-50 border border-yellow-200 px-4 py-3 flex items-start gap-3">
-                              <span className="text-xl mt-0.5">⏳</span>
+                            <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 flex items-start gap-3">
+                              <Clock className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
                               <div>
-                                <p className="font-semibold text-yellow-800 text-sm">Submitted — pending admin review</p>
-                                <p className="text-xs text-yellow-700 mt-0.5">
-                                  Your claim has been received. Our team will process it within 24–48 hours and send you a confirmation.
-                                </p>
+                                <p className="font-semibold text-amber-800 text-sm">Under admin review</p>
+                                <p className="text-xs text-amber-600 mt-0.5">Your claim is being processed. We'll complete it within 24–48 hours.</p>
                               </div>
                             </div>
                           )}
-
                           {prize?.status === 'CLAIMED' && (
-                            <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 flex items-start gap-3">
-                              <span className="text-xl mt-0.5">✅</span>
-                              <div>
-                                <p className="font-semibold text-green-800 text-sm">Prize delivered</p>
-                                {prize?.claim_reference && (
-                                  <p className="text-xs text-green-700 mt-0.5">Reference: {prize.claim_reference}</p>
-                                )}
-                              </div>
+                            <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 flex items-center gap-3">
+                              <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                              <p className="font-semibold text-emerald-800 text-sm">Prize delivered ✓</p>
                             </div>
                           )}
-
                           {prize?.status === 'APPROVED' && (
-                            <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 flex items-center gap-3">
-                              <span className="text-xl">✔️</span>
-                              <p className="font-semibold text-blue-800 text-sm">Approved — payment will be processed shortly</p>
+                            <div className="rounded-xl bg-blue-50 border border-blue-200 px-4 py-3 flex items-center gap-3">
+                              <CheckCircle className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                              <p className="font-semibold text-blue-800 text-sm">Approved — payment processing shortly</p>
                             </div>
                           )}
-
                           {prize?.status === 'REJECTED' && (
-                            <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 flex items-start gap-3">
-                              <span className="text-xl mt-0.5">❌</span>
+                            <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 flex items-start gap-3">
+                              <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
                               <div>
                                 <p className="font-semibold text-red-800 text-sm">Claim rejected</p>
-                                <p className="text-xs text-red-700 mt-0.5">Please contact support if you believe this is an error.</p>
+                                <p className="text-xs text-red-600 mt-0.5">Contact support if you believe this is an error.</p>
                               </div>
                             </div>
                           )}
 
-                          {/* Claim Button for Unclaimed Prizes */}
-                          {prize?.status === 'PENDING' && (
-                            <div className="space-y-3">
-                              {/* Bank Details Form for Cash Prizes */}
-                              {prize?.prize_type === 'CASH' && showBankForm === prize.id && (
-                                <div className="bg-gray-50 p-4 rounded space-y-3">
-                                  <p className="text-sm font-medium">Enter your bank details to claim this cash prize:</p>
-                                  <div className="grid gap-3 md:grid-cols-2">
-                                    <div>
-                                      <label className="text-sm font-medium">Account Name</label>
-                                      <Input
-                                        value={bankDetails.account_name}
-                                        onChange={(e) => setBankDetails(prev => ({ ...prev, account_name: e.target.value }))}
-                                        placeholder="John Doe"
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="text-sm font-medium">Account Number</label>
-                                      <Input
-                                        value={bankDetails.account_number}
-                                        onChange={(e) => setBankDetails(prev => ({ ...prev, account_number: e.target.value }))}
-                                        placeholder="1234567890"
-                                      />
-                                    </div>
-                                    <div className="md:col-span-2">
-                                      <label className="text-sm font-medium">Bank Name</label>
-                                      <Select
-                                        value={bankDetails.bank_name}
-                                        onValueChange={(val) => {
-                                          const bank = NIGERIAN_BANKS.find((b) => b.name === val);
-                                          setBankDetails(prev => ({
-                                            ...prev,
-                                            bank_name: val,
-                                            bank_code: bank?.code ?? '',
-                                          }));
-                                        }}
-                                      >
-                                        <SelectTrigger>
-                                          <SelectValue placeholder="Select your bank" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          {NIGERIAN_BANKS.map((b) => (
-                                            <SelectItem key={b.code} value={b.name}>
-                                              {b.name} ({b.code})
-                                            </SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
-                                    </div>
-                                  </div>
-                                  <div className="flex gap-2">
-                                    <Button
-                                      onClick={() => handleClaimPrize(prize.id, prize.prize_type)}
-                                      disabled={claimingPrize === prize.id}
-                                    >
-                                      {claimingPrize === prize.id ? (
-                                        <><Loader2 className="w-4 h-4 animate-spin mr-2" />Submitting...</>
-                                      ) : (
-                                        'Submit Claim'
-                                      )}
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      onClick={() => {
-                                        setShowBankForm(null);
-                                        setBankDetails({ account_number: '', account_name: '', bank_name: '', bank_code: '' });
-                                      }}
-                                    >
-                                      Cancel
-                                    </Button>
-                                  </div>
+                          {/* Bank form for cash prizes */}
+                          {prize?.status === 'PENDING' && prize?.prize_type === 'CASH' && showBankForm === prize.id && (
+                            <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 space-y-3">
+                              <p className="text-sm font-semibold text-purple-900">Enter bank details to claim:</p>
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                <div className="space-y-1">
+                                  <label className="text-xs font-semibold text-gray-700">Account Name</label>
+                                  <Input value={bankDetails.account_name} onChange={(e) => setBankDetails(p => ({ ...p, account_name: e.target.value }))} placeholder="John Doe" className="h-9 rounded-xl" />
                                 </div>
-                              )}
-
-                              {/* Claim Button */}
-                              {showBankForm !== prize.id && (
-                                <Button
-                                  onClick={() => handleClaimPrize(prize.id, prize.prize_type || 'OTHER')}
-                                  disabled={claimingPrize === prize.id}
-                                  className="w-full"
-                                >
-                                  {claimingPrize === prize.id ? (
-                                    <><Loader2 className="w-4 h-4 animate-spin mr-2" />Claiming...</>
-                                  ) : (
-                                    <><Gift className="w-4 h-4 mr-2" />Claim Now</>
-                                  )}
+                                <div className="space-y-1">
+                                  <label className="text-xs font-semibold text-gray-700">Account Number</label>
+                                  <Input value={bankDetails.account_number} onChange={(e) => setBankDetails(p => ({ ...p, account_number: e.target.value }))} placeholder="1234567890" className="h-9 rounded-xl" />
+                                </div>
+                                <div className="sm:col-span-2 space-y-1">
+                                  <label className="text-xs font-semibold text-gray-700">Bank</label>
+                                  <Select value={bankDetails.bank_name} onValueChange={(val) => { const bank = NIGERIAN_BANKS.find(b => b.name === val); setBankDetails(p => ({ ...p, bank_name: val, bank_code: bank?.code ?? '' })); }}>
+                                    <SelectTrigger className="h-9 rounded-xl">
+                                      <SelectValue placeholder="Select your bank" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {NIGERIAN_BANKS.map((b) => <SelectItem key={b.code} value={b.name}>{b.name}</SelectItem>)}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button onClick={() => handleClaimPrize(prize.id, prize.prize_type)} disabled={claimingPrize === prize.id} className="btn-claim border-0 flex-1">
+                                  {claimingPrize === prize.id ? <><Loader2 className="w-4 h-4 animate-spin mr-2"/>Submitting…</> : 'Submit Claim'}
                                 </Button>
-                              )}
+                                <Button variant="outline" onClick={() => { setShowBankForm(null); setBankDetails({ account_number: '', account_name: '', bank_name: '', bank_code: '' }); }} className="rounded-xl">Cancel</Button>
+                              </div>
                             </div>
                           )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-gray-600 text-center py-4">No prizes yet. Keep playing to win!</p>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          )}
 
-          {/* Profile Tab */}
-          {activeTab === 'profile' && dashboardData && (
-            <div className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Profile Information</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div>
-                      <label className="text-sm font-medium">First Name</label>
-                      <Input value={dashboardData.user.first_name || ''} readOnly />
+                          {/* Claim button for PENDING prizes */}
+                          {prize?.status === 'PENDING' && showBankForm !== prize.id && (
+                            <motion.button
+                              onClick={() => handleClaimPrize(prize.id, prize.prize_type || 'OTHER')}
+                              disabled={claimingPrize === prize.id}
+                              className="w-full btn-claim py-3 rounded-xl font-bold text-white flex items-center justify-center gap-2 disabled:opacity-60"
+                              whileHover={{ scale: 1.01 }}
+                              whileTap={{ scale: 0.98 }}
+                            >
+                              {claimingPrize === prize.id
+                                ? <><Loader2 className="w-4 h-4 animate-spin"/>Claiming…</>
+                                : <><Gift className="w-4 h-4"/>Claim Now</>
+                              }
+                            </motion.button>
+                          )}
+                        </div>
+                      </motion.div>
+                    ))
+                  ) : (
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 text-center py-16 space-y-4">
+                      <Trophy className="w-12 h-12 text-gray-200 mx-auto" />
+                      <div>
+                        <p className="text-gray-500 font-semibold">No prizes yet</p>
+                        <p className="text-gray-400 text-sm mt-1">Recharge to spin the wheel and win</p>
+                      </div>
+                      <motion.button
+                        onClick={() => window.location.href = '/recharge'}
+                        className="btn-claim px-6 py-3 rounded-xl font-bold text-white text-sm inline-flex items-center gap-2"
+                        whileHover={{ scale: 1.04 }}
+                        whileTap={{ scale: 0.97 }}
+                      >
+                        <Zap className="w-4 h-4" /> Recharge Now
+                      </motion.button>
                     </div>
-                    <div>
-                      <label className="text-sm font-medium">Last Name</label>
-                      <Input value={dashboardData.user.last_name || ''} readOnly />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium">Phone Number</label>
-                      <Input value={dashboardData.user.msisdn} readOnly />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="text-sm font-medium">Email</label>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ════════ PROFILE ════════ */}
+            {activeTab === 'profile' && dashboardData && (
+              <div className="space-y-5">
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-5">
+                  <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                    <User className="w-4 h-4 text-purple-600" /> Profile Information
+                  </h3>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {[
+                      { label: 'First Name', value: dashboardData.user.first_name || '' },
+                      { label: 'Last Name',  value: dashboardData.user.last_name || '' },
+                      { label: 'Phone',      value: dashboardData.user.msisdn },
+                      { label: 'Tier',       value: dashboardData.user.loyalty_tier },
+                      { label: 'Points',     value: dashboardData.user.total_points.toString() },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="space-y-1">
+                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</label>
+                        <Input value={value} readOnly className="h-10 rounded-xl bg-gray-50 border-gray-100 text-sm font-medium" />
+                      </div>
+                    ))}
+                    <div className="space-y-1 sm:col-span-2">
+                      <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Email</label>
                       {editingEmail ? (
                         <div className="flex gap-2">
-                          <Input
-                            value={newEmail}
-                            onChange={(e) => setNewEmail(e.target.value)}
-                            placeholder="Enter your email"
-                            type="email"
-                          />
-                          <Button
-                            onClick={handleUpdateEmail}
-                            disabled={updatingEmail}
-                            size="sm"
-                          >
+                          <Input value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="your@email.com" type="email" className="h-10 rounded-xl" />
+                          <Button onClick={handleUpdateEmail} disabled={updatingEmail} className="btn-claim border-0 h-10 rounded-xl px-4">
                             {updatingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
                           </Button>
-                          <Button
-                            onClick={() => {
-                              setEditingEmail(false);
-                              setNewEmail('');
-                            }}
-                            variant="outline"
-                            size="sm"
-                          >
-                            Cancel
-                          </Button>
+                          <Button variant="outline" onClick={() => { setEditingEmail(false); setNewEmail(''); }} className="h-10 rounded-xl px-4">Cancel</Button>
                         </div>
                       ) : (
                         <div className="flex gap-2">
-                          <Input value={dashboardData.user.email || 'Not set'} readOnly />
-                          <Button
-                            onClick={() => {
-                              setEditingEmail(true);
-                              setNewEmail(dashboardData.user.email || '');
-                            }}
-                            variant="outline"
-                            size="sm"
-                          >
-                            Edit
-                          </Button>
+                          <Input value={dashboardData.user.email || 'Not set'} readOnly className="h-10 rounded-xl bg-gray-50 border-gray-100 text-sm font-medium" />
+                          <Button variant="outline" onClick={() => { setEditingEmail(true); setNewEmail(dashboardData.user.email || ''); }} className="h-10 rounded-xl px-4">Edit</Button>
                         </div>
                       )}
                     </div>
-                    <div>
-                      <label className="text-sm font-medium">Loyalty Tier</label>
-                      <Input value={dashboardData.user.loyalty_tier} readOnly />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium">Total Points</label>
-                      <Input value={dashboardData.user.total_points.toString()} readOnly />
-                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline">Edit Profile</Button>
-                    <Button variant="outline" onClick={logout}>Logout</Button>
+                  <div className="flex gap-3 pt-2">
+                    <Button variant="outline" className="rounded-xl">Edit Profile</Button>
+                    <Button variant="outline" onClick={logout} className="rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50">Logout</Button>
                   </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Referral Code</CardTitle>
-                  <CardDescription>Share this code with friends to earn rewards</CardDescription>
-                </CardHeader>
-                <CardContent>
+                </div>
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-3">
+                  <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-500" /> Referral Code
+                  </h3>
+                  <p className="text-xs text-gray-500">Share this code with friends to earn commission</p>
                   <div className="flex items-center gap-2">
-                    <Input
-                      value={dashboardData.user.referral_code || 'N/A'}
-                      readOnly
-                      className="font-mono text-lg"
-                    />
-                    <Button size="icon" onClick={copyReferralCode}>
-                      <Copy className="h-4 w-4" />
-                    </Button>
+                    <div className="flex-1 bg-purple-50 border border-purple-200 rounded-xl px-4 py-3 font-mono text-base font-bold text-purple-700 tracking-widest">
+                      {dashboardData.user.referral_code || 'N/A'}
+                    </div>
+                    <motion.button onClick={copyReferralCode} className="w-11 h-11 rounded-xl gradient-brand flex items-center justify-center text-white" whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.9 }}>
+                      <Copy className="w-4 h-4" />
+                    </motion.button>
                   </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-        </div>
+                </div>
+              </div>
+            )}
+
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       {/* Spin Wheel Modal */}
@@ -1194,56 +1170,32 @@ export const UserDashboard: React.FC = () => {
           onClose={async () => {
             setShowSpinWheel(false);
             fetchDashboardData();
-            // Check eligibility NOW (after the user has dismissed the wheel themselves)
-            // and show the upgrade nudge if all spins are used up.
             try {
               const res = await apiClient.get('/spin/eligibility');
               const d = res.data?.data ?? {};
               const remaining: number = d.available_spins ?? 0;
               setAvailableSpins(remaining);
               if (remaining <= 0 && (d.spins_granted_today ?? 0) > 0) {
-                // Small delay so the wheel close animation completes first
                 setTimeout(() => {
-                  setNudgeData({
-                    spinsGranted:      d.spins_granted_today  ?? 0,
-                    spinsUsed:         d.spins_used_today      ?? 0,
-                    nextTierName:      d.next_tier_name,
-                    nextTierMinAmount: d.next_tier_min_amount,
-                    amountToNextTier:  d.amount_to_next_tier,
-                    nextTierSpins:     d.next_tier_spins,
-                  });
+                  setNudgeData({ spinsGranted: d.spins_granted_today ?? 0, spinsUsed: d.spins_used_today ?? 0, nextTierName: d.next_tier_name, nextTierMinAmount: d.next_tier_min_amount, amountToNextTier: d.amount_to_next_tier, nextTierSpins: d.next_tier_spins });
                   setShowUpgradeNudge(true);
                 }, 400);
               }
-            } catch {
-              setAvailableSpins(0);
-            }
+            } catch { setAvailableSpins(0); }
           }}
           transactionAmount={1000}
           userPhone={user?.msisdn || ''}
           onPrizeWon={async (_prize) => {
-            // Only update the remaining spin count — do NOT close the wheel
-            // or show the nudge here. The user is still reading their prize
-            // details and may need to click "Login to Claim". Let them.
-            try {
-              const res = await apiClient.get('/spin/eligibility');
-              const d = res.data?.data ?? {};
-              setAvailableSpins(d.available_spins ?? 0);
-            } catch {
-              // silently ignore — onClose will re-check
-            }
+            try { const res = await apiClient.get('/spin/eligibility'); setAvailableSpins(res.data?.data?.available_spins ?? 0); } catch {}
           }}
         />
       )}
 
-      {/* Upgrade Nudge Modal — shown when spins are exhausted instead of the wheel */}
+      {/* Upgrade Nudge */}
       {showUpgradeNudge && nudgeData && (
         <SpinUpgradeNudge
           isOpen={showUpgradeNudge}
-          onClose={() => {
-            setShowUpgradeNudge(false);
-            setNudgeData(null);
-          }}
+          onClose={() => { setShowUpgradeNudge(false); setNudgeData(null); }}
           spinsGranted={nudgeData.spinsGranted}
           spinsUsed={nudgeData.spinsUsed}
           nextTierName={nudgeData.nextTierName}

@@ -1,23 +1,23 @@
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { formatCurrency } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
-import { Gift, Zap, RotateCcw, Loader2 } from 'lucide-react';
+import { Gift, Zap, RotateCcw, Loader2, X, Sparkles, Trophy } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { useAuthContext } from '@/contexts/AuthContext';
+import confetti from 'canvas-confetti';
 
-// Fallback prizes used only when /spin/prizes is unreachable
+/* ── Fallback prizes (used when /spin/prizes is unreachable) ── */
 const FALLBACK_PRIZES = [
-  { name: '₦100 Airtime',   type: 'AIRTIME', value: 10000,  probability: 25, color: '#10b981' },
-  { name: '₦200 Airtime',   type: 'AIRTIME', value: 20000,  probability: 20, color: '#3b82f6' },
-  { name: '500MB Data',     type: 'DATA',    value: 50000,  probability: 15, color: '#8b5cf6' },
-  { name: '1GB Data',       type: 'DATA',    value: 100000, probability: 15, color: '#f59e0b' },
-  { name: '₦100 Cash',      type: 'CASH',    value: 10000,  probability: 10, color: '#ef4444' },
-  { name: '₦200 Cash',      type: 'CASH',    value: 20000,  probability: 8,  color: '#ec4899' },
-  { name: '₦500 Cash',      type: 'CASH',    value: 50000,  probability: 5,  color: '#fbbf24' },
-  { name: '₦1000 Cash',     type: 'CASH',    value: 100000, probability: 2,  color: '#6b7280' },
+  { name: '₦100 Airtime',  type: 'AIRTIME', value: 10000,  probability: 25, color: '#10b981' },
+  { name: '₦200 Airtime',  type: 'AIRTIME', value: 20000,  probability: 20, color: '#3b82f6' },
+  { name: '500MB Data',    type: 'DATA',    value: 50000,  probability: 15, color: '#8b5cf6' },
+  { name: '1GB Data',      type: 'DATA',    value: 100000, probability: 15, color: '#f59e0b' },
+  { name: '₦100 Cash',     type: 'CASH',    value: 10000,  probability: 10, color: '#ef4444' },
+  { name: '₦200 Cash',     type: 'CASH',    value: 20000,  probability: 8,  color: '#ec4899' },
+  { name: '₦500 Cash',     type: 'CASH',    value: 50000,  probability: 5,  color: '#fbbf24' },
+  { name: '₦1000 Cash',    type: 'CASH',    value: 100000, probability: 2,  color: '#a855f7' },
 ];
 
 interface WheelPrize {
@@ -36,12 +36,24 @@ interface SpinWheelProps {
   onPrizeWon?: (prize: any) => void;
 }
 
+/* ── Fire confetti from both corners ── */
+function fireWinConfetti() {
+  const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 9999 };
+  const count = 200;
+  const origin1 = { x: 0.2, y: 0.5 };
+  const origin2 = { x: 0.8, y: 0.5 };
+  confetti({ ...defaults, particleCount: count * 0.4, origin: origin1,
+    colors: ['#7c3aed', '#a855f7', '#f59e0b', '#fbbf24', '#10b981'] });
+  confetti({ ...defaults, particleCount: count * 0.4, origin: origin2,
+    colors: ['#7c3aed', '#c084fc', '#f59e0b', '#fcd34d', '#ec4899'] });
+  setTimeout(() => {
+    confetti({ ...defaults, particleCount: count * 0.2, origin: { x: 0.5, y: 0.3 },
+      colors: ['#ffffff', '#f59e0b', '#7c3aed'] });
+  }, 300);
+}
+
 export const SpinWheel: React.FC<SpinWheelProps> = ({
-  isOpen,
-  onClose,
-  transactionAmount,
-  userPhone,
-  onPrizeWon,
+  isOpen, onClose, transactionAmount, userPhone, onPrizeWon,
 }) => {
   const { toast } = useToast();
   const { isAuthenticated } = useAuthContext();
@@ -51,13 +63,13 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
   const [rotation, setRotation] = useState(0);
   const [selectedPrize, setSelectedPrize] = useState<any>(null);
   const [hasSpun, setHasSpun] = useState(false);
+  const [showWin, setShowWin] = useState(false);
+  const wheelRef = useRef<HTMLDivElement>(null);
 
-  // Fetch live prizes from backend when the wheel opens
   useEffect(() => {
     if (!isOpen) return;
     setLoadingPrizes(true);
-    apiClient
-      .get('/spin/prizes')
+    apiClient.get('/spin/prizes')
       .then((res) => {
         const raw: any[] = res.data?.data ?? [];
         if (raw.length > 0) {
@@ -73,9 +85,7 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
           if (mapped.length > 0) setPrizes(mapped);
         }
       })
-      .catch(() => {
-        // Silently fall back to FALLBACK_PRIZES; wheel still works
-      })
+      .catch(() => {})
       .finally(() => setLoadingPrizes(false));
   }, [isOpen]);
 
@@ -84,36 +94,22 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
   const spinWheel = async () => {
     if (isSpinning || hasSpun) return;
     setIsSpinning(true);
+    setShowWin(false);
 
     try {
-      // SECURITY: prize is ALWAYS determined server-side.
-      // When the user is logged in, the JWT (sent automatically via the
-      // Authorization header in api-client.ts) identifies them — no MSISDN
-      // needed in the body.
-      // When the user is a guest (not logged in), we send the MSISDN from the
-      // recharge form so the backend can validate a qualifying transaction
-      // exists within the last 4 hours for that number.
       const spinBody = isAuthenticated ? {} : { msisdn: userPhone };
       const response = await apiClient.post('/spin/play', spinBody);
-
-      if (!response.data.success) {
-        throw new Error(response.data.error || 'Failed to spin');
-      }
+      if (!response.data.success) throw new Error(response.data.error || 'Failed to spin');
 
       const spinResult = response.data.data;
-
-      // Match backend result to a wheel segment — fall back to first prize if nothing matches
       const winningPrize: WheelPrize =
-        prizes.find(
-          (p) => p.type === spinResult.prize_type && p.value === spinResult.prize_value,
-        ) ??
+        prizes.find((p) => p.type === spinResult.prize_type && p.value === spinResult.prize_value) ??
         prizes.find((p) => p.name === spinResult.prize_won) ??
         prizes[0] ?? { name: spinResult.prize_won ?? 'Prize', type: spinResult.prize_type ?? 'AIRTIME', value: 0, probability: 0, color: '#6b7280' };
 
-      // Animate to the winning segment
       const prizeIndex = prizes.findIndex((p) => p.name === winningPrize.name);
       const targetAngle = prizeIndex * segmentAngle + segmentAngle / 2;
-      const spins = 5 + Math.random() * 3;
+      const spins = 6 + Math.random() * 2;
       const finalRotation = spins * 360 + (360 - targetAngle);
       setRotation((prev) => prev + finalRotation);
 
@@ -121,39 +117,33 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
         setIsSpinning(false);
         setSelectedPrize({ ...winningPrize, claimStatus: spinResult.claim_status });
         setHasSpun(true);
+        setShowWin(true);
+        fireWinConfetti();
 
-        const isProvisioning = spinResult.claim_status === 'PROVISIONING';
         const claimInstructions =
           winningPrize.type === 'AIRTIME' || winningPrize.type === 'DATA'
-            ? isProvisioning
-              ? 'Your prize is being processed — it will be credited within 5-10 minutes.'
-              : 'Login and check Dashboard → My Prizes for status.'
+            ? spinResult.claim_status === 'PROVISIONING'
+              ? 'Being processed — credited within 5–10 min.'
+              : 'Check Dashboard → Prizes for claim status.'
             : winningPrize.type === 'CASH'
-            ? 'Login, then go to Dashboard → Prize Claims to submit your bank details.'
-            : 'Login to see your updated account.';
+            ? 'Go to Dashboard → Prizes to submit bank details.'
+            : 'Login to see your account update.';
 
         toast({
-          title: '🎉 Congratulations! You Won!',
+          title: '🎉 You Won!',
           description: `${winningPrize.name}! ${claimInstructions}`,
           duration: 10000,
         });
-
         onPrizeWon?.(winningPrize);
-      }, 4000);
+      }, 4500);
     } catch (error: any) {
       setIsSpinning(false);
-      // error.response.data.error is an object {code, message} — extract .message to avoid React #31 crash
       const errMsg: string =
         error.response?.data?.error?.message ??
         error.response?.data?.message ??
         error.message ??
-        'Failed to spin the wheel. Please try again.';
-      toast({
-        title: 'Spin Failed',
-        description: errMsg,
-        variant: 'destructive',
-        duration: 5000,
-      });
+        'Failed to spin. Please try again.';
+      toast({ title: 'Spin Failed', description: errMsg, variant: 'destructive', duration: 5000 });
     }
   };
 
@@ -161,198 +151,264 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
     setRotation(0);
     setSelectedPrize(null);
     setHasSpun(false);
+    setShowWin(false);
     onClose();
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-lg">
-        <CardHeader className="text-center">
-          <CardTitle className="flex items-center justify-center gap-2">
-            <Zap className="w-6 h-6 text-yellow-500" />
-            Spin the Wheel!
-          </CardTitle>
-          <CardDescription>
-            You've unlocked a free spin for recharging {formatCurrency(transactionAmount)}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Wheel Container */}
-          {loadingPrizes ? (
-            <div className="flex justify-center items-center h-80">
-              <Loader2 className="w-10 h-10 animate-spin text-primary" />
-            </div>
-          ) : (
-            <div className="relative mx-auto w-80 h-80">
-              {/* Spinning disc */}
-              <div
-                className="w-full h-full rounded-full border-4 border-gray-300 relative overflow-hidden transition-transform duration-[4000ms] ease-out"
-                style={{
-                  transform: `rotate(${rotation}deg)`,
-                  background: `conic-gradient(${prizes
-                    .map(
-                      (prize, i) =>
-                        `${prize.color} ${i * segmentAngle}deg ${(i + 1) * segmentAngle}deg`,
-                    )
-                    .join(', ')})`,
-                }}
-              >
-                {prizes.map((prize, index) => {
-                  const angle = index * segmentAngle + segmentAngle / 2;
-                  const radian = (angle * Math.PI) / 180;
-                  const x = Math.cos(radian) * 120;
-                  const y = Math.sin(radian) * 120;
-                  return (
-                    <div
-                      key={prize.name}
-                      className="absolute text-white text-xs font-bold text-center"
-                      style={{
-                        left: `calc(50% + ${x}px - 30px)`,
-                        top: `calc(50% + ${y}px - 10px)`,
-                        width: '60px',
-                        transform: `rotate(${angle}deg)`,
-                        textShadow: '1px 1px 2px rgba(0,0,0,0.8)',
-                      }}
-                    >
-                      {prize.name.split(' ').map((word, i) => (
-                        <div key={i}>{word}</div>
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          {/* Backdrop */}
+          <motion.div
+            className="absolute inset-0"
+            style={{ background: 'radial-gradient(ellipse at center, rgba(59,7,100,0.97) 0%, rgba(10,5,20,0.98) 100%)' }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={handleClose}
+          />
 
-              {/* Centre spin button */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Button
-                  onClick={spinWheel}
-                  disabled={isSpinning || hasSpun}
-                  className="w-20 h-20 rounded-full bg-white text-primary border-4 border-primary hover:bg-gray-50 disabled:opacity-50"
-                  size="lg"
+          {/* Modal */}
+          <motion.div
+            className="relative w-full max-w-md rounded-3xl overflow-hidden shadow-2xl"
+            style={{ background: 'linear-gradient(160deg, #1a0b3b 0%, #0f0520 60%, #1a0b3b 100%)', border: '1px solid rgba(124,58,237,0.3)' }}
+            initial={{ scale: 0.85, y: 40, opacity: 0 }}
+            animate={{ scale: 1, y: 0, opacity: 1 }}
+            exit={{ scale: 0.85, y: 40, opacity: 0 }}
+            transition={{ type: 'spring', damping: 22, stiffness: 250 }}
+          >
+            {/* Glow top accent */}
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-1 rounded-full" style={{ background: 'linear-gradient(90deg, transparent, #7c3aed, #f59e0b, #7c3aed, transparent)' }} />
+
+            {/* Close button */}
+            <motion.button
+              onClick={handleClose}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-colors z-10"
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+            >
+              <X className="w-4 h-4" />
+            </motion.button>
+
+            <div className="p-6 space-y-5">
+              {/* Header */}
+              <div className="text-center space-y-1">
+                <motion.div
+                  className="flex items-center justify-center gap-2"
+                  initial={{ y: -10, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.1 }}
                 >
-                  {isSpinning ? (
-                    <RotateCcw className="w-8 h-8 animate-spin" />
-                  ) : (
-                    <span className="font-bold text-lg">SPIN</span>
-                  )}
-                </Button>
+                  <Sparkles className="w-5 h-5 text-yellow-400" />
+                  <h2 className="text-2xl font-extrabold text-white" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Spin the Wheel!
+                  </h2>
+                  <Sparkles className="w-5 h-5 text-yellow-400" />
+                </motion.div>
+                <p className="text-purple-300 text-sm">
+                  You've unlocked a free spin for recharging {formatCurrency(transactionAmount)}
+                </p>
               </div>
 
-              {/* Pointer */}
-              <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-2">
-                <div className="w-0 h-0 border-l-4 border-r-4 border-b-8 border-l-transparent border-r-transparent border-b-red-500" />
-              </div>
-            </div>
-          )}
-
-          {/* Prize Result */}
-          {selectedPrize && (
-            <div className="text-center space-y-4">
-              <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white p-4 rounded-lg">
-                <h3 className="text-xl font-bold flex items-center justify-center gap-2">
-                  <Gift className="w-6 h-6" />
-                  🎉 Congratulations! You Won!
-                </h3>
-                <p className="text-2xl font-bold mt-2">{selectedPrize.name}</p>
-                <Badge variant="secondary" className="mt-2">
-                  {selectedPrize.type === 'AIRTIME' && 'Airtime Prize'}
-                  {selectedPrize.type === 'DATA' && 'Data Prize'}
-                  {selectedPrize.type === 'CASH' && 'Cash Prize'}
-                  {selectedPrize.type === 'DRAW_TICKETS' && 'Extra Draw Entries'}
-                </Badge>
-              </div>
-
-              <div className="bg-gradient-to-r from-blue-50 to-green-50 border-2 border-blue-300 p-6 rounded-xl text-left shadow-lg">
-                <h4 className="font-bold text-lg text-blue-900 mb-4 flex items-center gap-2">
-                  🎁{' '}
-                  <span className="bg-yellow-200 px-2 py-1 rounded">
-                    IMPORTANT: How to Claim Your Prize
-                  </span>
-                </h4>
-                {(selectedPrize.type === 'AIRTIME' || selectedPrize.type === 'DATA') && (
-                  <div className="text-sm text-blue-700 space-y-1">
-                    <p>
-                      {selectedPrize.type === 'AIRTIME' ? '📱' : '📶'}{' '}
-                      <strong>{selectedPrize.type === 'AIRTIME' ? 'Airtime' : 'Data'} Prize:</strong>{' '}
-                      {selectedPrize.name}
-                    </p>
-                    {selectedPrize.claimStatus === 'PROVISIONING' ? (
-                      <>
-                        <p>⏳ Your prize is <strong>being processed</strong></p>
-                        <p>1. It will be credited within <strong>5-10 minutes</strong></p>
-                        <p>2. <strong>Login</strong> and check <strong>Dashboard → My Prizes</strong> for status</p>
-                      </>
-                    ) : (
-                      <>
-                        <p>1. <strong>Login</strong> with your phone number</p>
-                        <p>2. Prize will be <strong>automatically credited</strong> to your phone</p>
-                        <p>3. Credited within <strong>5-10 minutes</strong></p>
-                      </>
-                    )}
+              {/* Wheel */}
+              {loadingPrizes ? (
+                <div className="flex justify-center items-center h-72">
+                  <div className="text-center space-y-3">
+                    <Loader2 className="w-10 h-10 animate-spin text-purple-400 mx-auto" />
+                    <p className="text-purple-300 text-sm">Loading prizes…</p>
                   </div>
-                )}
-                {selectedPrize.type === 'CASH' && (
-                  <div className="text-sm text-blue-700 space-y-1">
-                    <p>💰 <strong>Cash Prize:</strong> {selectedPrize.name}</p>
-                    <p>1. <strong>Login</strong> with your phone number</p>
-                    <p>2. Go to <strong>Dashboard → Prize Claims</strong></p>
-                    <p>3. Complete the <strong>Bank Details Form</strong></p>
-                    <p>4. Cash transferred within <strong>24-48 hours</strong></p>
-                  </div>
-                )}
-                {selectedPrize.type === 'DRAW_TICKETS' && (
-                  <div className="text-sm text-blue-700 space-y-1">
-                    <p>🎫 <strong>Draw Entries:</strong> {selectedPrize.value} extra entries</p>
-                    <p>1. Entries <strong>automatically added</strong> to your account</p>
-                    <p>2. <strong>Login</strong> to see updated entry count</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Action Buttons */}
-          <div className="flex gap-3">
-            {!hasSpun ? (
-              <>
-                <Button onClick={spinWheel} disabled={isSpinning || loadingPrizes} className="flex-1">
-                  {isSpinning ? 'Spinning...' : 'Spin Now!'}
-                </Button>
-                <Button variant="outline" onClick={handleClose}>
-                  Skip
-                </Button>
-              </>
-            ) : (
-              <div className="space-y-3 w-full">
-                <Button
-                  onClick={() => (window.location.href = '/login')}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3"
-                >
-                  📱 Login to Claim Your Prize
-                </Button>
-                <Button onClick={handleClose} variant="outline" className="w-full">
-                  Close (Claim Later)
-                </Button>
-              </div>
-            )}
-          </div>
-
-          {/* Prizes list */}
-          <div className="border-t pt-4">
-            <h4 className="font-semibold mb-3 text-center">Possible Prizes</h4>
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              {prizes.map((prize) => (
-                <div key={prize.name} className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: prize.color }} />
-                  <span>{prize.name}</span>
                 </div>
-              ))}
+              ) : (
+                <div className="relative mx-auto w-72 h-72">
+                  {/* Outer glow ring */}
+                  <div className="absolute inset-0 rounded-full wheel-glow opacity-60" />
+
+                  {/* Pointer */}
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
+                    <motion.div
+                      animate={isSpinning ? { scale: [1, 1.3, 1], y: [0, -3, 0] } : {}}
+                      transition={{ duration: 0.3, repeat: isSpinning ? Infinity : 0 }}
+                    >
+                      <div className="w-0 h-0 border-l-[10px] border-r-[10px] border-b-[20px] border-l-transparent border-r-transparent border-b-yellow-400 drop-shadow-lg" />
+                    </motion.div>
+                  </div>
+
+                  {/* Spinning disc */}
+                  <div
+                    ref={wheelRef}
+                    className="w-full h-full rounded-full relative overflow-hidden"
+                    style={{
+                      transform: `rotate(${rotation}deg)`,
+                      transition: isSpinning ? `transform 4500ms cubic-bezier(0.17, 0.67, 0.12, 0.99)` : 'none',
+                      border: '4px solid rgba(124,58,237,0.6)',
+                      boxShadow: isSpinning
+                        ? '0 0 40px rgba(124,58,237,0.6), 0 0 80px rgba(245,158,11,0.3)'
+                        : '0 0 20px rgba(124,58,237,0.3)',
+                      background: `conic-gradient(${prizes.map((p, i) =>
+                        `${p.color} ${i * segmentAngle}deg ${(i + 1) * segmentAngle}deg`
+                      ).join(', ')})`,
+                    }}
+                  >
+                    {/* Segment labels */}
+                    {prizes.map((prize, index) => {
+                      const angle = index * segmentAngle + segmentAngle / 2;
+                      const radian = (angle * Math.PI) / 180;
+                      const r = 100;
+                      const x = Math.cos(radian) * r;
+                      const y = Math.sin(radian) * r;
+                      return (
+                        <div
+                          key={prize.name}
+                          className="absolute font-bold text-center leading-tight"
+                          style={{
+                            left: `calc(50% + ${x}px - 32px)`,
+                            top: `calc(50% + ${y}px - 16px)`,
+                            width: '64px',
+                            transform: `rotate(${angle}deg)`,
+                            textShadow: '1px 1px 3px rgba(0,0,0,0.9)',
+                            fontSize: '9px',
+                            color: '#ffffff',
+                            lineHeight: '1.2',
+                          }}
+                        >
+                          {prize.name.split(' ').map((word, i) => (
+                            <div key={i}>{word}</div>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Centre spin button */}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <motion.button
+                      onClick={spinWheel}
+                      disabled={isSpinning || hasSpun}
+                      className="w-[72px] h-[72px] rounded-full flex items-center justify-center font-black text-base z-10 disabled:opacity-60"
+                      style={{
+                        background: 'white',
+                        color: '#7c3aed',
+                        boxShadow: '0 0 0 4px rgba(124,58,237,0.4), 0 4px 20px rgba(0,0,0,0.4)',
+                        border: '3px solid rgba(124,58,237,0.8)',
+                      }}
+                      whileHover={!isSpinning && !hasSpun ? { scale: 1.1 } : {}}
+                      whileTap={!isSpinning && !hasSpun ? { scale: 0.95 } : {}}
+                    >
+                      {isSpinning
+                        ? <RotateCcw className="w-7 h-7 animate-spin text-purple-700" />
+                        : <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>SPIN</span>
+                      }
+                    </motion.button>
+                  </div>
+                </div>
+              )}
+
+              {/* Win result */}
+              <AnimatePresence>
+                {showWin && selectedPrize && (
+                  <motion.div
+                    initial={{ scale: 0.7, opacity: 0, y: 20 }}
+                    animate={{ scale: 1, opacity: 1, y: 0 }}
+                    transition={{ type: 'spring', damping: 18, stiffness: 260 }}
+                    className="rounded-2xl p-5 text-center space-y-3 animate-prize-glow"
+                    style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.3), rgba(245,158,11,0.2))', border: '1px solid rgba(245,158,11,0.4)' }}
+                  >
+                    <motion.div
+                      animate={{ rotate: [0, -10, 10, -5, 5, 0], scale: [1, 1.2, 1] }}
+                      transition={{ duration: 0.6, delay: 0.2 }}
+                    >
+                      <Trophy className="w-10 h-10 text-yellow-400 mx-auto" />
+                    </motion.div>
+                    <div>
+                      <p className="text-yellow-300 text-sm font-semibold uppercase tracking-wider">🎉 Congratulations!</p>
+                      <p className="text-white text-2xl font-black mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        {selectedPrize.name}
+                      </p>
+                    </div>
+                    <p className="text-purple-300 text-xs leading-relaxed">
+                      {selectedPrize.type === 'CASH'
+                        ? 'Go to Dashboard → Prizes to submit your bank details.'
+                        : selectedPrize.claimStatus === 'PROVISIONING'
+                        ? 'Being credited to your phone within 5–10 minutes.'
+                        : 'Login and go to Dashboard → Prizes to check status.'}
+                    </p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Action buttons */}
+              <div className="space-y-2">
+                {!hasSpun ? (
+                  <div className="flex gap-3">
+                    <motion.button
+                      onClick={spinWheel}
+                      disabled={isSpinning || loadingPrizes}
+                      className="flex-1 py-3.5 rounded-2xl font-bold text-white btn-claim disabled:opacity-50 flex items-center justify-center gap-2"
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      {isSpinning
+                        ? <><Loader2 className="w-4 h-4 animate-spin" /> Spinning…</>
+                        : <><Zap className="w-4 h-4" /> Spin Now!</>
+                      }
+                    </motion.button>
+                    <motion.button
+                      onClick={handleClose}
+                      className="px-5 py-3.5 rounded-2xl font-semibold text-white/60 hover:text-white border border-white/10 hover:border-white/20 transition-colors"
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      Skip
+                    </motion.button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <motion.button
+                      onClick={() => window.location.href = '/login'}
+                      className="w-full py-3.5 rounded-2xl font-bold text-white btn-claim flex items-center justify-center gap-2"
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.3 }}
+                    >
+                      <Gift className="w-4 h-4" /> Login to Claim Prize
+                    </motion.button>
+                    <motion.button
+                      onClick={handleClose}
+                      className="w-full py-2.5 rounded-2xl font-medium text-white/50 hover:text-white/70 transition-colors text-sm"
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      Close (Claim Later)
+                    </motion.button>
+                  </div>
+                )}
+              </div>
+
+              {/* Prize list */}
+              {!showWin && (
+                <div className="border-t border-white/10 pt-4">
+                  <p className="text-center text-xs text-purple-300 font-semibold uppercase tracking-wider mb-3">Possible Prizes</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {prizes.map((prize) => (
+                      <div key={prize.name} className="flex items-center gap-2 text-xs text-white/70">
+                        <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: prize.color }} />
+                        {prize.name}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };

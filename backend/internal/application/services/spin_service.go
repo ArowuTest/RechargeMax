@@ -1220,7 +1220,7 @@ func (s *SpinService) GetTierProgress(ctx context.Context, msisdn string) (*Tier
 	// Find current tier based on today's amount
 	var currentTier *SpinTierResponse
 	var nextTier *SpinTierResponse
-	
+
 	for i, tier := range tiers {
 		if todayAmount >= tier.MinDailyAmount && todayAmount <= tier.MaxDailyAmount {
 			currentTier = &tiers[i]
@@ -1231,10 +1231,21 @@ func (s *SpinService) GetTierProgress(ctx context.Context, msisdn string) (*Tier
 			break
 		}
 	}
-	
-	// If no tier matches, user is below minimum (Bronze)
+
+	// currentTier == nil means either:
+	//   a) user is below the first tier (hasn't recharged enough yet), or
+	//   b) user's amount exceeds the highest tier's max (shouldn't happen after
+	//      migration 041 sets Platinum ceiling to effectively unlimited, but
+	//      handle it defensively by clamping to the top tier).
 	if currentTier == nil {
-		nextTier = &tiers[0] // First tier (Bronze)
+		if len(tiers) > 0 && todayAmount >= tiers[0].MinDailyAmount {
+			// Above top tier ceiling — use the highest tier, no next tier
+			currentTier = &tiers[len(tiers)-1]
+			nextTier = nil
+		} else {
+			// Below minimum — point toward Bronze
+			nextTier = &tiers[0]
+		}
 	}
 	
 	// Calculate progress

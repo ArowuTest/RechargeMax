@@ -15,37 +15,40 @@ type SpinTier struct {
 	SpinsPerDay int
 }
 
-// All spin tiers (amounts in kobo)
+// SpinTiers is the canonical in-memory fallback.
+// IMPORTANT: The live system reads tiers from the database (spin_tiers table)
+// via GetSpinTierFromDB. This slice is only used if the DB is unavailable.
+// Keep these values in sync with migration 037_seed_spin_tiers_and_prizes.sql.
+//
+// Tier model (cumulative daily recharge → daily spin cap):
+//   ₦1,000  – ₦2,499  → 1 spin  (Bronze)
+//   ₦2,500  – ₦4,999  → 2 spins (Silver)
+//   ₦5,000  – ₦9,999  → 3 spins (Gold)
+//   ₦10,000+          → 5 spins (Platinum)
 var SpinTiers = []SpinTier{
 	{
 		Name:        "Bronze",
-		MinAmount:   100000,  // ₦1,000
-		MaxAmount:   499999,  // ₦4,999.99
+		MinAmount:   100000,   // ₦1,000 in kobo
+		MaxAmount:   249999,   // ₦2,499.99 in kobo
 		SpinsPerDay: 1,
 	},
 	{
 		Name:        "Silver",
-		MinAmount:   500000,  // ₦5,000
-		MaxAmount:   999999,  // ₦9,999.99
+		MinAmount:   250000,   // ₦2,500 in kobo
+		MaxAmount:   499999,   // ₦4,999.99 in kobo
 		SpinsPerDay: 2,
 	},
 	{
 		Name:        "Gold",
-		MinAmount:   1000000, // ₦10,000
-		MaxAmount:   1999999, // ₦19,999.99
+		MinAmount:   500000,   // ₦5,000 in kobo
+		MaxAmount:   999999,   // ₦9,999.99 in kobo
 		SpinsPerDay: 3,
 	},
 	{
 		Name:        "Platinum",
-		MinAmount:   2000000, // ₦20,000
-		MaxAmount:   4999999, // ₦49,999.99
+		MinAmount:   1000000,  // ₦10,000 in kobo
+		MaxAmount:   9999999999, // No upper cap — Platinum covers everything above ₦10k
 		SpinsPerDay: 5,
-	},
-	{
-		Name:        "Diamond",
-		MinAmount:   5000000,      // ₦50,000
-		MaxAmount:   99999999999,  // Effectively unlimited
-		SpinsPerDay: 10,
 	},
 }
 

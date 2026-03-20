@@ -38,6 +38,16 @@ type PaystackWebhookPayload struct {
 			Email        string `json:"email"`
 			CustomerCode string `json:"customer_code"`
 		} `json:"customer"`
+		// Authorization holds the reusable card token — present on charge.success.
+		Authorization struct {
+			AuthorizationCode string `json:"authorization_code"`
+			CardType          string `json:"card_type"`
+			Last4             string `json:"last4"`
+			ExpMonth          string `json:"exp_month"`
+			ExpYear           string `json:"exp_year"`
+			Bank              string `json:"bank"`
+			Reusable          bool   `json:"reusable"`
+		} `json:"authorization"`
 	} `json:"data"`
 }
 
@@ -185,9 +195,17 @@ func (s *WebhookService) processChargeSuccess(ctx context.Context, payload *Pays
 				return errors.Internal(fmt.Sprintf("Failed to process recharge: %v", err))
 			}
 		case "SUB_":
-			// Process subscription
-			if err := s.subscriptionService.ProcessSuccessfulPayment(ctx, reference); err != nil {
+			// First-time subscription payment — activate the subscription and store auth code
+			authCode := payload.Data.Authorization.AuthorizationCode
+			customerCode := payload.Data.Customer.CustomerCode
+			if err := s.subscriptionService.ProcessFirstPayment(ctx, reference, authCode, customerCode); err != nil {
 				return errors.Internal(fmt.Sprintf("Failed to process subscription: %v", err))
+			}
+		case "RCR_":
+			// Recurring subscription renewal — mark billing completed and award points
+			txID := payload.Data.ID
+			if err := s.subscriptionService.ProcessRecurringPayment(ctx, reference, txID); err != nil {
+				return errors.Internal(fmt.Sprintf("Failed to process recurring payment: %v", err))
 			}
 		default:
 	logger.Warn("[Webhook] WARN: Unknown transaction type - Reference=, Prefix=", zap.Any("reference", reference), zap.Any("prefix", prefix))

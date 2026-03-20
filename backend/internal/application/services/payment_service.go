@@ -774,3 +774,120 @@ func (s *PaymentService) VerifyPaystackPayment(ctx context.Context, reference st
 	}
 	return true, amount, nil
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Recurring subscription: ChargeAuthorization
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ChargeAuthRequest holds the parameters for a recurring card charge.
+type ChargeAuthRequest struct {
+	AuthorizationCode string                 `json:"authorization_code"`
+	Email             string                 `json:"email"`
+	Amount            int64                  `json:"amount"`    // kobo
+	Reference         string                 `json:"reference"`
+	Metadata          map[string]interface{} `json:"metadata"`
+}
+
+// ChargeAuthResult is the parsed outcome of ChargeAuthorization.
+type ChargeAuthResult struct {
+	// Status: "success" | "pending" | "failed"
+	Status          string
+	TransactionID   int64
+	GatewayResponse string
+	Reference       string
+}
+
+// ChargeAuthorization charges a previously-authorised Paystack card using the
+// stored authorization_code.  This is the API used for all daily auto-renewals
+// after the first checkout payment.
+//
+// Paystack docs: POST https://api.paystack.co/transaction/charge_authorization
+//
+// Status semantics:
+//   "success" → charge approved inline (VISA/MC direct debit)
+//   "pending" → charge queued (Paystack will send charge.success webhook when done)
+//   "failed"  → card declined / insufficient funds
+func (s *PaymentService) ChargeAuthorization(ctx context.Context, req ChargeAuthRequest) (*ChargeAuthResult, error) {
+	type paystackChargeAuthReq struct {
+		Email             string                 `json:"email"`
+		Amount            int64                  `json:"amount"`
+		AuthorizationCode string                 `json:"authorization_code"`
+		Reference         string                 `json:"reference,omitempty"`
+		Metadata          map[string]interface{} `json:"metadata,omitempty"`
+		Currency          string                 `json:"currency"`
+	}
+	body := paystackChargeAuthReq{
+		Email:             req.Email,
+		Amount:            req.Amount,
+		AuthorizationCode: req.AuthorizationCode,
+		Reference:         req.Reference,
+		Metadata:          req.Metadata,
+		Currency:          "NGN",
+	}
+
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("charge authorization marshal: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST",
+		"https://api.paystack.co/transaction/charge_authorization",
+		bytes.NewBuffer(bodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("charge authorization request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+s.paystackSecretKey)
+
+	resp, err := s.client.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("charge authorization http: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("charge authorization read response: %w", err)
+	}
+
+	var paystackResp struct {
+		Status  bool   `json:"status"`
+		Message string `json:"message"`
+		Data    struct {
+			ID              int64  `json:"id"`
+			Status          string `json:"status"`
+			Reference       string `json:"reference"`
+			GatewayResponse string `json:"gateway_response"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(respBody, &paystackResp); err != nil {
+		return nil, fmt.Errorf("charge authorization parse: %w", err)
+	}
+
+	if !paystackResp.Status {
+		return &ChargeAuthResult{
+			Status:          "failed",
+			GatewayResponse: paystackResp.Message,
+		}, nil
+	}
+
+	status := paystackResp.Data.Status
+	// Normalise Paystack's status strings to our three values
+	switch status {
+	case "success":
+		// ok
+	case "send_birthday", "send_pin", "send_otp", "pending":
+		status = "pending"
+	default:
+		if status != "failed" {
+			status = "pending"
+		}
+	}
+
+	return &ChargeAuthResult{
+		Status:          status,
+		TransactionID:   paystackResp.Data.ID,
+		GatewayResponse: paystackResp.Data.GatewayResponse,
+		Reference:       paystackResp.Data.Reference,
+	}, nil
+}

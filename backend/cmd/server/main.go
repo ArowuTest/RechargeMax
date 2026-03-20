@@ -143,6 +143,12 @@ func main() {
 	reconciliationJob.RunProcessingRecovery(serverCtx) // recover any PROCESSING txns from previous run
 	log.Println("✅ Reconciliation job started (interval: 1h, startup recovery: 30s)")
 
+	// Subscription billing: auto-charges saved Paystack auth codes daily,
+	// awards points/entries only on confirmed success, retries on failure.
+	subscriptionBillingJob := jobs.NewSubscriptionBillingJob(db, svcs.Subscription, svcs.Payment)
+	subscriptionBillingJob.Start()
+	log.Println("✅ Subscription billing job started (interval: 15m)")
+
 	// Start server in goroutine
 	safe.Go(func() {
 		log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"rechargemax/internal/domain/entities"
 	"rechargemax/internal/domain/repositories"
@@ -17,7 +18,7 @@ import (
 	"rechargemax/internal/utils"
 )
 
-// SubscriptionService handles subscription operations
+// SubscriptionService handles subscription operations.
 type SubscriptionService struct {
 	subscriptionRepo repositories.SubscriptionRepository
 	userRepo         repositories.UserRepository
@@ -26,29 +27,40 @@ type SubscriptionService struct {
 	db               *gorm.DB
 }
 
-// CreateSubscriptionRequest represents subscription creation request.
-// PaymentMethod is optional — defaults to "paystack" if not provided.
+// CreateSubscriptionRequest is the input to CreateSubscription.
+// All fields are optional at parse time — the handler resolves MSISDN from JWT
+// or body before calling, and PaymentMethod defaults to "paystack".
 type CreateSubscriptionRequest struct {
 	MSISDN        string `json:"msisdn"`
 	Network       string `json:"network"`
 	PaymentMethod string `json:"payment_method"`
+	// Entries is the number of daily draw entries (and points) the user wants.
+	// Each entry costs ₦20 (PricePerEntry kobo).
+	// Min 1, max 100.  Defaults to 1 if not provided.
+	Entries int `json:"entries"`
 }
 
-// SubscriptionResponse represents subscription response
+// SubscriptionResponse is the API-facing subscription DTO.
 type SubscriptionResponse struct {
-	ID            uuid.UUID  `json:"id"`
-	MSISDN        string     `json:"msisdn"`
-	Network       string     `json:"network"`
-	Status        string     `json:"status"`
-	PaymentMethod string     `json:"payment_method"`
-	DailyAmount   int64      `json:"daily_amount"`
-	NextBilling   time.Time  `json:"next_billing"`
-	CreatedAt     time.Time  `json:"created_at"`
-	CancelledAt   *time.Time `json:"cancelled_at,omitempty"`
-	PaymentURL    string     `json:"payment_url,omitempty"`
+	ID              uuid.UUID  `json:"id"`
+	SubscriptionCode string    `json:"subscription_code"`
+	MSISDN          string     `json:"msisdn"`
+	Network         string     `json:"network"`
+	Status          string     `json:"status"`
+	PaymentMethod   string     `json:"payment_method"`
+	Entries         int        `json:"entries"`           // entries awarded per day
+	DailyAmount     int64      `json:"daily_amount"`      // kobo
+	DailyAmountNGN  float64    `json:"daily_amount_ngn"`  // naira (display)
+	NextBilling     time.Time  `json:"next_billing"`
+	CreatedAt       time.Time  `json:"created_at"`
+	CancelledAt     *time.Time `json:"cancelled_at,omitempty"`
+	PaymentURL      string     `json:"payment_url,omitempty"`
+	// Summary across all active subscriptions for this user
+	TotalDailyEntries int     `json:"total_daily_entries,omitempty"`
+	TotalDailyPoints  int     `json:"total_daily_points,omitempty"`
 }
 
-// NewSubscriptionService creates a new subscription service
+// NewSubscriptionService creates a new subscription service.
 func NewSubscriptionService(
 	subscriptionRepo repositories.SubscriptionRepository,
 	userRepo repositories.UserRepository,
@@ -69,170 +81,268 @@ func NewSubscriptionService(
 // CreateSubscription
 // ─────────────────────────────────────────────────────────────────────────────
 
-// CreateSubscription creates a ₦20/day subscription.
+// CreateSubscription creates a new recurring daily subscription line.
 //
-// MSISDN resolution order:
-//  1. req.MSISDN set by handler from JWT token (authenticated user)
-//  2. req.MSISDN supplied in request body (guest / unauthenticated user)
-//
-// The handler already copies the JWT msisdn into req.MSISDN before calling
-// this function.  If it is still empty we return a clear validation error.
+// Key design decisions:
+//  - Multiple active lines per user are allowed (see entities.DailySubscription).
+//  - Pricing: ₦20 per entry → entries=5 costs ₦100/day (10,000 kobo).
+//  - Status starts as "pending" until Paystack confirms the first payment.
+//  - On confirmation (ProcessFirstPayment), auth_code is stored and status → active.
+//  - From that point the SubscriptionBillingJob handles daily auto-renewal.
 func (s *SubscriptionService) CreateSubscription(ctx context.Context, req CreateSubscriptionRequest) (*SubscriptionResponse, error) {
-	// ── 1. Resolve & normalise MSISDN ────────────────────────────────────────
+	// ── 1. Resolve & normalise MSISDN ─────────────────────────────────────────
 	if req.MSISDN == "" {
 		return nil, errors.BadRequest("Phone number is required")
 	}
-	normalised, err := utils.NormalizeMSISDN(req.MSISDN)
+	msisdn, err := utils.NormalizeMSISDN(req.MSISDN)
 	if err != nil {
-		return nil, errors.BadRequest(fmt.Sprintf("Invalid phone number format: %s", req.MSISDN))
+		return nil, errors.BadRequest(fmt.Sprintf("Invalid phone number: %s", req.MSISDN))
 	}
-	req.MSISDN = normalised
 
-	// ── 2. Default payment method ─────────────────────────────────────────────
+	// ── 2. Entries & amount ────────────────────────────────────────────────────
+	if req.Entries <= 0 {
+		req.Entries = 1
+	}
+	if req.Entries > 100 {
+		return nil, errors.BadRequest("Maximum 100 entries per subscription")
+	}
+	dailyAmountKobo := entities.PricePerEntry * int64(req.Entries) // ₦20 × entries
+
+	// ── 3. Payment method default ──────────────────────────────────────────────
 	if req.PaymentMethod == "" {
 		req.PaymentMethod = "paystack"
 	}
 
-	// ── 3. Optional network detection (non-fatal) ─────────────────────────────
+	// ── 4. Network detection (non-fatal) ──────────────────────────────────────
 	networkHint := req.Network
-	detectedNetwork := ""
-	if n, e := s.hlrService.DetectNetwork(ctx, req.MSISDN, &networkHint); e == nil {
-		detectedNetwork = n
-	}
+	detectedNetwork, _ := s.hlrService.DetectNetwork(ctx, msisdn, &networkHint)
 	if detectedNetwork == "" {
-		detectedNetwork = "MTN" // safe default so DCB path works for MTN subscribers
+		detectedNetwork = "MTN"
 	}
 
-	// ── 4. Resolve user (optional — guest subscriptions are allowed) ──────────
+	// ── 5. Resolve user (optional — guest subscriptions are allowed) ──────────
 	var userID *uuid.UUID
 	var userEmail string
-	user, err := s.userRepo.FindByMSISDN(ctx, req.MSISDN)
-	if err == nil && user != nil {
+	if user, err := s.userRepo.FindByMSISDN(ctx, msisdn); err == nil && user != nil {
 		userID = &user.ID
-		userEmail = fmt.Sprintf("%s@rechargemax.ng", req.MSISDN)
+		userEmail = fmt.Sprintf("%s@rechargemax.ng", msisdn)
 	}
 
-	// ── 5. Check for existing active subscription (idempotency) ──────────────
-	existing, lookupErr := s.subscriptionRepo.FindActiveByMSISDN(ctx, req.MSISDN)
-	if lookupErr == nil && existing != nil {
-		return nil, errors.Conflict("You already have an active subscription. Cancel the current one to re-subscribe.")
-	}
-
-	// ── 6. Resolve tier_id — required NOT NULL in daily_subscriptions entity ──
-	// Use the first active spin tier as the FK value (Bronze by default).
-	// This FK is informational only for subscriptions; it has no NOT NULL
-	// constraint in the actual SQL schema (see 14_daily_subscriptions.sql).
-	// We provide it anyway so the entity validates correctly.
+	// ── 6. Resolve default tier ────────────────────────────────────────────────
 	tierID := s.resolveDefaultTierID(ctx)
 
-	// ── 7. Build subscription record ──────────────────────────────────────────
+	// ── 7. Build the subscription row ─────────────────────────────────────────
 	now := time.Now()
-	subscriptionCode := fmt.Sprintf("SUB_%s_%d", req.MSISDN[len(req.MSISDN)-4:], now.Unix())
-	paymentMethod := req.PaymentMethod
-	nextBilling := now.Add(24 * time.Hour)
-	dailyAmount := int64(2000) // ₦20 in kobo
-	drawEntries := 1
-	pointsEarned := 1
+	code := fmt.Sprintf("SUB%s%d", msisdn[len(msisdn)-4:], now.Unix())
+	entries := req.Entries
+	nextBilling := tomorrow(now)
 
-	subscription := &entities.DailySubscription{
+	sub := &entities.DailySubscription{
 		ID:               uuid.New(),
-		SubscriptionCode: subscriptionCode,
+		SubscriptionCode: code,
 		UserID:           userID,
-		MSISDN:           req.MSISDN,
-		TierID:           tierID,
-		BundleQuantity:   1,
-		TotalEntries:     drawEntries,
-		DailyAmount:      dailyAmount,
-		Amount:           dailyAmount, // legacy compat column
-		DrawEntriesEarned: &drawEntries,
-		PointsEarned:     &pointsEarned,
+		MSISDN:           msisdn,
+		TierID:           &tierID,
+		BundleQuantity:   entries,
+		TotalEntries:     0, // incremented per successful billing day
+		DailyAmount:      dailyAmountKobo,
+		Amount:           dailyAmountKobo, // legacy column
+		DrawEntriesEarned: &entries,
+		PointsEarned:     &entries,
 		Status:           "pending",
 		AutoRenew:        true,
 		NextBillingDate:  nextBilling,
-		PaymentMethod:    paymentMethod,
+		PaymentMethod:    req.PaymentMethod,
 		SubscriptionDate: now,
 		CustomerEmail:    ptrString(userEmail),
 	}
 
-	if err := s.subscriptionRepo.Create(ctx, subscription); err != nil {
-		logger.Error("[SubscriptionService] Create failed", zap.String("msisdn", req.MSISDN), zap.Error(err))
-		if strings.Contains(err.Error(), "23505") ||
-			strings.Contains(err.Error(), "duplicate key") ||
-			strings.Contains(err.Error(), "unique constraint") {
-			return nil, errors.Conflict("You already have a subscription for today")
+	if err := s.subscriptionRepo.Create(ctx, sub); err != nil {
+		logger.Error("[SubscriptionService] Create failed",
+			zap.String("msisdn", msisdn), zap.Error(err))
+		if strings.ContainsAny(err.Error(), "duplicate key") ||
+			strings.Contains(err.Error(), "23505") {
+			return nil, errors.Conflict("Duplicate subscription code — please retry")
 		}
 		return nil, fmt.Errorf("failed to create subscription: %w", err)
 	}
 
-	// ── 8. Build response ─────────────────────────────────────────────────────
-	response := &SubscriptionResponse{
-		ID:            subscription.ID,
-		MSISDN:        subscription.MSISDN,
-		Network:       detectedNetwork,
-		Status:        subscription.Status,
-		PaymentMethod: paymentMethod,
-		DailyAmount:   dailyAmount,
-		NextBilling:   nextBilling,
-		CreatedAt:     subscription.CreatedAt,
+	// ── 8. Build response ──────────────────────────────────────────────────────
+	resp := &SubscriptionResponse{
+		ID:             sub.ID,
+		SubscriptionCode: sub.SubscriptionCode,
+		MSISDN:         msisdn,
+		Network:        detectedNetwork,
+		Status:         sub.Status,
+		PaymentMethod:  req.PaymentMethod,
+		Entries:        entries,
+		DailyAmount:    dailyAmountKobo,
+		DailyAmountNGN: float64(dailyAmountKobo) / 100,
+		NextBilling:    nextBilling,
+		CreatedAt:      sub.CreatedAt,
 	}
 
-	// ── 9. Payment initialisation ─────────────────────────────────────────────
-	if paymentMethod == "dcb" && detectedNetwork == "MTN" {
-		// Direct carrier billing — activate immediately
-		subscription.Status = "active"
-		_ = s.subscriptionRepo.Update(ctx, subscription)
-		response.Status = "active"
-		// Award points immediately on DCB
-		_ = s.awardSubscriptionPoints(ctx, subscription)
+	// ── 9. Initialise first payment ────────────────────────────────────────────
+	// The first payment MUST go through the Paystack checkout UI so we can
+	// capture a reusable authorization_code for subsequent auto-charges.
+	// We ALWAYS use the Paystack checkout for the first payment (even if the
+	// user later chooses DCB for renewals).
+	ref := fmt.Sprintf("SUB_%s_%d", sub.ID.String()[:8], now.Unix())
+	payReq := PaymentRequest{
+		Amount:    dailyAmountKobo,
+		Email:     userEmail,
+		Reference: ref,
+		Metadata: map[string]interface{}{
+			"msisdn":           msisdn,
+			"type":             "subscription_first_payment",
+			"subscription_id":  sub.ID.String(),
+			"entries":          entries,
+		},
+	}
+	payURL, payErr := s.paymentService.InitializePayment(ctx, payReq)
+	if payErr != nil {
+		// Non-fatal: row created, user can retry payment later
+		logger.Error("[SubscriptionService] Payment init failed", zap.Error(payErr))
+		resp.PaymentURL = ""
 	} else {
-		// Paystack / card — generate payment link
-		reference := fmt.Sprintf("SUB_%s_%d", subscription.ID.String()[:8], now.Unix())
-		paymentReq := PaymentRequest{
-			Amount:    2000,
-			Email:     userEmail,
-			Reference: reference,
-			Metadata: map[string]interface{}{
-				"msisdn":          req.MSISDN,
-				"type":            "subscription",
-				"subscription_id": subscription.ID.String(),
-			},
-		}
-		payURL, err := s.paymentService.InitializePayment(ctx, paymentReq)
-		if err != nil {
-			// Non-fatal: subscription row is created, payment can be retried
-			logger.Error("[SubscriptionService] Payment init failed", zap.Error(err))
-		} else {
-			response.PaymentURL = payURL
-			// Store payment reference on the subscription row
-			subscription.PaymentReference = &reference
-			_ = s.subscriptionRepo.Update(ctx, subscription)
-		}
+		resp.PaymentURL = payURL
+		sub.PaymentReference = &ref
+		_ = s.subscriptionRepo.Update(ctx, sub)
 	}
 
-	logger.Info("[SubscriptionService] Subscription created",
-		zap.String("msisdn", req.MSISDN),
-		zap.String("id", subscription.ID.String()),
-		zap.String("status", subscription.Status),
+	// Compute user's total daily commitment across all active subscriptions
+	resp.TotalDailyEntries, resp.TotalDailyPoints = s.totalDailyCommitment(ctx, msisdn)
+
+	logger.Info("[SubscriptionService] Created subscription",
+		zap.String("id", sub.ID.String()),
+		zap.String("msisdn", msisdn),
+		zap.Int("entries", entries),
+		zap.Float64("daily_ngn", resp.DailyAmountNGN),
 	)
-	return response, nil
+	return resp, nil
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GetSubscription
+// ProcessFirstPayment  — called by webhook on charge.success for SUB_ prefix
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ProcessFirstPayment activates a subscription after the first Paystack
+// checkout payment succeeds and stores the reusable authorization_code.
+//
+// authCode:     the Paystack authorization.authorization_code from the webhook
+// customerCode: the Paystack customer.customer_code from the webhook
+func (s *SubscriptionService) ProcessFirstPayment(ctx context.Context, paymentRef, authCode, customerCode string) error {
+	sub, err := s.subscriptionRepo.FindByPaymentRef(ctx, paymentRef)
+	if err != nil {
+		return fmt.Errorf("subscription not found for ref %s: %w", paymentRef, err)
+	}
+	if sub.Status == "active" {
+		return nil // idempotent
+	}
+
+	now := time.Now()
+	sub.Status = "active"
+	sub.SubscriptionDate = now
+	sub.LastBillingDate = &now
+	sub.NextBillingDate = tomorrow(now)
+	sub.PaystackAuthorizationCode = ptrString(authCode)
+	sub.PaystackCustomerCode = ptrString(customerCode)
+	isPaid := true
+	sub.IsPaid = &isPaid
+
+	if err := s.subscriptionRepo.Update(ctx, sub); err != nil {
+		return fmt.Errorf("failed to activate subscription: %w", err)
+	}
+
+	// Create today's billing record as completed (first payment already confirmed)
+	today := truncateToDay(now)
+	billing := &entities.SubscriptionBilling{
+		ID:             uuid.New(),
+		SubscriptionID: sub.ID,
+		MSISDN:         sub.MSISDN,
+		BillingDate:    today,
+		Amount:         sub.DailyAmount,
+		EntriesToAward: sub.BundleQuantity,
+		PointsToAward:  sub.BundleQuantity,
+		Status:         "completed",
+		PaymentReference: sub.PaymentReference,
+		ProcessedAt:    &now,
+	}
+	// Upsert — ignore conflict if somehow already exists
+	if dbErr := s.db.WithContext(ctx).
+		Clauses(clause.OnConflict{DoNothing: true}).
+		Create(billing).Error; dbErr != nil {
+		logger.Error("[SubscriptionService] Failed to create first billing record", zap.Error(dbErr))
+	}
+
+	// Award points + entries for today
+	return s.awardSubscriptionPoints(ctx, sub, billing)
+}
+
+// ProcessSuccessfulPayment is the legacy entry point kept for backward-compat.
+// New callers should use ProcessFirstPayment or ProcessRecurringPayment.
+func (s *SubscriptionService) ProcessSuccessfulPayment(ctx context.Context, paymentRef string) error {
+	return s.ProcessFirstPayment(ctx, paymentRef, "", "")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ProcessRecurringPayment — called by webhook on charge.success for RCR_ prefix
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ProcessRecurringPayment handles the webhook confirmation of a daily auto-charge.
+// It marks the corresponding subscription_billing row as completed and awards points.
+func (s *SubscriptionService) ProcessRecurringPayment(ctx context.Context, paymentRef string, txID int64) error {
+	// Find the billing record waiting for this reference
+	var billing entities.SubscriptionBilling
+	err := s.db.WithContext(ctx).
+		Where("payment_reference = ?", paymentRef).
+		First(&billing).Error
+	if err != nil {
+		// Could be a race — log and ignore (job will retry)
+		logger.Error("[SubscriptionService] Billing record not found for recurring ref",
+			zap.String("ref", paymentRef), zap.Error(err))
+		return nil
+	}
+
+	if billing.Status == "completed" {
+		return nil // idempotent
+	}
+
+	now := time.Now()
+	billing.Status = "completed"
+	billing.PaystackTransactionID = &txID
+	billing.ProcessedAt = &now
+	if err := s.db.WithContext(ctx).Save(&billing).Error; err != nil {
+		return fmt.Errorf("failed to update billing record: %w", err)
+	}
+
+	// Load the parent subscription to award points
+	sub, err := s.subscriptionRepo.FindByID(ctx, billing.SubscriptionID)
+	if err != nil {
+		return fmt.Errorf("subscription not found: %w", err)
+	}
+
+	// Update subscription billing metadata
+	sub.LastBillingDate = &now
+	sub.NextBillingDate = tomorrow(now)
+	sub.ConsecutiveFailures = 0 // reset on success
+	sub.TotalBilledAmount += billing.Amount
+	_ = s.subscriptionRepo.Update(ctx, sub)
+
+	return s.awardSubscriptionPoints(ctx, sub, &billing)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GetSubscription / GetSubscriptions
 // ─────────────────────────────────────────────────────────────────────────────
 
 func (s *SubscriptionService) GetSubscription(ctx context.Context, msisdn string) (*SubscriptionResponse, error) {
-	normalised, err := utils.NormalizeMSISDN(msisdn)
-	if err == nil {
-		msisdn = normalised
-	}
-
+	msisdn = s.normMSISDN(msisdn)
 	active, err := s.subscriptionRepo.FindActiveByMSISDN(ctx, msisdn)
 	if err == nil && active != nil {
 		return s.toResponse(active), nil
 	}
-
-	// Fall back to user-based lookup
+	// Fall back to user lookup
 	user, err := s.userRepo.FindByMSISDN(ctx, msisdn)
 	if err != nil {
 		return nil, errors.NotFound("No subscription found for this number")
@@ -251,51 +361,73 @@ func (s *SubscriptionService) GetSubscription(ctx context.Context, msisdn string
 	return s.toResponse(latest), nil
 }
 
+// GetAllActiveSubscriptions returns all active subscriptions for a MSISDN
+// (multiple lines possible).
+func (s *SubscriptionService) GetAllActiveSubscriptions(ctx context.Context, msisdn string) ([]*entities.DailySubscription, error) {
+	msisdn = s.normMSISDN(msisdn)
+	var subs []*entities.DailySubscription
+	err := s.db.WithContext(ctx).
+		Where("msisdn = ? AND LOWER(status) = 'active'", msisdn).
+		Order("created_at ASC").
+		Find(&subs).Error
+	return subs, err
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // CancelSubscription
 // ─────────────────────────────────────────────────────────────────────────────
 
 func (s *SubscriptionService) CancelSubscription(ctx context.Context, msisdn string) error {
-	normalised, err := utils.NormalizeMSISDN(msisdn)
-	if err == nil {
-		msisdn = normalised
-	}
+	return s.CancelSubscriptionByID(ctx, msisdn, uuid.Nil)
+}
 
-	active, err := s.subscriptionRepo.FindActiveByMSISDN(ctx, msisdn)
-	if err != nil || active == nil {
-		// Fall back to user-based lookup
-		user, userErr := s.userRepo.FindByMSISDN(ctx, msisdn)
-		if userErr != nil {
-			return errors.NotFound("No active subscription found")
-		}
-		subs, subsErr := s.subscriptionRepo.FindByUserID(ctx, user.ID)
-		if subsErr != nil {
-			return errors.NotFound("No active subscription found")
-		}
-		for _, sub := range subs {
-			if sub.Status == "active" {
-				active = sub
-				break
-			}
-		}
-	}
+// CancelSubscriptionByID cancels a specific subscription line by its ID.
+// If id is uuid.Nil, the most recently created active subscription is cancelled.
+func (s *SubscriptionService) CancelSubscriptionByID(ctx context.Context, msisdn string, id uuid.UUID) error {
+	msisdn = s.normMSISDN(msisdn)
 
-	if active == nil {
-		return errors.NotFound("No active subscription found to cancel")
+	var sub *entities.DailySubscription
+
+	if id != uuid.Nil {
+		var found entities.DailySubscription
+		if err := s.db.WithContext(ctx).
+			Where("id = ? AND msisdn = ?", id, msisdn).
+			First(&found).Error; err != nil {
+			return errors.NotFound("Subscription not found")
+		}
+		sub = &found
+	} else {
+		// Cancel the most recent active line
+		active, err := s.subscriptionRepo.FindActiveByMSISDN(ctx, msisdn)
+		if err != nil || active == nil {
+			return errors.NotFound("No active subscription found to cancel")
+		}
+		sub = active
 	}
 
 	now := time.Now()
-	active.Status = "cancelled"
-	active.CancelledAt = &now
-	active.CancellationReason = "user_requested"
+	sub.Status = "cancelled"
+	sub.CancelledAt = &now
+	sub.CancellationReason = "user_requested"
+	sub.AutoRenew = false
 
-	if err := s.subscriptionRepo.Update(ctx, active); err != nil {
+	if err := s.subscriptionRepo.Update(ctx, sub); err != nil {
 		return fmt.Errorf("failed to cancel subscription: %w", err)
 	}
 
+	// Mark any pending billing records for future dates as skipped
+	s.db.WithContext(ctx).
+		Model(&entities.SubscriptionBilling{}).
+		Where("subscription_id = ? AND billing_date > ? AND status = 'pending'",
+			sub.ID, truncateToDay(now)).
+		Updates(map[string]interface{}{
+			"status":     "skipped",
+			"updated_at": now,
+		})
+
 	logger.Info("[SubscriptionService] Subscription cancelled",
+		zap.String("id", sub.ID.String()),
 		zap.String("msisdn", msisdn),
-		zap.String("id", active.ID.String()),
 	)
 	return nil
 }
@@ -305,53 +437,20 @@ func (s *SubscriptionService) CancelSubscription(ctx context.Context, msisdn str
 // ─────────────────────────────────────────────────────────────────────────────
 
 func (s *SubscriptionService) GetSubscriptionHistory(ctx context.Context, msisdn string) ([]SubscriptionResponse, error) {
-	normalised, err := utils.NormalizeMSISDN(msisdn)
-	if err == nil {
-		msisdn = normalised
-	}
-
-	// Try MSISDN-direct lookup first (works for both guests and registered users)
-	var allSubs []*entities.DailySubscription
-	if dbErr := s.db.WithContext(ctx).
+	msisdn = s.normMSISDN(msisdn)
+	var subs []*entities.DailySubscription
+	if err := s.db.WithContext(ctx).
 		Where("msisdn = ?", msisdn).
 		Order("subscription_date DESC").
-		Find(&allSubs).Error; dbErr != nil || len(allSubs) == 0 {
-		// Fall back to user_id lookup
-		user, userErr := s.userRepo.FindByMSISDN(ctx, msisdn)
-		if userErr != nil {
-			return []SubscriptionResponse{}, nil // empty, not an error
-		}
-		allSubs, _ = s.subscriptionRepo.FindByUserID(ctx, user.ID)
+		Find(&subs).Error; err != nil {
+		return nil, err
 	}
-
-	result := make([]SubscriptionResponse, 0, len(allSubs))
-	for _, sub := range allSubs {
-		result = append(result, *s.toResponse(sub))
+	result := make([]SubscriptionResponse, 0, len(subs))
+	for _, sub := range subs {
+		r := s.toResponse(sub)
+		result = append(result, *r)
 	}
 	return result, nil
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ProcessSuccessfulPayment  (Paystack webhook callback)
-// ─────────────────────────────────────────────────────────────────────────────
-
-func (s *SubscriptionService) ProcessSuccessfulPayment(ctx context.Context, paymentRef string) error {
-	subscription, err := s.subscriptionRepo.FindByPaymentRef(ctx, paymentRef)
-	if err != nil {
-		return fmt.Errorf("subscription not found for ref %s: %w", paymentRef, err)
-	}
-	if subscription.Status == "active" {
-		return nil // already processed — idempotent
-	}
-
-	subscription.Status = "active"
-	subscription.SubscriptionDate = time.Now()
-	if err := s.subscriptionRepo.Update(ctx, subscription); err != nil {
-		return fmt.Errorf("failed to activate subscription: %w", err)
-	}
-
-	// Award points + draw entry
-	return s.awardSubscriptionPoints(ctx, subscription)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -365,15 +464,17 @@ func (s *SubscriptionService) GetConfig(ctx context.Context) (map[string]interfa
 		isPaid := true
 		return map[string]interface{}{
 			"amount":               int64(2000),
+			"price_per_entry":      int64(2000),
 			"draw_entries_earned":  &entries,
 			"is_paid":              &isPaid,
 			"description":          "Daily ₦20 subscription — 1 point + 1 draw entry per day",
-			"terms_and_conditions": "",
+			"terms_and_conditions": "Renews automatically every 24 hours. Cancel anytime.",
 		}, nil
 	}
 	return map[string]interface{}{
 		"id":                   cfg.ID,
 		"amount":               cfg.Amount,
+		"price_per_entry":      entities.PricePerEntry,
 		"draw_entries_earned":  cfg.DrawEntriesEarned,
 		"is_paid":              cfg.IsPaid,
 		"description":          cfg.Description,
@@ -442,105 +543,175 @@ func (s *SubscriptionService) GetAllSubscriptions(ctx context.Context, page, per
 // Internal helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-// resolveDefaultTierID returns the UUID of the Bronze spin_tier (lowest tier).
-// The DailySubscription.TierID field is a UUID NOT NULL in the entity struct
-// even though the actual SQL column allows NULL.  We always set it to avoid
-// any ORM-level validation failure.
-func (s *SubscriptionService) resolveDefaultTierID(ctx context.Context) uuid.UUID {
-	var tier struct {
-		ID uuid.UUID `gorm:"column:id"`
+// awardSubscriptionPoints credits points and draw entries to the user.
+// It checks billing.PointsAwarded first — safe to call multiple times.
+func (s *SubscriptionService) awardSubscriptionPoints(ctx context.Context, sub *entities.DailySubscription, billing *entities.SubscriptionBilling) error {
+	if billing.PointsAwarded {
+		return nil // already awarded — idempotent
 	}
-	err := s.db.WithContext(ctx).
-		Table("spin_tiers").
-		Where("LOWER(tier_name) = ? AND is_active = true", "bronze").
-		Order("sort_order ASC").
-		Limit(1).
-		Scan(&tier).Error
-	if err != nil || tier.ID == uuid.Nil {
-		// Fallback: pick any active tier
-		s.db.WithContext(ctx).
-			Table("spin_tiers").
-			Where("is_active = true").
-			Order("sort_order ASC").
-			Limit(1).
-			Scan(&tier)
+	if billing.Status != "completed" {
+		return nil // don't award for non-completed billings
+	}
+
+	points := billing.PointsToAward
+	entries := billing.EntriesToAward
+
+	// Resolve user_id
+	resolvedUserID := sub.UserID
+	if resolvedUserID == nil {
+		user, err := s.userRepo.FindByMSISDN(ctx, sub.MSISDN)
+		if err == nil && user != nil {
+			resolvedUserID = &user.ID
+		}
+	}
+
+	if resolvedUserID != nil {
+		// Award points
+		if err := s.db.WithContext(ctx).
+			Model(&entities.User{}).
+			Where("id = ?", *resolvedUserID).
+			UpdateColumn("total_points", gorm.Expr("total_points + ?", points)).
+			Error; err != nil {
+			return fmt.Errorf("failed to award points: %w", err)
+		}
+	}
+
+	// Mark billing record as awarded (atomic update — prevents double-award)
+	now := time.Now()
+	if err := s.db.WithContext(ctx).
+		Model(&entities.SubscriptionBilling{}).
+		Where("id = ? AND points_awarded = false", billing.ID).
+		Updates(map[string]interface{}{
+			"points_awarded": true,
+			"updated_at":     now,
+		}).Error; err != nil {
+		return fmt.Errorf("failed to mark points awarded: %w", err)
+	}
+
+	// Update subscription lifetime totals
+	s.db.WithContext(ctx).
+		Model(&entities.DailySubscription{}).
+		Where("id = ?", sub.ID).
+		Updates(map[string]interface{}{
+			"total_entries":        gorm.Expr("total_entries + ?", entries),
+			"total_points_awarded": gorm.Expr("total_points_awarded + ?", points),
+			"updated_at":           now,
+		})
+
+	logger.Info("[SubscriptionService] Points awarded",
+		zap.String("subscription_id", sub.ID.String()),
+		zap.String("msisdn", sub.MSISDN),
+		zap.Int("points", points),
+		zap.Int("entries", entries),
+	)
+	return nil
+}
+
+// resolveDefaultTierID returns the UUID of the Bronze spin tier.
+func (s *SubscriptionService) resolveDefaultTierID(ctx context.Context) uuid.UUID {
+	var tier struct{ ID uuid.UUID `gorm:"column:id"` }
+	s.db.WithContext(ctx).Table("spin_tiers").
+		Where("LOWER(tier_name) = 'bronze' AND is_active = true").
+		Order("sort_order ASC").Limit(1).Scan(&tier)
+	if tier.ID == uuid.Nil {
+		s.db.WithContext(ctx).Table("spin_tiers").
+			Where("is_active = true").Order("sort_order ASC").Limit(1).Scan(&tier)
 	}
 	if tier.ID == uuid.Nil {
-		// Absolute fallback: generate a deterministic nil-safe UUID
 		return uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	}
 	return tier.ID
 }
 
-// awardSubscriptionPoints credits 1 point and 1 draw entry to the user
-// associated with the subscription.
-func (s *SubscriptionService) awardSubscriptionPoints(ctx context.Context, sub *entities.DailySubscription) error {
-	if sub.UserID == nil {
-		// Guest subscription — find user by MSISDN
-		user, err := s.userRepo.FindByMSISDN(ctx, sub.MSISDN)
-		if err != nil || user == nil {
-			logger.Info("[SubscriptionService] No user found for points award — guest subscription",
-				zap.String("msisdn", sub.MSISDN))
-			return nil
-		}
-		sub.UserID = &user.ID
+// totalDailyCommitment sums entries + points across all ACTIVE subscription lines.
+func (s *SubscriptionService) totalDailyCommitment(ctx context.Context, msisdn string) (totalEntries int, totalPoints int) {
+	var subs []*entities.DailySubscription
+	s.db.WithContext(ctx).
+		Where("msisdn = ? AND LOWER(status) = 'active'", msisdn).
+		Find(&subs)
+	for _, sub := range subs {
+		totalEntries += sub.BundleQuantity
+		totalPoints += sub.BundleQuantity
 	}
-
-	// Update user points
-	if err := s.db.WithContext(ctx).
-		Model(&entities.User{}).
-		Where("id = ?", sub.UserID).
-		UpdateColumn("total_points", gorm.Expr("total_points + 1")).
-		Error; err != nil {
-		logger.Error("[SubscriptionService] Failed to award points", zap.Error(err))
-		return err
-	}
-
-	logger.Info("[SubscriptionService] Awarded 1 point + 1 draw entry",
-		zap.String("user_id", sub.UserID.String()),
-		zap.String("msisdn", sub.MSISDN),
-	)
-	return nil
+	return
 }
 
-// toResponse converts a DailySubscription entity to SubscriptionResponse
+func (s *SubscriptionService) normMSISDN(msisdn string) string {
+	if n, err := utils.NormalizeMSISDN(msisdn); err == nil {
+		return n
+	}
+	return msisdn
+}
+
 func (s *SubscriptionService) toResponse(sub *entities.DailySubscription) *SubscriptionResponse {
-	nextBilling := sub.NextBillingDate
-	if nextBilling.IsZero() {
-		nextBilling = sub.SubscriptionDate.Add(24 * time.Hour)
+	nb := sub.NextBillingDate
+	if nb.IsZero() {
+		nb = sub.SubscriptionDate.Add(24 * time.Hour)
 	}
-	amount := sub.DailyAmount
-	if amount == 0 {
-		amount = sub.Amount
+	amt := sub.DailyAmount
+	if amt == 0 {
+		amt = sub.Amount
 	}
-	if amount == 0 {
-		amount = 2000 // ₦20 in kobo
+	if amt == 0 {
+		amt = entities.PricePerEntry * int64(sub.BundleQuantity)
 	}
 	pm := sub.PaymentMethod
 	if pm == "" {
 		pm = "paystack"
 	}
+	entries := sub.BundleQuantity
+	if entries == 0 {
+		entries = 1
+	}
 	return &SubscriptionResponse{
-		ID:            sub.ID,
-		MSISDN:        sub.MSISDN,
-		Network:       "auto",
-		Status:        sub.Status,
-		PaymentMethod: pm,
-		DailyAmount:   amount,
-		NextBilling:   nextBilling,
-		CreatedAt:     sub.CreatedAt,
-		CancelledAt:   sub.CancelledAt,
+		ID:               sub.ID,
+		SubscriptionCode: sub.SubscriptionCode,
+		MSISDN:           sub.MSISDN,
+		Network:          "auto",
+		Status:           sub.Status,
+		PaymentMethod:    pm,
+		Entries:          entries,
+		DailyAmount:      amt,
+		DailyAmountNGN:   float64(amt) / 100,
+		NextBilling:      nb,
+		CreatedAt:        sub.CreatedAt,
+		CancelledAt:      sub.CancelledAt,
 	}
 }
 
-// getUserEmail is kept for backward compatibility
 func (s *SubscriptionService) getUserEmail(ctx context.Context, msisdn string) string {
 	return fmt.Sprintf("%s@rechargemax.ng", msisdn)
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Date helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+// tomorrow returns 08:00 Africa/Lagos (UTC+1) the next calendar day.
+// Using 08:00 WAT ensures billing attempts happen during business hours.
+func tomorrow(from time.Time) time.Time {
+	y, m, d := from.Date()
+	// 07:00 UTC = 08:00 WAT
+	return time.Date(y, m, d+1, 7, 0, 0, 0, time.UTC)
+}
+
+// truncateToDay returns the UTC date at 00:00 (used as billing_date key).
+func truncateToDay(t time.Time) time.Time {
+	y, m, d := t.UTC().Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+}
+
+
+
+// ptrString returns a pointer to a string, or nil for empty strings.
 func ptrString(s string) *string {
 	if s == "" {
 		return nil
 	}
 	return &s
+}
+
+// AwardPointsForBilling is the exported wrapper used by SubscriptionBillingJob.
+func (s *SubscriptionService) AwardPointsForBilling(ctx context.Context, sub *entities.DailySubscription, billing *entities.SubscriptionBilling) error {
+	return s.awardSubscriptionPoints(ctx, sub, billing)
 }

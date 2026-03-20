@@ -210,26 +210,29 @@ func (s *SpinService) PlaySpin(ctx context.Context, msisdn string) (*SpinResultR
 	// Try to find existing user
 	user, err := s.userRepo.FindByMSISDN(ctx, msisdn)
 	if err != nil {
-		// User doesn't exist — validate guest spin eligibility.
-		// For security, guest spins require a qualifying transaction within the
-		// last 4 hours (not just "today"). This makes it impractical for a bad
-		// actor to spin on behalf of a random MSISDN using stale recharges.
+		// User doesn't exist yet — validate that there is at least one qualifying
+		// recharge today (since midnight UTC) before auto-creating the account.
+		// We use the same day boundary as CheckEligibility so the guest experience
+		// is identical to the authenticated experience.
+		// (A rolling 4-hour window was used previously but caused false rejections
+		// for users who recharged earlier in the day and false allows for users
+		// who recharged late the previous night.)
 		var transaction entities.Transactions
-		guestWindow := time.Now().UTC().Add(-4 * time.Hour)
+		todayMidnight := time.Now().UTC().Truncate(24 * time.Hour)
 
 		errors.Info("Checking for qualifying guest transactions", map[string]interface{}{
 			"msisdn":       msisdn,
 			"min_amount":   int64(100000),
 			"status":       "SUCCESS",
-			"window_start": guestWindow,
+			"window_start": todayMidnight,
 		})
 
 		txErr := s.db.Where("msisdn = ? AND amount >= ? AND status = ? AND created_at >= ?",
-			msisdn, int64(100000), "SUCCESS", guestWindow).First(&transaction).Error
+			msisdn, int64(100000), "SUCCESS", todayMidnight).First(&transaction).Error
 
 		if txErr != nil {
 			errors.Info("Guest transaction lookup failed", map[string]interface{}{
-				"error": txErr.Error(),
+				"error":  txErr.Error(),
 				"msisdn": msisdn,
 			})
 			return nil, errors.BadRequest("Not eligible to spin: No qualifying recharges found. Recharge ₦1000+ to earn a spin!")

@@ -41,25 +41,4 @@ func (SubscriptionPricing) TableName() string {
 }
 
 
-// SubscriptionBilling represents a daily billing record
-type SubscriptionBilling struct {
-	ID               uuid.UUID  `json:"id" gorm:"type:uuid;primary_key;default:uuid_generate_v4()"`
-	SubscriptionID   uuid.UUID  `json:"subscription_id" gorm:"type:uuid;not null;index" validate:"required"`
-	MSISDN           string     `json:"msisdn" gorm:"not null;index"`
-	BillingDate      time.Time  `json:"billing_date" gorm:"not null;index"`
-	Amount           int64      `json:"amount" gorm:"not null"` // Amount in kobo
-	EntriesAwarded   int        `json:"entries_awarded" gorm:"not null"` // Draw entries for this billing
-	PointsEarned     int        `json:"points_earned" gorm:"default:0"` // Points for this billing
-	Status           string     `json:"status" gorm:"default:'pending'"` // pending, completed, failed
-	PaymentReference string     `json:"payment_reference"`
-	PaymentMethod    string     `json:"payment_method"`
-	FailureReason    string     `json:"failure_reason"`
-	ProcessedAt      *time.Time `json:"processed_at,omitempty"`
-	CreatedAt        time.Time  `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt        time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
-}
-
-// TableName specifies the table name
-func (SubscriptionBilling) TableName() string {
-	return "subscription_billings"
-}
+// SubscriptionBilling is defined in subscription_billing.go

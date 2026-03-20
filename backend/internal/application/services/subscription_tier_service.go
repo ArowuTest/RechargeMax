@@ -319,10 +319,9 @@ func (s *SubscriptionTierService) processSingleBilling(ctx context.Context, sub 
 		MSISDN:         sub.MSISDN,
 		BillingDate:    time.Now(),
 		Amount:         sub.DailyAmount,
-		EntriesAwarded: sub.TotalEntries,
-		PointsEarned:   int(sub.DailyAmount / 20000), // ₦200 = 1 point (20000 kobo)
+		EntriesToAward: sub.TotalEntries,
+		PointsToAward:  sub.BundleQuantity,
 		Status:         "pending",
-		PaymentMethod:  sub.PaymentMethod,
 	}
 
 	if err := s.tierRepo.CreateBilling(ctx, billing); err != nil {
@@ -373,7 +372,7 @@ func (s *SubscriptionTierService) processSingleBilling(ctx context.Context, sub 
 	if sub.UserID != nil {
 		user, err := s.userRepo.FindByID(ctx, *sub.UserID)
 		if err == nil && user != nil {
-			user.TotalPoints += billing.PointsEarned
+			user.TotalPoints += billing.PointsToAward
 			s.userRepo.Update(ctx, user)
 		}
 	}

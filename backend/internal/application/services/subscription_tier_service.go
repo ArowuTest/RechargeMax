@@ -176,7 +176,7 @@ func (s *SubscriptionTierService) CreateDailySubscription(ctx context.Context, m
 		ID:              uuid.New(),
 		UserID:          userID,
 		MSISDN:          msisdn,
-		TierID:          tierID,
+		TierID:          &tierID,
 		BundleQuantity:  bundleQuantity,
 		TotalEntries:    totalEntries,
 		DailyAmount:     totalCost,
@@ -222,7 +222,11 @@ func (s *SubscriptionTierService) UpdateSubscriptionQuantity(ctx context.Context
 	}
 
 	// Recalculate cost and entries
-	totalCost, totalEntries, err := s.CalculateSubscriptionCost(ctx, subscription.TierID, newBundleQuantity)
+	var tierIDVal uuid.UUID
+	if subscription.TierID != nil {
+		tierIDVal = *subscription.TierID
+	}
+	totalCost, totalEntries, err := s.CalculateSubscriptionCost(ctx, tierIDVal, newBundleQuantity)
 	if err != nil {
 		return nil, err
 	}
@@ -353,7 +357,7 @@ func (s *SubscriptionTierService) processSingleBilling(ctx context.Context, sub 
 	// Update billing as completed
 	now := time.Now()
 	billing.Status = "completed"
-	billing.PaymentReference = paymentRef
+	billing.PaymentReference = &paymentRef
 	billing.ProcessedAt = &now
 
 	if err := s.tierRepo.UpdateBilling(ctx, billing); err != nil {

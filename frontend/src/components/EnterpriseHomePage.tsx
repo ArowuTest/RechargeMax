@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { apiClient } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -421,11 +422,11 @@ export const EnterpriseHomePage: React.FC = () => {
     <div className="min-h-screen bg-white overflow-x-hidden">
 
       {/* ── Live ticker ──────────────────────────────────────────── */}
-      <div className="bg-gradient-to-r from-orange-500 to-red-500 text-white py-2 overflow-hidden">
+      <div className="bg-gradient-to-r from-[#7c3aed] to-[#f59e0b] text-white py-2 overflow-hidden">
         <div className="flex items-center justify-center gap-3 text-sm font-medium px-4">
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
-            <span className="font-semibold">LIVE</span>
+            <span className="font-bold tracking-widest text-xs uppercase">Live</span>
           </div>
           <div className="overflow-hidden h-5 relative flex-1 max-w-md">
             <p
@@ -439,10 +440,12 @@ export const EnterpriseHomePage: React.FC = () => {
       </div>
 
       {/* ── Hero ─────────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-blue-700 via-blue-600 to-purple-700 text-white">
+      <section className="relative overflow-hidden text-white" style={{ background: 'linear-gradient(160deg, #0f0520 0%, #1a0b3b 35%, #3b0764 70%, #7c3aed 100%)' }}>
         {/* Background texture */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(255,255,255,0.08)_0%,_transparent_60%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_rgba(139,92,246,0.3)_0%,_transparent_60%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(245,158,11,0.15)_0%,_transparent_50%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_rgba(124,58,237,0.3)_0%,_transparent_60%)]" />
+        {/* Subtle grid overlay */}
+        <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
 
         {/* Floating particles */}
         {[
@@ -458,15 +461,20 @@ export const EnterpriseHomePage: React.FC = () => {
           <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
 
             {/* Left: copy */}
-            <div className="space-y-7 text-center lg:text-left">
+            <motion.div
+              className="space-y-7 text-center lg:text-left"
+              initial={{ opacity: 0, x: -30 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+            >
               <div className="space-y-2">
-                <Badge className="bg-orange-500/20 text-orange-200 border border-orange-400/30 backdrop-blur-sm px-4 py-1 text-sm font-semibold">
+                <Badge className="bg-amber-400/20 text-amber-200 border border-amber-400/30 backdrop-blur-sm px-4 py-1 text-sm font-semibold">
                   <Flame className="w-3.5 h-3.5 mr-1.5" />
                   Nigeria's #1 Gamified Recharge Platform
                 </Badge>
                 <h1 className="text-5xl sm:text-6xl lg:text-7xl font-black tracking-tight leading-[1.05]">
                   Recharge &<br />
-                  <span className="bg-gradient-to-r from-yellow-300 via-orange-300 to-red-300 bg-clip-text text-transparent">
+                  <span className="bg-gradient-to-r from-yellow-300 via-amber-300 to-yellow-200 bg-clip-text text-transparent">
                     Win Big!
                   </span>
                 </h1>
@@ -479,7 +487,7 @@ export const EnterpriseHomePage: React.FC = () => {
                 <Button
                   size="lg"
                   onClick={scrollToRecharge}
-                  className="bg-white text-blue-700 hover:bg-yellow-50 font-bold px-7 py-3 text-base shadow-xl hover:shadow-2xl hover:scale-105 transition-all rounded-xl"
+                  className="bg-white text-purple-700 hover:bg-amber-50 font-bold px-7 py-3 text-base shadow-xl shadow-purple-900/30 hover:shadow-2xl hover:scale-105 transition-all rounded-xl"
                 >
                   <Zap className="w-4 h-4 mr-2" />
                   Recharge Now
@@ -496,19 +504,25 @@ export const EnterpriseHomePage: React.FC = () => {
               </div>
 
               {/* trust badges */}
-              <div className="flex flex-wrap gap-4 items-center justify-center lg:justify-start text-sm text-blue-200">
+              <div className="flex flex-wrap gap-4 items-center justify-center lg:justify-start text-sm text-purple-200">
                 <span className="flex items-center gap-1.5"><Shield className="w-4 h-4 text-green-300" /> Secure Payments</span>
                 <span className="flex items-center gap-1.5"><CheckCircle className="w-4 h-4 text-green-300" /> Instant Recharge</span>
                 <span className="flex items-center gap-1.5"><Star className="w-4 h-4 text-yellow-300" /> Real Prizes</span>
               </div>
-            </div>
+
+            </motion.div>
 
             {/* Right: hero card */}
-            <div className="relative flex justify-center">
+            <motion.div
+              className="relative flex justify-center"
+              initial={{ opacity: 0, x: 30 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.7, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
+            >
               <div className="absolute -inset-4 bg-gradient-to-r from-yellow-400/30 to-orange-500/30 rounded-3xl blur-2xl" />
               <div className="relative bg-white/10 backdrop-blur-md border border-white/20 rounded-3xl p-6 w-full max-w-sm shadow-2xl">
                 {/* Prize pool card */}
-                <div className="bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl p-5 mb-4 text-white shadow-lg">
+                <div className="gradient-gold rounded-2xl p-5 mb-4 text-white shadow-lg shadow-amber-500/30">
                   <div className="flex items-center gap-2 mb-1">
                     <Trophy className="w-5 h-5" />
                     <span className="text-sm font-semibold opacity-90">Today's Prize Pool</span>
@@ -532,7 +546,7 @@ export const EnterpriseHomePage: React.FC = () => {
                     { label: 'Networks', value: '4', icon: Wifi },
                   ].map(({ label, value, icon: Icon }) => (
                     <div key={label} className="bg-white/10 rounded-xl p-3 text-center">
-                      <Icon className="w-4 h-4 mx-auto mb-1 text-blue-200" />
+                      <Icon className="w-4 h-4 mx-auto mb-1 text-purple-200" />
                       <div className="text-white font-bold text-sm">{value}</div>
                       <div className="text-blue-300 text-xs">{label}</div>
                     </div>
@@ -542,27 +556,27 @@ export const EnterpriseHomePage: React.FC = () => {
                 {/* CTA pill */}
                 <button
                   onClick={scrollToRecharge}
-                  className="mt-4 w-full bg-white text-blue-700 font-bold rounded-xl py-3 text-sm flex items-center justify-center gap-2 hover:bg-yellow-50 transition-colors shadow-md"
+                  className="mt-4 w-full bg-white text-purple-700 font-bold rounded-xl py-3 text-sm flex items-center justify-center gap-2 hover:bg-yellow-50 transition-colors shadow-md hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <Zap className="w-4 h-4" />
                   Start Recharging & Win
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
-            </div>
-          </div>
+          </motion.div>
 
+          </div>{/* /grid */}
           {/* Scroll indicator */}
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 text-white/50 animate-bounce">
             <span className="text-xs">Scroll</span>
             <ChevronDown className="w-4 h-4" />
           </div>
-        </div>
+        </div>{/* /max-w */}
       </section>
 
       {/* ── Live draw banner ─────────────────────────────────────── */}
       {stats.activeDraw && (
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
+        <div className="bg-gradient-to-r from-[#3b0764] to-[#7c3aed] text-white">
           <div className="max-w-screen-xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse flex-shrink-0" />
@@ -596,7 +610,7 @@ export const EnterpriseHomePage: React.FC = () => {
 
           {/* Header */}
           <div className="text-center mb-10">
-            <Badge className="mb-3 bg-blue-100 text-blue-700 border-blue-200 px-4 py-1 font-semibold">
+            <Badge className="mb-3 bg-purple-100 text-purple-700 border-purple-200 px-4 py-1 font-semibold">
               <Zap className="w-3.5 h-3.5 mr-1.5" />
               Instant Recharge
             </Badge>
@@ -608,14 +622,14 @@ export const EnterpriseHomePage: React.FC = () => {
 
           {/* Processing banner — shown while polling (pending=true, amount=0) */}
           {rechargeSuccess?.pending && (
-            <Alert className="mb-6 border-blue-200 bg-blue-50 max-w-2xl mx-auto">
+            <Alert className="mb-6 border-purple-200 bg-purple-50 max-w-2xl mx-auto">
               <div className="flex items-center gap-2">
                 {rechargeSuccess.timedOut ? (
-                  <Clock className="h-5 w-5 text-blue-500 shrink-0" />
+                  <Clock className="h-5 w-5 text-purple-500 shrink-0" />
                 ) : (
                   <Loader2 className="h-5 w-5 text-blue-500 animate-spin shrink-0" />
                 )}
-                <AlertDescription className="text-blue-800 font-medium">
+                <AlertDescription className="text-purple-800 font-medium">
                   {rechargeSuccess.timedOut
                     ? `⏳ Your recharge (Ref: ${rechargeSuccess.transactionReference}) is still being processed by your network provider. The airtime will be delivered shortly — no action needed.`
                     : '⏳ Your recharge is being processed… Please wait, this usually takes under 60 seconds.'}
@@ -682,9 +696,9 @@ export const EnterpriseHomePage: React.FC = () => {
               </div>
 
               {/* Daily subscription teaser */}
-              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-5">
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-purple-200 rounded-2xl p-5">
                 <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center flex-shrink-0">
+                  <div className="w-10 h-10 rounded-xl gradient-brand flex items-center justify-center flex-shrink-0">
                     <Gift className="w-5 h-5 text-white" />
                   </div>
                   <div>
@@ -693,7 +707,7 @@ export const EnterpriseHomePage: React.FC = () => {
                     <Button
                       size="sm"
                       onClick={() => window.location.href = '/subscription'}
-                      className="mt-3 bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700"
+                      className="mt-3 btn-claim text-white text-xs font-semibold border-0"
                     >
                       Subscribe — Only ₦20/day
                     </Button>
@@ -704,7 +718,7 @@ export const EnterpriseHomePage: React.FC = () => {
               {/* How points work */}
               <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-3">
                 <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-blue-600" />
+                  <TrendingUp className="w-4 h-4 text-purple-600" />
                   How It Works
                 </h3>
                 {[
@@ -725,17 +739,17 @@ export const EnterpriseHomePage: React.FC = () => {
       </section>
 
       {/* ── Platform Stats ──────────────────────────────────────── */}
-      <section ref={statsRef} className="py-14 md:py-20 bg-gradient-to-br from-blue-700 to-purple-800 text-white relative overflow-hidden">
+      <section ref={statsRef} className="py-14 md:py-20 bg-gradient-to-br from-[#1a0b3b] to-[#3b0764] text-white relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(255,255,255,0.05)_0%,_transparent_70%)]" />
         <div className="relative max-w-screen-xl mx-auto px-4">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-black mb-3">Platform Impact</h2>
-            <p className="text-blue-200 text-lg">Numbers that speak for themselves</p>
+            <p className="text-purple-200 text-lg">Numbers that speak for themselves</p>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             {[
               { label: 'Happy Users', value: countUsers.toLocaleString() + '+', icon: Users, color: 'text-blue-300' },
-              { label: 'Total Recharges', value: countRecharges.toLocaleString() + '+', icon: Smartphone, color: 'text-purple-300' },
+              { label: 'Total Recharges', value: countRecharges.toLocaleString() + '+', icon: Smartphone, color: 'text-purple-200' },
               { label: 'Prizes Distributed', value: countPrizes.toLocaleString() + '+', icon: Award, color: 'text-yellow-300' },
               { label: 'Networks Supported', value: '4', icon: Wifi, color: 'text-green-300' },
             ].map(({ label, value, icon: Icon, color }) => (
@@ -744,7 +758,7 @@ export const EnterpriseHomePage: React.FC = () => {
                   <Icon className={`w-6 h-6 ${color}`} />
                 </div>
                 <div className="text-3xl md:text-4xl font-black mb-1">{value}</div>
-                <div className="text-blue-300 text-sm">{label}</div>
+                <div className="text-purple-200 text-sm">{label}</div>
               </div>
             ))}
           </div>
@@ -767,7 +781,7 @@ export const EnterpriseHomePage: React.FC = () => {
 
           <div className="grid md:grid-cols-3 gap-8 relative">
             {/* connector line (desktop) */}
-            <div className="hidden md:block absolute top-14 left-[calc(16.666%+2rem)] right-[calc(16.666%+2rem)] h-0.5 bg-gradient-to-r from-blue-200 via-purple-200 to-green-200" />
+            <div className="hidden md:block absolute top-14 left-[calc(16.666%+2rem)] right-[calc(16.666%+2rem)] h-0.5 bg-gradient-to-r from-purple-200 via-amber-200 to-purple-200" />
 
             {[
               {
@@ -775,8 +789,8 @@ export const EnterpriseHomePage: React.FC = () => {
                 title: 'Recharge Your Phone',
                 desc: 'Enter phone number, pick network & amount, pay securely via card or bank transfer.',
                 icon: Smartphone,
-                color: 'from-blue-500 to-blue-600',
-                bg: 'bg-blue-50',
+                color: 'from-violet-500 to-purple-600',
+                bg: 'bg-purple-50',
                 border: 'border-blue-100',
               },
               {
@@ -818,7 +832,7 @@ export const EnterpriseHomePage: React.FC = () => {
             <Button
               size="lg"
               onClick={scrollToRecharge}
-              className="bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold px-10 py-3 rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transition-all"
+              className="bg-gradient-to-r gradient-brand text-white font-bold px-10 py-3 rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transition-all"
             >
               <Zap className="w-4 h-4 mr-2" />
               Try It Now — Free!
@@ -842,8 +856,8 @@ export const EnterpriseHomePage: React.FC = () => {
                 icon: Smartphone,
                 title: 'Instant Recharge',
                 desc: 'Quick, secure airtime & data for all 4 Nigerian networks — MTN, Airtel, Glo, 9mobile',
-                color: 'from-blue-500 to-blue-600',
-                highlight: 'bg-blue-50',
+                color: 'from-violet-500 to-purple-600',
+                highlight: 'bg-purple-50',
               },
               {
                 icon: Trophy,
@@ -898,7 +912,7 @@ export const EnterpriseHomePage: React.FC = () => {
             <Button
               variant="outline"
               onClick={() => window.location.href = '/draws'}
-              className="border-gray-200 text-gray-600 hover:text-blue-600 hover:border-blue-200 font-medium"
+              className="border-gray-200 text-gray-600 hover:text-blue-600 hover:border-purple-200 font-medium"
             >
               All Winners <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
@@ -959,7 +973,7 @@ export const EnterpriseHomePage: React.FC = () => {
       <section className="py-14 md:py-20 bg-gradient-to-br from-gray-50 to-blue-50">
         <div className="max-w-screen-xl mx-auto px-4">
           <div className="text-center mb-10">
-            <Badge className="mb-3 bg-blue-100 text-blue-700 border-blue-200 px-4 py-1 font-semibold">
+            <Badge className="mb-3 bg-purple-100 text-purple-700 border-purple-200 px-4 py-1 font-semibold">
               <Target className="w-3.5 h-3.5 mr-1.5" />
               Prize Draws
             </Badge>
@@ -1009,7 +1023,7 @@ export const EnterpriseHomePage: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {[
                 { icon: DollarSign, title: 'Daily Prize Pool', value: formatCurrency(stats.activeDraw?.prizePool || 500000), color: 'from-yellow-400 to-orange-400', textColor: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200' },
-                { icon: Users, title: 'Active Users', value: `${stats.totalUsers > 0 ? stats.totalUsers.toLocaleString() : '10,000'}+`, color: 'from-blue-500 to-blue-600', textColor: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200' },
+                { icon: Users, title: 'Active Users', value: `${stats.totalUsers > 0 ? stats.totalUsers.toLocaleString() : '10,000'}+`, color: 'from-violet-500 to-purple-600', textColor: 'text-blue-600', bg: 'bg-purple-50', border: 'border-purple-200' },
                 { icon: Award, title: 'Prizes Given', value: `${stats.totalPrizes > 0 ? stats.totalPrizes.toLocaleString() : '500'}+`, color: 'from-green-500 to-teal-500', textColor: 'text-green-600', bg: 'bg-green-50', border: 'border-green-200' },
                 { icon: Shield, title: 'Security Level', value: 'Enterprise', color: 'from-purple-500 to-purple-600', textColor: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-200' },
               ].map(({ icon: Icon, title, value, color, textColor, bg, border }) => (
@@ -1029,7 +1043,7 @@ export const EnterpriseHomePage: React.FC = () => {
       </section>
 
       {/* ── Final CTA ────────────────────────────────────────────── */}
-      <section className="py-16 md:py-24 bg-gradient-to-br from-blue-700 via-blue-600 to-purple-700 text-white relative overflow-hidden">
+      <section className="py-16 md:py-24 bg-gradient-to-br from-[#1a0b3b] via-[#3b0764] to-[#7c3aed] text-white relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(255,255,255,0.05)_0%,_transparent_60%)]" />
         <div className="relative max-w-screen-xl mx-auto px-4 text-center space-y-7">
           <Badge className="bg-white/20 text-white border-white/30 text-sm px-4 py-1 font-semibold backdrop-blur-sm">
@@ -1046,7 +1060,7 @@ export const EnterpriseHomePage: React.FC = () => {
             <Button
               size="lg"
               onClick={scrollToRecharge}
-              className="bg-white text-blue-700 hover:bg-yellow-50 font-bold px-10 py-4 text-lg shadow-2xl hover:shadow-3xl hover:scale-105 transition-all rounded-xl"
+              className="bg-white text-purple-700 hover:bg-yellow-50 font-bold px-10 py-4 text-lg shadow-2xl hover:shadow-3xl hover:scale-105 transition-all rounded-xl"
             >
               <Smartphone className="w-5 h-5 mr-2" />
               Recharge Now
@@ -1075,7 +1089,7 @@ export const EnterpriseHomePage: React.FC = () => {
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-8">
             <div>
               <div className="flex items-center gap-2.5 mb-3">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br gradient-brand flex items-center justify-center">
                   <Zap className="w-4 h-4 text-white" />
                 </div>
                 <span className="font-bold text-white text-base">RechargeMax</span>
@@ -1086,7 +1100,7 @@ export const EnterpriseHomePage: React.FC = () => {
               <p className="text-white font-semibold mb-3 text-sm">Services</p>
               <ul className="space-y-2 text-xs">
                 {['Airtime Recharge', 'Data Bundles', 'Daily Draws', 'Spin Wheel', 'Daily Subscription'].map((s) => (
-                  <li key={s} className="hover:text-blue-400 cursor-pointer transition-colors">{s}</li>
+                  <li key={s} className="hover:text-purple-400 cursor-pointer transition-colors">{s}</li>
                 ))}
               </ul>
             </div>
@@ -1094,7 +1108,7 @@ export const EnterpriseHomePage: React.FC = () => {
               <p className="text-white font-semibold mb-3 text-sm">Networks</p>
               <ul className="space-y-2 text-xs">
                 {['MTN Nigeria', 'Airtel Nigeria', 'Glo Mobile', '9mobile'].map((n) => (
-                  <li key={n} className="hover:text-blue-400 cursor-pointer transition-colors">{n}</li>
+                  <li key={n} className="hover:text-purple-400 cursor-pointer transition-colors">{n}</li>
                 ))}
               </ul>
             </div>
@@ -1102,7 +1116,7 @@ export const EnterpriseHomePage: React.FC = () => {
               <p className="text-white font-semibold mb-3 text-sm">Company</p>
               <ul className="space-y-2 text-xs">
                 {['About Us', 'Contact', 'Privacy Policy', 'Terms of Service', 'Affiliate Program'].map((c) => (
-                  <li key={c} className="hover:text-blue-400 cursor-pointer transition-colors">{c}</li>
+                  <li key={c} className="hover:text-purple-400 cursor-pointer transition-colors">{c}</li>
                 ))}
               </ul>
             </div>

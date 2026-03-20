@@ -1188,6 +1188,12 @@ export const UserDashboard: React.FC = () => {
           onPrizeWon={async (_prize) => {
             try { const res = await apiClient.get('/spin/eligibility'); setAvailableSpins(res.data?.data?.available_spins ?? 0); } catch {}
           }}
+          onSpinLimitReached={() => {
+            // Backend rejected spin due to stale frontend state — reset and show nudge
+            setShowSpinWheel(false);
+            setAvailableSpins(0);
+            checkPendingSpins(); // re-fetch nudge data and update availableSpins
+          }}
         />
       )}
 

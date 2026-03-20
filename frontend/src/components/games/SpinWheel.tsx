@@ -34,6 +34,9 @@ interface SpinWheelProps {
   transactionAmount: number;
   userPhone: string;
   onPrizeWon?: (prize: any) => void;
+  /** Called when the backend rejects the spin with a daily-limit error.
+   *  The parent should close the wheel and show the upgrade nudge. */
+  onSpinLimitReached?: () => void;
 }
 
 /* ── Fire confetti from both corners ── */
@@ -53,7 +56,7 @@ function fireWinConfetti() {
 }
 
 export const SpinWheel: React.FC<SpinWheelProps> = ({
-  isOpen, onClose, transactionAmount, userPhone, onPrizeWon,
+  isOpen, onClose, transactionAmount, userPhone, onPrizeWon, onSpinLimitReached,
 }) => {
   const { toast } = useToast();
   const { isAuthenticated } = useAuthContext();
@@ -143,7 +146,26 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
         error.response?.data?.message ??
         error.message ??
         'Failed to spin. Please try again.';
-      toast({ title: 'Spin Failed', description: errMsg, variant: 'destructive', duration: 5000 });
+
+      // Detect daily-limit errors — close the wheel and show the upgrade nudge
+      // instead of leaving the user staring at an unusable wheel.
+      const isLimitError =
+        errMsg.toLowerCase().includes('daily spin limit') ||
+        errMsg.toLowerCase().includes('not eligible') ||
+        errMsg.toLowerCase().includes('no spins') ||
+        errMsg.toLowerCase().includes('limit reached') ||
+        error.response?.status === 429;
+
+      if (isLimitError && onSpinLimitReached) {
+        // Small delay so the user can read the brief toast before the modal swaps
+        toast({ title: 'Spins Used Up', description: errMsg, variant: 'destructive', duration: 3000 });
+        setTimeout(() => {
+          handleClose();
+          onSpinLimitReached();
+        }, 1200);
+      } else {
+        toast({ title: 'Spin Failed', description: errMsg, variant: 'destructive', duration: 5000 });
+      }
     }
   };
 

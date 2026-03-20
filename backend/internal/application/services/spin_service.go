@@ -1156,7 +1156,9 @@ type TierProgressResponse struct {
 	TodayAmount      int64             `json:"today_amount"`
 	ProgressPercent  float64           `json:"progress_percent"`
 	AmountToNextTier int64             `json:"amount_to_next_tier"`
-	AvailableSpins   int               `json:"available_spins"`
+	AvailableSpins   int               `json:"available_spins"`   // cap - already used today (never negative)
+	SpinsUsedToday   int64             `json:"spins_used_today"`  // raw count for display
+	DailySpinCap     int               `json:"daily_spin_cap"`    // tier's total allowance
 }
 
 // GetAllTiers retrieves all active spin tiers
@@ -1236,16 +1238,30 @@ func (s *SpinService) GetTierProgress(ctx context.Context, msisdn string) (*Tier
 	var progressPercent float64
 	var amountToNextTier int64
 	var availableSpins int
-	
+	var dailyCap int
+
+	// Count spins already used today — same query as CheckEligibility so the two
+	// endpoints are consistent and cannot diverge.
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	var spinsUsedToday int64
+	s.db.Model(&entities.WheelSpin{}).
+		Where("msisdn = ? AND created_at >= ?", msisdn, today).
+		Count(&spinsUsedToday)
+
 	if currentTier != nil {
-		availableSpins = currentTier.SpinsPerDay
-		
+		dailyCap = currentTier.SpinsPerDay
+		// available = cap minus already used, floored at zero
+		remaining := int64(dailyCap) - spinsUsedToday
+		if remaining > 0 {
+			availableSpins = int(remaining)
+		}
+
 		if nextTier != nil {
 			// Calculate progress to next tier
 			currentTierRange := float64(currentTier.MaxDailyAmount - currentTier.MinDailyAmount)
 			currentProgress := float64(todayAmount - currentTier.MinDailyAmount)
 			progressPercent = (currentProgress / currentTierRange) * 100
-			
+
 			amountToNextTier = nextTier.MinDailyAmount - todayAmount
 			if amountToNextTier < 0 {
 				amountToNextTier = 0
@@ -1256,13 +1272,14 @@ func (s *SpinService) GetTierProgress(ctx context.Context, msisdn string) (*Tier
 			amountToNextTier = 0
 		}
 	} else {
-		// Below minimum tier
+		// Below minimum tier — no spins available
+		availableSpins = 0
 		if nextTier != nil {
 			amountToNextTier = nextTier.MinDailyAmount - todayAmount
 			progressPercent = 0
 		}
 	}
-	
+
 	return &TierProgressResponse{
 		CurrentTier:      currentTier,
 		NextTier:         nextTier,
@@ -1270,5 +1287,7 @@ func (s *SpinService) GetTierProgress(ctx context.Context, msisdn string) (*Tier
 		ProgressPercent:  progressPercent,
 		AmountToNextTier: amountToNextTier,
 		AvailableSpins:   availableSpins,
+		SpinsUsedToday:   spinsUsedToday,
+		DailySpinCap:     dailyCap,
 	}, nil
 }

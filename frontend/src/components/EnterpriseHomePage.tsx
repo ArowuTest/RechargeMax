@@ -197,7 +197,8 @@ export const EnterpriseHomePage: React.FC = () => {
           }
 
         } else if (d.spins_granted_today > 0 || d.spins_used_today > 0) {
-          // All spins used today — show upgrade nudge
+          // All spins used today — update count to zero and show upgrade nudge
+          setAvailableSpins(0);
           setNudgeData({
             spinsGranted:      d.spins_granted_today  ?? 0,
             spinsUsed:         d.spins_used_today      ?? 0,
@@ -416,6 +417,29 @@ export const EnterpriseHomePage: React.FC = () => {
 
   const scrollToRecharge = () =>
     document.getElementById('recharge-form')?.scrollIntoView({ behavior: 'smooth' });
+
+  // Shared helper: fetch fresh eligibility, set nudgeData and open the upgrade modal.
+  // Called both from onClose (after all spins are used) and from onSpinLimitReached
+  // (when the backend rejects mid-spin because state was stale).
+  const triggerUpgradeNudgeIfExhausted = useCallback(async () => {
+    if (!isAuthenticated) return;
+    try {
+      const res = await apiClient.get('/spin/eligibility');
+      const d = res.data?.data ?? {};
+      setAvailableSpins(d.available_spins ?? 0);
+      if ((d.available_spins ?? 0) <= 0 && (d.spins_granted_today ?? 0) > 0) {
+        setNudgeData({
+          spinsGranted:      d.spins_granted_today  ?? 0,
+          spinsUsed:         d.spins_used_today      ?? 0,
+          nextTierName:      d.next_tier_name,
+          nextTierMinAmount: d.next_tier_min_amount,
+          amountToNextTier:  d.amount_to_next_tier,
+          nextTierSpins:     d.next_tier_spins,
+        });
+        setShowUpgradeNudge(true);
+      }
+    } catch { /* ignore */ }
+  }, [isAuthenticated]);
 
   /* ═══════════════════════ render ════════════════════════════════ */
   return (
@@ -676,7 +700,13 @@ export const EnterpriseHomePage: React.FC = () => {
                   {userPhone && (
                     <DailySpinProgress
                       msisdn={userPhone}
-                      onSpinsUpdate={(spins) => setAvailableSpins(spins)}
+                      onSpinsUpdate={(spins) => {
+                        // Only use this as the initial value if we haven't yet
+                        // gotten a fresh count from /spin/eligibility.
+                        // availableSpins from eligibility is authoritative (cap - used);
+                        // tier-progress returns the raw cap which can be stale.
+                        setAvailableSpins((prev) => prev === 0 ? spins : prev);
+                      }}
                     />
                   )}
 
@@ -1135,43 +1165,26 @@ export const EnterpriseHomePage: React.FC = () => {
           onClose={async () => {
             setShowSpinWheel(false);
             setAvailableSpins(0);
-            // Only check for nudge AFTER the user has closed the wheel themselves —
-            // never interrupt them while they're reading their prize / Login to Claim.
-            if (isAuthenticated) {
-              try {
-                const res = await apiClient.get('/spin/eligibility');
-                const d = res.data?.data ?? {};
-                const remaining: number = d.available_spins ?? 0;
-                if (remaining <= 0 && (d.spins_granted_today ?? 0) > 0) {
-                  setTimeout(() => {
-                    setNudgeData({
-                      spinsGranted:      d.spins_granted_today  ?? 0,
-                      spinsUsed:         d.spins_used_today      ?? 0,
-                      nextTierName:      d.next_tier_name,
-                      nextTierMinAmount: d.next_tier_min_amount,
-                      amountToNextTier:  d.amount_to_next_tier,
-                      nextTierSpins:     d.next_tier_spins,
-                    });
-                    setShowUpgradeNudge(true);
-                  }, 400);
-                }
-              } catch {
-                // ignore
-              }
-            }
+            // Re-check eligibility after the user closes the wheel normally.
+            // If all spins are exhausted show the upgrade nudge after a short delay.
+            setTimeout(() => triggerUpgradeNudgeIfExhausted(), 400);
           }}
           transactionAmount={rechargeSuccess?.amount || 1000}
           userPhone={userPhone || ''}
           onPrizeWon={async () => {
-            // Only silently update the remaining count — let the user stay on
-            // their prize screen for as long as they want.
+            // Silently refresh remaining spin count while the user reads their prize.
             try {
               const res = await apiClient.get('/spin/eligibility');
-              const d = res.data?.data ?? {};
-              setAvailableSpins(d.available_spins ?? 0);
-            } catch {
-              // ignore — onClose will re-check
-            }
+              setAvailableSpins(res.data?.data?.available_spins ?? 0);
+            } catch { /* ignore — onClose will re-check */ }
+          }}
+          onSpinLimitReached={() => {
+            // Backend rejected the spin because the frontend had stale state.
+            // The SpinWheel already called handleClose() + showed a brief toast.
+            // We just need to show the upgrade nudge with fresh data.
+            setShowSpinWheel(false);
+            setAvailableSpins(0);
+            triggerUpgradeNudgeIfExhausted();
           }}
         />
       )}

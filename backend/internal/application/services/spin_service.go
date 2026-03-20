@@ -484,6 +484,26 @@ func (s *SpinService) provisionPrizeWithRetry(ctx context.Context, spin *entitie
 
 // provisionPrize provisions a single prize (one attempt)
 func (s *SpinService) provisionPrize(ctx context.Context, spin *entities.WheelSpin) error {
+	// Re-fetch the canonical prize value from wheel_prizes before provisioning.
+	// spin_results.prize_value may have been written when wheel_prizes still had a
+	// corrupt value — we must use the FK-backed canonical value, not the stored one.
+	if spin.PrizeID != nil && s.db != nil {
+		var wp entities.WheelPrize
+		if err := s.db.WithContext(ctx).
+			Select("prize_value").
+			Where("id = ?", spin.PrizeID).
+			First(&wp).Error; err == nil && wp.PrizeValue > 0 {
+			if wp.PrizeValue != spin.PrizeValue {
+				logger.Info("provisionPrize: correcting stale prize_value from wheel_prizes",
+					zap.String("spin_id",       spin.ID.String()),
+					zap.Int64("stored_kobo",    spin.PrizeValue),
+					zap.Int64("canonical_kobo", wp.PrizeValue),
+				)
+			}
+			spin.PrizeValue = wp.PrizeValue
+		}
+	}
+
 	// Detect network
 	networkHint := ""
 	networkResult, err := s.hlrService.DetectNetwork(ctx, spin.MSISDN, &networkHint)

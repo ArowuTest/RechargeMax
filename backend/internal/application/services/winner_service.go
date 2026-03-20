@@ -1224,6 +1224,72 @@ func (s *WinnerService) ClaimSpinPrize(ctx context.Context, prizeID uuid.UUID, m
 	return fmt.Errorf("unsupported prize type for claiming")
 }
 
+// canonicalPrizeValueKobo returns the authoritative prize value (in kobo) for a spin result.
+//
+// It always re-reads from wheel_prizes using the prize_id FK as the source of truth.
+// The spin_results.prize_value column may contain a stale / corrupt value written at
+// spin-time (e.g. before migration 037 corrected wheel_prizes), so we must not use it
+// directly when sending money to VTPass.
+//
+// Fallback chain:
+//  1. prize_id FK → wheel_prizes.prize_value  (canonical)
+//  2. Prize name regex match against known prizes  (e.g. "₦100 Airtime" → 10000 kobo)
+//  3. spin_results.prize_value as-is, but only if it looks sane (≤ 100,000 kobo = ₦1,000)
+func (s *WinnerService) canonicalPrizeValueKobo(ctx context.Context, spinPrize *entities.SpinResults) int64 {
+	// 1. Look up via FK
+	if spinPrize.PrizeID != nil && s.db != nil {
+		var wp entities.WheelPrize
+		if err := s.db.WithContext(ctx).
+			Select("prize_value").
+			Where("id = ?", spinPrize.PrizeID).
+			First(&wp).Error; err == nil {
+			if wp.PrizeValue > 0 {
+				logger.Info("canonicalPrizeValueKobo: resolved via FK",
+					zap.String("spin_id",        spinPrize.ID.String()),
+					zap.Int64("stored_kobo",     spinPrize.PrizeValue),
+					zap.Int64("canonical_kobo",  wp.PrizeValue),
+				)
+				return wp.PrizeValue
+			}
+		}
+	}
+
+	// 2. Name-based lookup
+	nameMap := map[string]int64{
+		"₦100 Airtime": 10000,
+		"₦200 Airtime": 20000,
+		"500MB Data":   50000,
+		"1GB Data":     100000,
+		"₦100 Cash":    10000,
+		"₦200 Cash":    20000,
+		"₦500 Cash":    50000,
+		"₦1000 Cash":   100000,
+	}
+	if v, ok := nameMap[spinPrize.PrizeName]; ok {
+		logger.Info("canonicalPrizeValueKobo: resolved via prize name",
+			zap.String("spin_id",       spinPrize.ID.String()),
+			zap.String("prize_name",    spinPrize.PrizeName),
+			zap.Int64("stored_kobo",    spinPrize.PrizeValue),
+			zap.Int64("canonical_kobo", v),
+		)
+		return v
+	}
+
+	// 3. Sanity-check the stored value — reject anything > ₦1,000 (100,000 kobo) for
+	// prize types that should never exceed that, log a warning, and clamp to 0 so the
+	// caller can queue for admin review rather than sending the wrong amount.
+	const maxSaneKobo = int64(100_000) // ₦1,000
+	if spinPrize.PrizeValue > maxSaneKobo {
+		logger.Error("canonicalPrizeValueKobo: stored value exceeds sanity limit, cannot fulfil safely",
+			zap.String("spin_id",    spinPrize.ID.String()),
+			zap.Int64("stored_kobo", spinPrize.PrizeValue),
+		)
+		return 0 // signals caller to queue for admin review
+	}
+
+	return spinPrize.PrizeValue
+}
+
 // triggerManualFulfillment triggers manual fulfillment for airtime/data prizes.
 // When VTPass / HLR is not yet configured (staging), falls back to PENDING_ADMIN_REVIEW
 // so the prize is queued for admin to fulfil manually rather than returning an error.
@@ -1256,18 +1322,23 @@ func (s *WinnerService) triggerManualFulfillment(ctx context.Context, spinPrize 
 	}
 	network := networkResult.Network
 
-	// Guard against corrupt prize_value (pre-seed data anomaly).
-	// Prize values > ₦1 million (100_000_000 kobo) are clearly wrong; queue for admin.
-	if spinPrize.PrizeValue > 100_000_000 {
-		logger.Warn("⚠️  Corrupt prize_value detected — queuing for admin review",
-			zap.String("id", spinPrize.ID.String()),
-			zap.Int64("prize_value_kobo", spinPrize.PrizeValue))
+	// Guard against corrupt prize_value.
+	// Always re-fetch the canonical value from wheel_prizes to avoid using a stale
+	// value that was written to spin_results before the prize table was corrected.
+	canonicalKobo := s.canonicalPrizeValueKobo(ctx, spinPrize)
+	if canonicalKobo == 0 {
 		now := time.Now()
 		spinPrize.ClaimStatus = "PENDING_ADMIN_REVIEW"
 		spinPrize.ClaimedAt = &now
-		spinPrize.FulfillmentError = "Prize value appears corrupt (pre-seed data); queued for admin review"
+		spinPrize.FulfillmentError = fmt.Sprintf(
+			"prize_value %d kobo could not be resolved to a canonical value — queued for admin review",
+			spinPrize.PrizeValue,
+		)
 		return s.spinRepo.Update(ctx, spinPrize)
 	}
+	// Overwrite the (potentially corrupt) stored value with the canonical one
+	// so the provisioning functions use the correct amount.
+	spinPrize.PrizeValue = canonicalKobo
 
 	// Increment fulfillment attempts
 	spinPrize.FulfillmentAttempts++

@@ -551,33 +551,56 @@ type PrizeResponse struct {
 // resolvePrizeValueNaira returns the correct naira value for a spin result.
 //
 // Priority order:
-//  1. wheelPrize.PrizeValue (preloaded from wheel_prizes) → authoritative DB value
-//  2. prizeValueKobo (copied into spin_results at spin time) if sane (<= ₦1M kobo)
-//  3. Regex fallback: parse naira amount from prize_name (requires ₦/N prefix)
+//  1. wheelPrize.PrizeValue (preloaded from wheel_prizes) — but cross-checked against
+//     the prize name to detect lingering corrupt values (e.g. ₦200 prize stored as
+//     2,000,000 kobo instead of 20,000 kobo). If the DB value is more than 10× the
+//     name-derived value, the name wins (it is always human-entered and correct).
+//  2. prizeValueKobo (copied from wheel_prizes at spin time) — same cross-check.
+//  3. Regex fallback: parse naira amount from prize_name (₦/N prefix required).
 //     "₦200 Cash" → 200, "1GB Data" → 0  (non-monetary prizes return 0)
 func resolvePrizeValueNaira(prizeValueKobo int64, prizeName string, wheelPrize *entities.WheelPrize) float64 {
-	const maxSaneKobo = int64(100_000_000) // ₦1 million sanity cap
+	const maxSaneKobo = int64(100_000_000) // ₦1 million hard cap
 
-	// 1. Authoritative value from wheel_prizes table — but only if the value itself is sane.
-	//    Old wheel_prizes rows created before migration 037 may also have corrupt values.
-	if wheelPrize != nil && wheelPrize.PrizeValue > 0 && wheelPrize.PrizeValue <= maxSaneKobo {
+	// Helper: extract naira value from prize_name via regex.
+	nameValueNaira := func() float64 {
+		re := regexp.MustCompile(`[₦N]([\d,]+)`)
+		m := re.FindStringSubmatch(prizeName)
+		if len(m) >= 2 {
+			cleaned := strings.ReplaceAll(m[1], ",", "")
+			if val, err := strconv.ParseFloat(cleaned, 64); err == nil {
+				return val
+			}
+		}
+		return 0
+	}
+
+	// isSaneValue returns true if the kobo value converts to a naira amount that
+	// is within 10× of what the prize name says (or the name gives no clue).
+	isSaneValue := func(kobo int64) bool {
+		if kobo <= 0 || kobo > maxSaneKobo {
+			return false
+		}
+		nameNaira := nameValueNaira()
+		if nameNaira <= 0 {
+			return true // no name clue — accept as-is
+		}
+		derivedNaira := float64(kobo) / 100.0
+		// Accept if within 10× in either direction
+		return derivedNaira <= nameNaira*10 && derivedNaira >= nameNaira/10
+	}
+
+	// 1. Authoritative value from wheel_prizes — cross-checked against prize name.
+	if wheelPrize != nil && isSaneValue(wheelPrize.PrizeValue) {
 		return float64(wheelPrize.PrizeValue) / 100.0
 	}
-	// 2. Copied value in spin_results is sane
-	if prizeValueKobo > 0 && prizeValueKobo <= maxSaneKobo {
+
+	// 2. Copied value in spin_results — same sanity check.
+	if isSaneValue(prizeValueKobo) {
 		return float64(prizeValueKobo) / 100.0
 	}
-	// 3. Regex fallback: extract naira amount from prize_name (₦/N prefix required)
-	//    "₦200 Cash" → 200, "₦1,000 Cash" → 1000, "1GB Data" → 0
-	re := regexp.MustCompile(`[₦N]([\d,]+)`)
-	matches := re.FindStringSubmatch(prizeName)
-	if len(matches) >= 2 {
-		cleaned := strings.ReplaceAll(matches[1], ",", "")
-		if val, err := strconv.ParseFloat(cleaned, 64); err == nil {
-			return val
-		}
-	}
-	return 0
+
+	// 3. Both DB values are corrupt or missing — fall back to prize name.
+	return nameValueNaira()
 }
 
 func (s *UserService) GetUserPrizes(ctx context.Context, msisdn string) ([]PrizeResponse, error) {

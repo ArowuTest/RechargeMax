@@ -147,13 +147,17 @@ apiClient.interceptors.response.use(
     }
 
     // CSRF token expired or invalid — clear cache and retry once (SEC-007)
+    // Retry on ANY 403 for state-changing requests (not just when body says 'csrf')
+    // because Render proxies / CDN edge nodes can return a plain 403 without CSRF detail.
     if (status === 403 && requiresCSRF(error.config?.method)) {
-      const responseData = error.response?.data as any;
-      if (responseData?.error?.toLowerCase().includes('csrf')) {
-        csrfCache.token = null;
+      // Only attempt one auto-retry per request (guard against infinite loops)
+      const retryConfig = { ...error.config } as any;
+      if (!retryConfig._csrfRetried) {
+        retryConfig._csrfRetried = true;
+        csrfCache.token = null; // force fresh token fetch
         try {
           const newToken = await fetchCSRFToken();
-          const retryConfig = { ...error.config } as any;
+          retryConfig.headers = retryConfig.headers || {};
           retryConfig.headers['X-CSRF-Token'] = newToken;
           return apiClient(retryConfig); // single automatic retry
         } catch {

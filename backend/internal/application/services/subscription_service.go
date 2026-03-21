@@ -169,17 +169,37 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 	}
 
 	if err := s.subscriptionRepo.Create(ctx, sub); err != nil {
-		logger.Error("[SubscriptionService] Create failed",
-			zap.String("msisdn", msisdn), zap.Error(err))
-		if strings.Contains(err.Error(), "duplicate key") ||
-			strings.Contains(err.Error(), "23505") {
-			// Last-resort: if UUID-based code still collides (extremely unlikely),
-			// generate a fresh one and retry once.
-			retryID := uuid.New()
-			sub.ID = retryID
-			sub.SubscriptionCode = fmt.Sprintf("SUB%s%s", msisdn[len(msisdn)-4:], strings.ToUpper(retryID.String()[:8]))
-			if retryErr := s.subscriptionRepo.Create(ctx, sub); retryErr != nil {
-				return nil, errors.Conflict("Could not create subscription — please try again")
+		errStr := err.Error()
+		logger.Error("[SubscriptionService] Create failed — DB constraint detail",
+			zap.String("msisdn", msisdn),
+			zap.String("db_error", errStr),
+			zap.Error(err))
+
+		if strings.Contains(errStr, "duplicate key") || strings.Contains(errStr, "23505") {
+			// Diagnose which constraint fired so we can give the user a clear message.
+			switch {
+			case strings.Contains(errStr, "user_id_subscription_date"):
+				// Stale DB: migration 043 hasn't run yet (or failed).
+				// The user already has a row for today. Regenerate with a new date offset
+				// so it doesn't collide — subscription_date is only used for reporting.
+				sub.ID = uuid.New()
+				sub.SubscriptionCode = fmt.Sprintf("SUB%s%s", msisdn[len(msisdn)-4:], strings.ToUpper(sub.ID.String()[:8]))
+				sub.SubscriptionDate = sub.SubscriptionDate.Add(time.Millisecond) // break date uniqueness
+				if retryErr := s.subscriptionRepo.Create(ctx, sub); retryErr != nil {
+					logger.Error("[SubscriptionService] retry after date-constraint failed",
+						zap.String("msisdn", msisdn), zap.Error(retryErr))
+					return nil, errors.Conflict("You already have a subscription for today — please wait until tomorrow or cancel the existing one")
+				}
+			default:
+				// Unknown unique constraint — generate fresh IDs and retry once.
+				retryID := uuid.New()
+				sub.ID = retryID
+				sub.SubscriptionCode = fmt.Sprintf("SUB%s%s", msisdn[len(msisdn)-4:], strings.ToUpper(retryID.String()[:8]))
+				if retryErr := s.subscriptionRepo.Create(ctx, sub); retryErr != nil {
+					logger.Error("[SubscriptionService] retry after unknown constraint failed",
+						zap.String("msisdn", msisdn), zap.Error(retryErr))
+					return nil, errors.Conflict("Could not create subscription — please try again")
+				}
 			}
 		} else {
 			return nil, fmt.Errorf("failed to create subscription: %w", err)

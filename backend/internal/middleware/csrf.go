@@ -196,7 +196,7 @@ func GetCSRFTokenHandler() gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate CSRF token"})
 			return
 		}
-		const ttl = time.Hour
+		const ttl = 24 * time.Hour // extend to 24h so tokens survive normal browser sessions
 		if err := activeCSRFStore.Store(token, ttl); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store CSRF token"})
 			return

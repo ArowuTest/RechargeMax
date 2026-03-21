@@ -2,8 +2,12 @@
 -- Table: provider_configs
 -- ============================================================
 
-CREATE TABLE public.provider_configs (
-    id bigint NOT NULL,
+-- Create sequence first so the ALTER COLUMN SET DEFAULT succeeds
+CREATE SEQUENCE IF NOT EXISTS public.provider_configs_id_seq
+    AS bigint START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1;
+
+CREATE TABLE IF NOT EXISTS public.provider_configs (
+    id bigint NOT NULL DEFAULT nextval('public.provider_configs_id_seq'::regclass),
     network character varying(50) NOT NULL,
     service_type character varying(50) NOT NULL,
     provider_mode character varying(50) NOT NULL,
@@ -14,8 +18,6 @@ CREATE TABLE public.provider_configs (
     created_at timestamp without time zone DEFAULT now(),
     updated_at timestamp without time zone DEFAULT now()
 );
-
-ALTER TABLE ONLY public.provider_configs ALTER COLUMN id SET DEFAULT nextval('public.provider_configs_id_seq'::regclass);
 
 ALTER TABLE ONLY public.provider_configs
     ADD CONSTRAINT provider_configs_pkey PRIMARY KEY (id);

@@ -86,11 +86,15 @@ func main() {
 	// Run embedded SQL migrations + seed in background so HTTP server starts immediately
 	// (Render health check needs /health to respond within ~90s of container start)
 	// Tables already exist from the first deploy; subsequent runs are idempotent.
+	// migrationsReady is closed when RunAll+seed finish — jobs that query schema
+	// columns wait on this channel so they don't race against ADD COLUMN migrations.
+	migrationsReady := make(chan struct{})
 	go func() {
 		log.Println("🔄 Running migrations in background...")
 		migrations.RunAll(db)
 		seedDatabase(db)
 		log.Println("✅ Background migrations + seed complete")
+		close(migrationsReady)
 	}()
 
 	// Initialize repositories (tables exist from first deploy / migration already ran)
@@ -145,9 +149,14 @@ func main() {
 
 	// Subscription billing: auto-charges saved Paystack auth codes daily,
 	// awards points/entries only on confirmed success, retries on failure.
+	// Wait for migrations to finish before starting — the job queries columns
+	// (next_retry_at etc.) that may be added by ADD COLUMN IF NOT EXISTS migrations.
 	subscriptionBillingJob := jobs.NewSubscriptionBillingJob(db, svcs.Subscription, svcs.Payment)
-	subscriptionBillingJob.Start()
-	log.Println("✅ Subscription billing job started (interval: 15m)")
+	go func() {
+		<-migrationsReady // don't race against schema migrations
+		subscriptionBillingJob.Start()
+	}()
+	log.Println("✅ Subscription billing job registered (starts after migrations)")
 
 	// Start server in goroutine
 	safe.Go(func() {

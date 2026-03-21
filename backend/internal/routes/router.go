@@ -218,16 +218,10 @@ func registerProtected(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *serv
 		recharge.GET("/history",   hdlrs.Recharge.GetHistory)
 	}
 
-	// Subscription routes are registered in registerPublic with OptionalAuth.
-	// The protected versions below remain as aliases so callers with a valid JWT
-	// hitting these paths still work (protected middleware runs first, sets msisdn).
-	subProtected := protected.Group("/subscription")
-	{
-		subProtected.POST("/create", hdlrs.Subscription.CreateSubscription)
-		subProtected.GET("/status",  hdlrs.Subscription.GetSubscription)
-		subProtected.POST("/cancel", hdlrs.Subscription.CancelSubscription)
-		subProtected.GET("/history", hdlrs.Subscription.GetHistory)
-	}
+	// Subscription routes are fully handled by the OptionalAuth group registered
+	// in registerPublic (/subscription/* and /subscriptions/daily/*).
+	// No protected aliases are needed — OptionalAuthMiddleware already sets
+	// msisdn/user_id from the JWT when one is present.
 
 	// Affiliate programme
 	affiliate := protected.Group("/affiliate")

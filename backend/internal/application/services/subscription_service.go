@@ -115,9 +115,10 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 
 	// ── 4. Network detection (non-fatal) ──────────────────────────────────────
 	networkHint := req.Network
-	detectedNetwork, _ := s.hlrService.DetectNetwork(ctx, msisdn, &networkHint)
-	if detectedNetwork == "" {
-		detectedNetwork = "MTN"
+	detectedNetworkResult, _ := s.hlrService.DetectNetwork(ctx, msisdn, &networkHint)
+	detectedNetwork := "MTN" // safe default
+	if detectedNetworkResult != nil && detectedNetworkResult.Network != "" {
+		detectedNetwork = detectedNetworkResult.Network
 	}
 
 	// ── 5. Resolve user (optional — guest subscriptions are allowed) ──────────

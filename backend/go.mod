@@ -1,5 +1,6 @@
 module rechargemax
 
+// cache-bust: 2026-03-21
 go 1.23.0
 
 require (

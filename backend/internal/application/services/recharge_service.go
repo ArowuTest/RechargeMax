@@ -359,8 +359,9 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 		// spin_eligible is already set to true in the Updates() call above, so no
 		// data is lost by moving this call post-commit.
 
-		// Create draw_entries rows for the active draw
-		s.createRechargeDrawEntries(ctx, tx, &user, int(drawEntries), recharge.MSISDN)
+		// NOTE: createRechargeDrawEntries is called POST-COMMIT (below) to prevent
+		// a source_type NOT NULL violation from rolling back the payment transaction.
+		// draw entries are non-critical; a payment must never fail because of them.
 
 		return nil // Commit transaction
 	})
@@ -377,6 +378,10 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 		zap.String("payment_ref", paymentRef),
 		zap.String("msisdn", recharge.MSISDN),
 	)
+
+	// Create draw_entries rows POST-COMMIT so a DB constraint on draw_entries
+	// (e.g. source_type NOT NULL) can never roll back the payment transaction.
+	s.createRechargeDrawEntries(ctx, s.db, &txUser, int(drawEntries), recharge.MSISDN, recharge.ID)
 
 	// Create wheel spin opportunity POST-COMMIT to avoid deadlock.
 	// spin_eligible is already persisted by the transaction above; this call
@@ -1097,8 +1102,11 @@ func getTierMultiplier(db *gorm.DB, ctx context.Context, totalPoints int) float6
 }
 
 // createRechargeDrawEntries creates individual draw_entries rows for an active draw.
-// Called inside the payment-processing DB transaction so entries are created atomically.
-func (s *RechargeService) createRechargeDrawEntries(ctx context.Context, tx *gorm.DB, user *entities.Users, entryCount int, msisdn string) {
+// MUST be called AFTER the payment transaction commits — never inside it.
+// draw_entries has source_type NOT NULL; a violation inside the payment tx would
+// silently abort it (PostgreSQL "transaction is aborted" state) rolling back
+// the status=SUCCESS update and leaving the recharge stuck as PROCESSING.
+func (s *RechargeService) createRechargeDrawEntries(ctx context.Context, db *gorm.DB, user *entities.Users, entryCount int, msisdn string, txnID uuid.UUID) {
 	if entryCount <= 0 {
 		return
 	}
@@ -1107,9 +1115,9 @@ func (s *RechargeService) createRechargeDrawEntries(ctx context.Context, tx *gor
 	// Use Find+Limit (not First) to avoid GORM logging "record not found"
 	// as an error every time no draw is running — that is expected behaviour.
 	var activeDraws []entities.Draw
-	tx.WithContext(ctx).Where("status = 'ACTIVE'").Order("start_time DESC").Limit(1).Find(&activeDraws)
+	db.WithContext(ctx).Where("status = 'ACTIVE'").Order("start_time DESC").Limit(1).Find(&activeDraws)
 	if len(activeDraws) == 0 {
-		// No active draw - entries will be created via CSV import at draw time
+		// No active draw — entries will be created via CSV import at draw time.
 		return
 	}
 	activeDraw := activeDraws[0]
@@ -1117,21 +1125,23 @@ func (s *RechargeService) createRechargeDrawEntries(ctx context.Context, tx *gor
 	now := time.Now()
 	count := entryCount
 	entry := entities.DrawEntries{
-		ID:           uuid.New(),
-		DrawID:       activeDraw.ID,
-		UserID:       &user.ID,
-		MSISDN:       msisdn,
-		EntriesCount: &count,
-		CreatedAt:    &now,
+		ID:                  uuid.New(),
+		DrawID:              activeDraw.ID,
+		UserID:              &user.ID,
+		MSISDN:              msisdn,
+		EntriesCount:        &count,
+		SourceType:          "TRANSACTION",
+		SourceTransactionID: &txnID,
+		CreatedAt:           &now,
 	}
-	if err := tx.WithContext(ctx).Create(&entry).Error; err != nil {
-		// Log but don't fail the transaction - draw entries are non-critical
-		logger.Error("failed to create draw entries", zap.String("msisdn", msisdn), zap.Error(err))
+	if err := db.WithContext(ctx).Create(&entry).Error; err != nil {
+		// Non-fatal: draw entries are supplementary. Log and continue.
+		logger.Error("failed to create draw entries (non-fatal)", zap.String("msisdn", msisdn), zap.Error(err))
 		return
 	}
 
 	// Increment total_entries counter on the draw
-	tx.WithContext(ctx).Model(&activeDraw).
+	db.WithContext(ctx).Model(&activeDraw).
 		Update("total_entries", gorm.Expr("total_entries + ?", entryCount))
 }
 
@@ -1197,6 +1207,12 @@ func (s *RechargeService) requeryVTPassTransaction(ctx context.Context, recharge
 			zap.Int64("draw_entries", drawEntries),
 			zap.Bool("spin_eligible", isWheelEligible),
 		)
+
+		// Create draw_entry rows for the active draw (non-fatal, outside any transaction)
+		var rechargeUser entities.Users
+		if err := s.db.WithContext(ctx).Where("msisdn = ?", recharge.MSISDN).First(&rechargeUser).Error; err == nil {
+			s.createRechargeDrawEntries(ctx, s.db, &rechargeUser, int(drawEntries), recharge.MSISDN, recharge.ID)
+		}
 
 	case "FAILED":
 		return s.handleFailedRechargeWithRefund(ctx, recharge, "VTPass requery returned FAILED")

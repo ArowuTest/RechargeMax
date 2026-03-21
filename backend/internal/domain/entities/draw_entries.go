@@ -13,6 +13,12 @@ type DrawEntry struct {
 	UserID       *uuid.UUID `json:"user_id" gorm:"column:user_id;index"`
 	MSISDN       string     `json:"msisdn" gorm:"column:msisdn;not null" validate:"required"`
 	EntriesCount *int       `json:"entries_count" gorm:"column:entries_count"`
+
+	// source_type is NOT NULL with CHECK (TRANSACTION | SUBSCRIPTION | BONUS | MANUAL)
+	SourceType            string     `json:"source_type" gorm:"column:source_type;not null;default:TRANSACTION"`
+	SourceTransactionID   *uuid.UUID `json:"source_transaction_id" gorm:"column:source_transaction_id;type:uuid"`
+	SourceSubscriptionID  *uuid.UUID `json:"source_subscription_id" gorm:"column:source_subscription_id;type:uuid"`
+
 	CreatedAt    *time.Time `json:"created_at" gorm:"column:created_at"`
 }
 

@@ -1103,12 +1103,16 @@ func (s *RechargeService) createRechargeDrawEntries(ctx context.Context, tx *gor
 		return
 	}
 
-	// Find the most recent active draw
-	var activeDraw entities.Draw
-	if err := tx.WithContext(ctx).Where("status = 'ACTIVE'").Order("start_time DESC").First(&activeDraw).Error; err != nil {
+	// Find the most recent active draw.
+	// Use Find+Limit (not First) to avoid GORM logging "record not found"
+	// as an error every time no draw is running — that is expected behaviour.
+	var activeDraws []entities.Draw
+	tx.WithContext(ctx).Where("status = 'ACTIVE'").Order("start_time DESC").Limit(1).Find(&activeDraws)
+	if len(activeDraws) == 0 {
 		// No active draw - entries will be created via CSV import at draw time
 		return
 	}
+	activeDraw := activeDraws[0]
 
 	now := time.Now()
 	count := entryCount

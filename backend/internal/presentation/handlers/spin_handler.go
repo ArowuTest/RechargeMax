@@ -71,19 +71,38 @@ func (h *SpinHandler) PlaySpin(c *gin.Context) {
 	msisdn := c.GetString("msisdn") // set by OptionalAuthMiddleware when JWT is valid
 
 	if msisdn == "" {
-		// Guest path: require MSISDN in request body
-		var req struct {
-			MSISDN string `json:"msisdn" binding:"required"`
+		// Path B-prime: JWT was present and valid but its msisdn claim is empty
+		// (legacy tokens issued before MSISDN normalisation).  If user_id is in
+		// context we can still identify the user — look up their MSISDN by ID.
+		if userID := c.GetString("user_id"); userID != "" {
+			resolved, err := h.spinService.ResolveMSISDNFromUserID(c.Request.Context(), userID)
+			if err == nil && resolved != "" {
+				msisdn = resolved
+				errors.Info("Resolved MSISDN from user_id (stale JWT)", map[string]interface{}{
+					"user_id": userID,
+					"msisdn":  msisdn,
+				})
+			}
 		}
-		if err := c.ShouldBindJSON(&req); err != nil {
+	}
+
+	if msisdn == "" {
+		// Guest path: require MSISDN in request body (or optional msisdn param)
+		var req struct {
+			MSISDN string `json:"msisdn"`
+		}
+		_ = c.ShouldBindJSON(&req) // non-binding — missing field is handled below
+		if req.MSISDN != "" {
+			// Normalise to international format (234XXXXXXXXXX)
+			if normalized, err := validation.NormalizeMSISDN(req.MSISDN); err == nil {
+				msisdn = normalized
+			} else {
+				msisdn = req.MSISDN
+			}
+		}
+		if msisdn == "" {
 			middleware.RespondWithError(c, errors.BadRequest("Phone number required. Please provide your MSISDN."))
 			return
-		}
-		// Normalise to international format (234XXXXXXXXXX)
-		if normalized, err := validation.NormalizeMSISDN(req.MSISDN); err == nil {
-			msisdn = normalized
-		} else {
-			msisdn = req.MSISDN
 		}
 		errors.Info("Guest spin request", map[string]interface{}{"msisdn": msisdn})
 	} else {

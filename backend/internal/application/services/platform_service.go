@@ -56,12 +56,16 @@ func (s *PlatformService) GetStatistics(ctx context.Context) (*PlatformStats, er
 		return nil, err
 	}
 
-	var activeDraw entities.Draw
-	var activeDrawData map[string]interface{}
-	err := db.Where("status = ? AND end_time > ?", "ACTIVE", time.Now()).
+	// Use Find (not First) so GORM does not log a noisy "record not found"
+	// error when no draw is currently active — that is expected behaviour.
+	var activeDraws []entities.Draw
+	db.Where("status = ? AND end_time > ?", "ACTIVE", time.Now()).
 		Order("created_at DESC").
-		First(&activeDraw).Error
-	if err == nil {
+		Limit(1).
+		Find(&activeDraws)
+	var activeDrawData map[string]interface{}
+	if len(activeDraws) > 0 {
+		activeDraw := activeDraws[0]
 		var entries int64
 		db.Model(&entities.DrawEntry{}).Where("draw_id = ?", activeDraw.ID).Count(&entries)
 		activeDrawData = map[string]interface{}{

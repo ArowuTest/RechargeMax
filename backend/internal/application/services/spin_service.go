@@ -66,13 +66,16 @@ type SpinEligibilityResponse struct {
 
 // SpinResultResponse represents spin result
 type SpinResultResponse struct {
-ID          uuid.UUID `json:"id"`
-PrizeWon    string    `json:"prize_won"`
-PrizeType   string    `json:"prize_type"`
-PrizeValue  int64     `json:"prize_value"`
-PointsEarned int64    `json:"points_earned"`
-Status      string    `json:"status"`
-CreatedAt   time.Time `json:"created_at"`
+ID           uuid.UUID `json:"id"`
+PrizeWon     string    `json:"prize_won"`
+PrizeType    string    `json:"prize_type"`
+PrizeValue   int64     `json:"prize_value"`
+PointsEarned int64     `json:"points_earned"`
+// ClaimStatus sent as both "status" (legacy) and "claim_status" (frontend modal reads this)
+Status       string    `json:"status"`
+ClaimStatus  string    `json:"claim_status"`
+SpinCode     string    `json:"spin_code,omitempty"`
+CreatedAt    time.Time `json:"created_at"`
 }
 
 // NewSpinService creates a new spin service
@@ -389,8 +392,10 @@ if err != nil || len(prizes) == 0 {
 		PrizeWon:     spin.PrizeName,
 		PrizeType:    spin.PrizeType,
 		PrizeValue:   int64(spin.PrizeValue),
-		PointsEarned: 0, // Points not stored in SpinResults
+		PointsEarned: 0,
 		Status:       spin.ClaimStatus,
+		ClaimStatus:  spin.ClaimStatus, // frontend modal reads claim_status
+		SpinCode:     spin.SpinCode,
 		CreatedAt:    spin.CreatedAt,
 	}, nil
 }
@@ -599,41 +604,58 @@ func (s *SpinService) getDataVariationCode(prizeValue int64, network string) str
 	// Map based on network and common data sizes
 	// Prize value is in kobo, so 50000 = 500MB, 100000 = 1GB, etc.
 	
+	// Prize value is in kobo. Variation codes match VTPass plan IDs.
 	switch network {
 	case "MTN":
 		switch prizeValue {
-		case 50000: // 500MB
-			return "mtn-20mb-100"
+		case 10000: // 100MB
+			return "mtn-100mb-100"
+		case 20000: // 200MB
+			return "mtn-200mb-200"
+		case 50000: // 500MB — was wrongly "mtn-20mb-100"
+			return "mtn-500mb-500"
 		case 100000: // 1GB
-			return "mtn-1gb-500"
+			return "mtn-1gb-1000"
+		case 150000: // 1.5GB
+			return "mtn-1-5gb-1200"
 		case 200000: // 2GB
-			return "mtn-2gb-1000"
+			return "mtn-2gb-1200"
 		}
 	case "GLO":
 		switch prizeValue {
-		case 50000:
+		case 10000:
+			return "glo-100mb-100"
+		case 20000:
 			return "glo-200mb-200"
-		case 100000:
-			return "glo-1gb-500"
-		case 200000:
-			return "glo-2gb-1000"
+		case 50000: // 500MB — was wrongly "glo-200mb-200"
+			return "glo-500mb-500"
+		case 100000: // 1GB
+			return "glo-1gb-1000"
+		case 200000: // 2GB
+			return "glo-2gb-2000"
 		}
 	case "AIRTEL":
 		switch prizeValue {
-		case 50000:
-			return "airtel-750mb-500"
-		case 100000:
-			return "airtel-1gb-500"
-		case 200000:
-			return "airtel-2gb-1000"
+		case 10000:
+			return "airtel-100mb-100"
+		case 20000:
+			return "airtel-200mb-200"
+		case 50000: // 500MB — was wrongly "airtel-750mb-500"
+			return "airtel-500mb-500"
+		case 100000: // 1GB
+			return "airtel-1gb-1000"
+		case 200000: // 2GB
+			return "airtel-2gb-2000"
 		}
 	case "9MOBILE":
 		switch prizeValue {
-		case 50000:
+		case 10000:
+			return "etisalat-150mb-100"
+		case 50000: // 500MB ✓
 			return "etisalat-500mb-500"
-		case 100000:
+		case 100000: // 1GB
 			return "etisalat-1gb-1000"
-		case 200000:
+		case 200000: // 2GB
 			return "etisalat-2gb-2000"
 		}
 	}
@@ -679,8 +701,10 @@ return nil, fmt.Errorf("failed to get spin history: %w", err)
 			PrizeWon:     spin.PrizeName,
 			PrizeType:    spin.PrizeType,
 			PrizeValue:   int64(spin.PrizeValue),
-			PointsEarned: 0, // Points not stored in SpinResults
+			PointsEarned: 0,
 			Status:       spin.ClaimStatus,
+			ClaimStatus:  spin.ClaimStatus,
+			SpinCode:     spin.SpinCode,
 			CreatedAt:    spin.CreatedAt,
 		}
 	}
@@ -695,6 +719,24 @@ func (s *SpinService) GetTotalSpinCount(ctx context.Context) (int64, error) {
 		return 0, fmt.Errorf("failed to get spin count: %w", err)
 	}
 	return count, nil
+}
+
+// ResolveMSISDNFromUserID looks up a user's MSISDN by their UUID.
+// Used when the JWT contains a valid user_id but the msisdn claim is empty
+// (can happen with legacy tokens issued before MSISDN was normalised).
+func (s *SpinService) ResolveMSISDNFromUserID(ctx context.Context, userIDStr string) (string, error) {
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		return "", fmt.Errorf("invalid user_id: %w", err)
+	}
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return "", fmt.Errorf("user not found: %w", err)
+	}
+	if user.MSISDN == "" {
+		return "", fmt.Errorf("user has no MSISDN on record")
+	}
+	return user.MSISDN, nil
 }
 
 // GetConfig returns spin/wheel configuration

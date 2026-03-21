@@ -1459,41 +1459,57 @@ func (s *WinnerService) getDataVariationCode(prizeValue int64, network string) s
 	switch network {
 	case "MTN":
 		switch prizeValue {
-		case 50000: // 500MB
-			return "mtn-20mb-100"
+		case 10000: // 100MB
+			return "mtn-100mb-100"
+		case 20000: // 200MB
+			return "mtn-200mb-200"
+		case 50000: // 500MB — was wrongly "mtn-20mb-100"
+			return "mtn-500mb-500"
 		case 100000: // 1GB
-			return "mtn-1gb-500"
+			return "mtn-1gb-1000"
+		case 150000: // 1.5GB
+			return "mtn-1-5gb-1200"
 		case 200000: // 2GB
-			return "mtn-2gb-1000"
+			return "mtn-2gb-1200"
 		}
 	case "GLO":
 		switch prizeValue {
-		case 50000:
+		case 10000:
+			return "glo-100mb-100"
+		case 20000:
 			return "glo-200mb-200"
-		case 100000:
-			return "glo-1gb-500"
-		case 200000:
-			return "glo-2gb-1000"
+		case 50000: // 500MB — was wrongly "glo-200mb-200"
+			return "glo-500mb-500"
+		case 100000: // 1GB
+			return "glo-1gb-1000"
+		case 200000: // 2GB
+			return "glo-2gb-2000"
 		}
 	case "AIRTEL":
 		switch prizeValue {
-		case 50000:
-			return "airtel-750mb-500"
-		case 100000:
-			return "airtel-1gb-500"
-		case 200000:
-			return "airtel-2gb-1000"
+		case 10000:
+			return "airtel-100mb-100"
+		case 20000:
+			return "airtel-200mb-200"
+		case 50000: // 500MB — was wrongly "airtel-750mb-500"
+			return "airtel-500mb-500"
+		case 100000: // 1GB
+			return "airtel-1gb-1000"
+		case 200000: // 2GB
+			return "airtel-2gb-2000"
 		}
 	case "9MOBILE":
 		switch prizeValue {
-		case 50000:
+		case 10000:
+			return "etisalat-150mb-100"
+		case 50000: // 500MB ✓
 			return "etisalat-500mb-500"
-		case 100000:
+		case 100000: // 1GB
 			return "etisalat-1gb-1000"
-		case 200000:
+		case 200000: // 2GB
 			return "etisalat-2gb-2000"
 		}
 	}
-	
+
 	return "" // No matching variation code
 }

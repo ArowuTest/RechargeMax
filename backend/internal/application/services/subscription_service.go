@@ -133,13 +133,23 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 	tierID := s.resolveDefaultTierID(ctx)
 
 	// ── 7. Build the subscription row ─────────────────────────────────────────
+	// Purge any stale 'pending' rows for this MSISDN+entries combination that were
+	// never activated (payment abandoned). This prevents the uniqueIndex on
+	// subscription_code from blocking a legitimate retry.
+	s.db.WithContext(ctx).
+		Where("msisdn = ? AND status = 'pending' AND bundle_quantity = ?", msisdn, req.Entries).
+		Delete(&entities.DailySubscription{})
+
 	now := time.Now()
-	code := fmt.Sprintf("SUB%s%d", msisdn[len(msisdn)-4:], now.Unix())
+	// Use UUID fragment for guaranteed uniqueness — unix timestamp alone collides
+	// on rapid retries or multiple subscriptions created in the same second.
+	newID := uuid.New()
+	code := fmt.Sprintf("SUB%s%s", msisdn[len(msisdn)-4:], strings.ToUpper(newID.String()[:8]))
 	entries := req.Entries
 	nextBilling := tomorrow(now)
 
 	sub := &entities.DailySubscription{
-		ID:               uuid.New(),
+		ID:               newID,
 		SubscriptionCode: code,
 		UserID:           userID,
 		MSISDN:           msisdn,
@@ -161,11 +171,19 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 	if err := s.subscriptionRepo.Create(ctx, sub); err != nil {
 		logger.Error("[SubscriptionService] Create failed",
 			zap.String("msisdn", msisdn), zap.Error(err))
-		if strings.ContainsAny(err.Error(), "duplicate key") ||
+		if strings.Contains(err.Error(), "duplicate key") ||
 			strings.Contains(err.Error(), "23505") {
-			return nil, errors.Conflict("Duplicate subscription code — please retry")
+			// Last-resort: if UUID-based code still collides (extremely unlikely),
+			// generate a fresh one and retry once.
+			retryID := uuid.New()
+			sub.ID = retryID
+			sub.SubscriptionCode = fmt.Sprintf("SUB%s%s", msisdn[len(msisdn)-4:], strings.ToUpper(retryID.String()[:8]))
+			if retryErr := s.subscriptionRepo.Create(ctx, sub); retryErr != nil {
+				return nil, errors.Conflict("Could not create subscription — please try again")
+			}
+		} else {
+			return nil, fmt.Errorf("failed to create subscription: %w", err)
 		}
-		return nil, fmt.Errorf("failed to create subscription: %w", err)
 	}
 
 	// ── 8. Build response ──────────────────────────────────────────────────────

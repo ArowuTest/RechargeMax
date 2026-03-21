@@ -9,6 +9,16 @@
 --    code paths don't generate noisy "record not found" logs
 -- =============================================================
 
+-- Ensure provider_configs sequence exists BEFORE the INSERT below.
+-- Migration 044 also creates it, but migrations run alphabetically so 042
+-- executes first. Creating it here (idempotent IF NOT EXISTS) guarantees
+-- the INSERT has a working DEFAULT for the id column.
+CREATE SEQUENCE IF NOT EXISTS public.provider_configs_id_seq
+    AS bigint START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1;
+
+ALTER TABLE public.provider_configs
+    ALTER COLUMN id SET DEFAULT nextval('public.provider_configs_id_seq'::regclass);
+
 -- ─────────────────────────────────────────────────────────────
 -- 1. msisdn_blacklist
 -- ─────────────────────────────────────────────────────────────

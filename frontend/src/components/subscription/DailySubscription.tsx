@@ -209,21 +209,22 @@ export function DailySubscription() {
       
       const response = await processDailySubscription(subscriptionData);
 
-      // Show diagnostic data in console and alert
-      if (response.diagnostic) {
-        alert('DIAGNOSTIC DATA: ' + JSON.stringify(response, null, 2))
-        return
-      }
-      
+      // Remove diagnostic block (was leftover debug code)
+
       if (!response.success) {
         throw new Error(response.error || 'Subscription payment initialization failed')
       }
 
+      // Backend wraps the DTO inside response.data.
+      // Try all known field names in case of future API changes.
+      const subData = response.data || response
+      const payURL = subData.authorization_url || subData.payment_url
+
       // Redirect to Paystack payment page
-      if (response.authorization_url) {
-        window.location.href = response.authorization_url
+      if (payURL) {
+        window.location.href = payURL
       } else {
-        throw new Error('Payment URL not received')
+        throw new Error('Payment URL not received from server')
       }
 
     } catch (error: any) {

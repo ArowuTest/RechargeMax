@@ -487,6 +487,8 @@ func initServices(repos *Repositories, config *Config, db *gorm.DB) *services.Re
 		paymentService,
 		hlrService,
 		db,
+		config.BackendURL,
+		config.FrontendURL,
 	)
 
 	// Prize Fulfillment Config Service

@@ -2,11 +2,12 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	
+
 	"rechargemax/internal/application/services"
 	"rechargemax/internal/errors"
 	"rechargemax/internal/middleware"
@@ -319,6 +320,9 @@ func (h *PaymentHandler) HandleCallback(c *gin.Context) {
 	}
 
 	if success {
+		// Determine the reference prefix to route post-payment processing
+		isSubscription := len(reference) >= 4 && reference[:4] == "SUB_"
+
 		if len(reference) >= 4 {
 			prefix := reference[:4]
 			switch prefix {
@@ -350,11 +354,17 @@ func (h *PaymentHandler) HandleCallback(c *gin.Context) {
 		if isAPICall {
 			c.JSON(http.StatusOK, gin.H{
 				"success":   true,
-				"message":   "Payment verified, recharge processing",
+				"message":   "Payment verified, processing",
 				"reference": reference,
 			})
+		} else if isSubscription {
+			// Subscription payment: redirect to /subscription page with status params.
+			// DailySubscription.tsx reads: ?status=success&type=subscription&ref=SUB_xxx
+			redirectURL := fmt.Sprintf("%s/#/subscription?status=success&type=subscription&ref=%s",
+				h.frontendURL, reference)
+			c.Redirect(http.StatusFound, redirectURL)
 		} else {
-			// Browser redirect: go to frontend immediately, let it poll for VTPass result
+			// Recharge payment: redirect to home, frontend polls for VTPass result
 			c.Redirect(http.StatusFound, h.frontendURL+"/?payment=success&reference="+reference)
 		}
 	} else {
@@ -365,6 +375,8 @@ func (h *PaymentHandler) HandleCallback(c *gin.Context) {
 				"message":   "Payment verification failed",
 				"reference": reference,
 			})
+		} else if len(reference) >= 4 && reference[:4] == "SUB_" {
+			c.Redirect(http.StatusFound, h.frontendURL+"/#/subscription?status=error&type=subscription&error=Payment+verification+failed&ref="+reference)
 		} else {
 			c.Redirect(http.StatusFound, h.frontendURL+"/?payment=failed&reference="+reference)
 		}

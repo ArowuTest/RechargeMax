@@ -25,6 +25,8 @@ type SubscriptionService struct {
 	paymentService   *PaymentService
 	hlrService       *HLRService
 	db               *gorm.DB
+	backendURL       string // e.g. https://rechargemax-backend.onrender.com
+	frontendURL      string // e.g. https://rechargemax-frontend.vercel.app
 }
 
 // CreateSubscriptionRequest is the input to CreateSubscription.
@@ -54,7 +56,8 @@ type SubscriptionResponse struct {
 	NextBilling     time.Time  `json:"next_billing"`
 	CreatedAt       time.Time  `json:"created_at"`
 	CancelledAt     *time.Time `json:"cancelled_at,omitempty"`
-	PaymentURL      string     `json:"payment_url,omitempty"`
+	PaymentURL           string     `json:"payment_url,omitempty"`
+	AuthorizationURL     string     `json:"authorization_url,omitempty"` // alias — matches Paystack field name
 	// Summary across all active subscriptions for this user
 	TotalDailyEntries int     `json:"total_daily_entries,omitempty"`
 	TotalDailyPoints  int     `json:"total_daily_points,omitempty"`
@@ -67,6 +70,8 @@ func NewSubscriptionService(
 	paymentService *PaymentService,
 	hlrService *HLRService,
 	db *gorm.DB,
+	backendURL string,
+	frontendURL string,
 ) *SubscriptionService {
 	return &SubscriptionService{
 		subscriptionRepo: subscriptionRepo,
@@ -74,6 +79,8 @@ func NewSubscriptionService(
 		paymentService:   paymentService,
 		hlrService:       hlrService,
 		db:               db,
+		backendURL:       backendURL,
+		frontendURL:      frontendURL,
 	}
 }
 
@@ -227,10 +234,14 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 	// We ALWAYS use the Paystack checkout for the first payment (even if the
 	// user later chooses DCB for renewals).
 	ref := fmt.Sprintf("SUB_%s_%d", sub.ID.String()[:8], now.Unix())
+	// callbackURL routes through the backend /payment/callback handler,
+	// which verifies the payment and redirects to the subscription page.
+	callbackURL := fmt.Sprintf("%s/api/v1/payment/callback?reference=%s&gateway=paystack", s.backendURL, ref)
 	payReq := PaymentRequest{
-		Amount:    dailyAmountKobo,
-		Email:     userEmail,
-		Reference: ref,
+		Amount:      dailyAmountKobo,
+		Email:       userEmail,
+		Reference:   ref,
+		CallbackURL: callbackURL,
 		Metadata: map[string]interface{}{
 			"msisdn":           msisdn,
 			"type":             "subscription_first_payment",
@@ -245,6 +256,7 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 		resp.PaymentURL = ""
 	} else {
 		resp.PaymentURL = payURL
+		resp.AuthorizationURL = payURL // alias so frontend can use either field name
 		sub.PaymentReference = &ref
 		_ = s.subscriptionRepo.Update(ctx, sub)
 	}

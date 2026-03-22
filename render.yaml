@@ -6,6 +6,8 @@ services:
     dockerContext: .
     plan: starter
     region: oregon
+    branch: main
+    autoDeploy: true
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL

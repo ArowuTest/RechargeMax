@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"log"
 	"net/http"
 	"time"
 
@@ -93,8 +94,12 @@ func RespondWithError(c *gin.Context, err error) {
 		c.JSON(appErr.HTTPStatus, appErr.ToResponse())
 		return
 	}
-	
-	// Generic error
+
+	// Log the ACTUAL underlying error so it appears in Render/server logs.
+	// Previously this was swallowed — making root-cause diagnosis impossible.
+	log.Printf("❌ [500] %s %s — %v", c.Request.Method, c.Request.URL.Path, err)
+
+	// Generic error (do not expose internals to client)
 	c.JSON(http.StatusInternalServerError, gin.H{
 		"success": false,
 		"error": map[string]interface{}{

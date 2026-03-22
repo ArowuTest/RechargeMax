@@ -98,21 +98,49 @@ export function DailySubscription() {
     window.history.replaceState({}, '', '/subscription')
 
     if (status === 'success') {
+      // Restore phone from sessionStorage (saved before Paystack redirect)
+      const savedPhone = sessionStorage.getItem('sub_phone') || ''
+      if (savedPhone && phoneRef.current) {
+        setPhone(savedPhone)
+      }
+      sessionStorage.removeItem('sub_phone')
+      sessionStorage.removeItem('sub_entries')
+
       toast({ title: '🎉 Payment Successful!', description: 'Activating your subscription line…', duration: 7000 })
-      if (ref) {
-        let attempts = 0
-        const poll = setInterval(async () => {
-          attempts++
-          const digits = (phoneRef.current?.value || '').replace(/\D/g, '')
+
+      // Poll /subscription/active-lines using the auth cookie (JWT) — no phone param needed.
+      // The backend resolves MSISDN from the JWT when no query param is provided.
+      let attempts = 0
+      const poll = setInterval(async () => {
+        attempts++
+        try {
+          // Try auth-cookie route first (logged-in users)
+          const r = await apiClient.get<{ success: boolean; data: ActiveLinesData }>(
+            '/subscription/active-lines'
+          )
+          if (r.data?.success && r.data.data.total_active_lines > 0) {
+            clearInterval(poll)
+            setActiveLines(r.data.data)
+            const d = r.data.data
+            toast({
+              title: '✅ Subscription Active!',
+              description: `You now have ${d.total_daily_entries} entr${d.total_daily_entries === 1 ? 'y' : 'ies'}/day · ₦${d.total_daily_cost_ngn}/day`,
+              duration: 10000,
+            })
+            return
+          }
+        } catch {
+          // If auth-cookie call fails, fall back to phone param
+          const digits = (phoneRef.current?.value || savedPhone).replace(/\D/g, '')
           if (digits.length >= 10) {
             try {
-              const r = await apiClient.get<{ success: boolean; data: ActiveLinesData }>(
+              const r2 = await apiClient.get<{ success: boolean; data: ActiveLinesData }>(
                 `/subscription/active-lines?msisdn=${digits}`
               )
-              if (r.data?.success && r.data.data.total_active_lines > 0) {
+              if (r2.data?.success && r2.data.data.total_active_lines > 0) {
                 clearInterval(poll)
-                setActiveLines(r.data.data)
-                const d = r.data.data
+                setActiveLines(r2.data.data)
+                const d = r2.data.data
                 toast({
                   title: '✅ Subscription Active!',
                   description: `You now have ${d.total_daily_entries} entr${d.total_daily_entries === 1 ? 'y' : 'ies'}/day · ₦${d.total_daily_cost_ngn}/day`,
@@ -121,9 +149,9 @@ export function DailySubscription() {
               }
             } catch {}
           }
-          if (attempts >= 5) clearInterval(poll)
-        }, 2000)
-      }
+        }
+        if (attempts >= 8) clearInterval(poll)
+      }, 2000)
     } else {
       toast({ title: 'Payment Failed', description: params.get('error') || 'Please try again.', variant: 'destructive', duration: 8000 })
     }
@@ -177,6 +205,9 @@ export function DailySubscription() {
       const d = res.data || res
       const url = d.authorization_url || d.payment_url
       if (!url) throw new Error('Payment URL not received from server')
+      // Save phone + entries before leaving the page so we can restore them on return
+      sessionStorage.setItem('sub_phone', phone)
+      sessionStorage.setItem('sub_entries', String(entries))
       window.location.href = url
     } catch (e: any) {
       toast({ title: 'Subscription Failed', description: e.message || 'Unable to start payment.', variant: 'destructive' })

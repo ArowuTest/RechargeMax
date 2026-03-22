@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"rechargemax/internal/application/services"
 	"rechargemax/internal/errors"
@@ -143,6 +144,99 @@ func (h *SubscriptionHandler) GetConfig(c *gin.Context) {
 		return
 	}
 	middleware.RespondWithSuccess(c, config)
+}
+
+// GetActiveLines returns ALL active subscription lines for a MSISDN,
+// plus aggregate totals (total_daily_entries, total_daily_cost).
+// This supports the multi-line subscription UI.
+func (h *SubscriptionHandler) GetActiveLines(c *gin.Context) {
+	msisdn := c.GetString("msisdn")
+	if msisdn == "" {
+		msisdn = c.Query("msisdn")
+	}
+	if msisdn == "" {
+		middleware.RespondWithError(c, errors.BadRequest("Phone number is required"))
+		return
+	}
+
+	subs, err := h.subscriptionService.GetAllActiveSubscriptions(c.Request.Context(), msisdn)
+	if err != nil {
+		middleware.RespondWithError(c, err)
+		return
+	}
+
+	// Build response list and compute aggregates
+	type lineItem struct {
+		ID            string  `json:"id"`
+		Code          string  `json:"code"`
+		Entries       int     `json:"entries"`
+		DailyAmountNGN float64 `json:"daily_amount_ngn"`
+		Status        string  `json:"status"`
+		NextBilling   string  `json:"next_billing"`
+		CreatedAt     string  `json:"created_at"`
+	}
+	lines := make([]lineItem, 0, len(subs))
+	totalEntries := 0
+	totalDailyCostNGN := 0.0
+	for _, s := range subs {
+		entries := s.BundleQuantity
+		if entries == 0 {
+			entries = 1
+		}
+		amtNGN := float64(s.DailyAmount) / 100
+		if amtNGN == 0 {
+			amtNGN = s.Amount // legacy naira field
+		}
+		totalEntries += entries
+		totalDailyCostNGN += amtNGN
+		lines = append(lines, lineItem{
+			ID:            s.ID.String(),
+			Code:          s.SubscriptionCode,
+			Entries:       entries,
+			DailyAmountNGN: amtNGN,
+			Status:        s.Status,
+			NextBilling:   s.NextBillingDate.Format("2006-01-02T15:04:05Z"),
+			CreatedAt:     s.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		})
+	}
+
+	middleware.RespondWithSuccess(c, map[string]interface{}{
+		"lines":                lines,
+		"total_active_lines":   len(lines),
+		"total_daily_entries":  totalEntries,
+		"total_daily_cost_ngn": totalDailyCostNGN,
+	})
+}
+
+// CancelLine cancels a specific subscription line by its ID.
+func (h *SubscriptionHandler) CancelLine(c *gin.Context) {
+	msisdn := c.GetString("msisdn")
+	if msisdn == "" {
+		var body struct {
+			MSISDN string `json:"msisdn"`
+		}
+		_ = c.ShouldBindJSON(&body)
+		msisdn = body.MSISDN
+	}
+	if msisdn == "" {
+		middleware.RespondWithError(c, errors.BadRequest("Phone number is required"))
+		return
+	}
+
+	lineID := c.Param("id")
+	parsedID, err := uuid.Parse(lineID)
+	if err != nil {
+		middleware.RespondWithError(c, errors.BadRequest("Invalid subscription line ID"))
+		return
+	}
+
+	if err := h.subscriptionService.CancelSubscriptionByID(c.Request.Context(), msisdn, parsedID); err != nil {
+		middleware.RespondWithError(c, err)
+		return
+	}
+	middleware.RespondWithSuccess(c, map[string]interface{}{
+		"message": "Subscription line cancelled successfully",
+	})
 }
 
 // Subscribe is an alias for CreateSubscription (matches frontend /subscribe endpoint)

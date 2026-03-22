@@ -49,7 +49,7 @@ import {
   CreditCard, Gift, TrendingUp, Calendar, Smartphone, Trophy,
   User, Loader2, CheckCircle, Clock, AlertCircle, ArrowLeft,
   DollarSign, Phone, Download, Search, Copy, RefreshCw, Award,
-  Zap, Star, ChevronRight, Sparkles, Wallet
+  Zap, Star, ChevronRight, Sparkles, Wallet, Layers, Plus, XCircle
 } from 'lucide-react';
 
 interface DashboardData {
@@ -129,6 +129,13 @@ export const UserDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [searchTerm, setSearchTerm] = useState('');
   const [claimingPrize, setClaimingPrize] = useState<string | null>(null);
+  const [activeLines, setActiveLines] = useState<{
+    lines: Array<{ id: string; code: string; entries: number; daily_amount_ngn: number; status: string; next_billing: string }>;
+    total_active_lines: number;
+    total_daily_entries: number;
+    total_daily_cost_ngn: number;
+  } | null>(null);
+  const [cancellingLine, setCancellingLine] = useState<string | null>(null);
     const [bankDetails, setBankDetails] = useState<BankDetails>({
     account_number: '',
     account_name: '',
@@ -170,6 +177,15 @@ export const UserDashboard: React.FC = () => {
       } else {
         setError(!response.success ? response.error : 'Failed to load dashboard');
       }
+
+      // Fetch active subscription lines (multi-line support)
+      try {
+        const linesRes = await apiClient.get<{ success: boolean; data: typeof activeLines }>(
+          `/subscription/active-lines?msisdn=${encodeURIComponent(user.msisdn)}`
+        );
+        if (linesRes.data?.success) setActiveLines(linesRes.data.data);
+      } catch { /* non-critical */ }
+
     } catch (err: any) {
       console.error('Dashboard fetch error:', err);
       setError(err.message || 'An error occurred');
@@ -843,26 +859,132 @@ export const UserDashboard: React.FC = () => {
             {/* ════════ SUBSCRIPTIONS ════════ */}
             {activeTab === 'subscriptions' && (
               <div className="space-y-5">
-                <div className="grid gap-4 md:grid-cols-3">
-                  {[
-                    { label: 'Total Subscriptions', value: dashboardData.summary?.total_subscriptions || 0, icon: Calendar, color: 'from-blue-500 to-cyan-500' },
-                    { label: 'Total Entries', value: dashboardData.summary?.total_subscription_entries || 0, icon: Trophy, color: 'from-amber-400 to-orange-500' },
-                    { label: 'Points Earned', value: dashboardData.summary?.total_subscription_points || 0, icon: Award, color: 'from-violet-500 to-purple-600' },
-                  ].map(({ label, value, icon: Icon, color }) => (
-                    <div key={label} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex items-center gap-4">
-                      <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${color} flex items-center justify-center flex-shrink-0`}>
-                        <Icon className="w-6 h-6 text-white" />
-                      </div>
+
+                {/* ── Summary stats ── */}
+                <div className="grid gap-4 md:grid-cols-4">
+                  {/* Active lines count (live) */}
+                  <div className="bg-white rounded-2xl shadow-sm border-2 border-green-100 p-5 flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-400 to-emerald-600 flex items-center justify-center flex-shrink-0">
+                      <Layers className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 font-medium">Active Lines</p>
+                      <p className="text-2xl font-black text-gray-900">{activeLines?.total_active_lines ?? 0}</p>
+                    </div>
+                  </div>
+                  {/* Total daily entries (live = sum of active lines) */}
+                  <div className="bg-white rounded-2xl shadow-sm border-2 border-amber-100 p-5 flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center flex-shrink-0">
+                      <Trophy className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 font-medium">Daily Entries</p>
+                      <p className="text-2xl font-black text-gray-900">{activeLines?.total_daily_entries ?? dashboardData.summary?.total_subscription_entries ?? 0}</p>
+                    </div>
+                  </div>
+                  {/* All-time subscription count */}
+                  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center flex-shrink-0">
+                      <Calendar className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 font-medium">All-time Lines</p>
+                      <p className="text-2xl font-black text-gray-900">{dashboardData.summary?.total_subscriptions ?? 0}</p>
+                    </div>
+                  </div>
+                  {/* Points earned */}
+                  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+                      <Award className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 font-medium">Points Earned</p>
+                      <p className="text-2xl font-black text-gray-900">{dashboardData.summary?.total_subscription_points ?? 0}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Active subscription lines ── */}
+                {activeLines && activeLines.total_active_lines > 0 && (
+                  <div className="bg-white rounded-2xl shadow-sm border-2 border-green-100 overflow-hidden">
+                    <div className="p-5 border-b border-green-100 bg-green-50 flex items-center justify-between">
                       <div>
-                        <p className="text-xs text-gray-500 font-medium">{label}</p>
-                        <p className="text-2xl font-black text-gray-900" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{value}</p>
+                        <h3 className="font-bold text-green-900 flex items-center gap-2">
+                          <Layers className="w-4 h-4" /> Active Subscription Lines
+                        </h3>
+                        <p className="text-xs text-green-700 mt-0.5">
+                          {activeLines.total_daily_entries} guaranteed entries/day · ₦{activeLines.total_daily_cost_ngn}/day total
+                        </p>
+                      </div>
+                      <motion.button
+                        onClick={() => window.location.href = '/subscription'}
+                        className="flex items-center gap-1.5 bg-green-600 text-white text-sm font-bold px-4 py-2 rounded-xl"
+                        whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                      >
+                        <Plus className="w-4 h-4" /> Add Line
+                      </motion.button>
+                    </div>
+                    <div className="divide-y divide-gray-50">
+                      {activeLines.lines.map(line => (
+                        <div key={line.id} className="flex items-center justify-between px-5 py-3 hover:bg-gray-50">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-full bg-green-100 flex items-center justify-center">
+                              <Trophy className="w-4 h-4 text-green-600" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-gray-800 text-sm">
+                                {line.entries} {line.entries === 1 ? 'entry' : 'entries'}/day
+                                <span className="text-gray-400 font-normal ml-1">— ₦{line.daily_amount_ngn}/day</span>
+                              </p>
+                              <p className="text-xs text-gray-400 font-mono">{line.code}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs text-gray-400">
+                              Next: {new Date(line.next_billing).toLocaleDateString('en-NG', { month: 'short', day: 'numeric' })}
+                            </span>
+                            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">active</span>
+                            <button
+                              onClick={async () => {
+                                if (!confirm(`Cancel ${line.code}?`)) return;
+                                setCancellingLine(line.id);
+                                try {
+                                  await apiClient.post(`/subscription/cancel/${line.id}`, { msisdn: user?.msisdn });
+                                  toast({ title: 'Line cancelled', description: `${line.code} has been cancelled.` });
+                                  fetchDashboardData();
+                                } catch {
+                                  toast({ title: 'Cancel failed', variant: 'destructive' });
+                                } finally { setCancellingLine(null); }
+                              }}
+                              disabled={cancellingLine === line.id}
+                              className="text-red-400 hover:text-red-600 transition-colors p-1 rounded"
+                              title="Cancel this line"
+                            >
+                              {cancellingLine === line.id
+                                ? <Loader2 className="w-4 h-4 animate-spin" />
+                                : <XCircle className="w-4 h-4" />}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      {/* Total bar */}
+                      <div className="flex items-center justify-between bg-green-700 text-white px-5 py-3">
+                        <span className="font-bold text-sm">Total daily guaranteed</span>
+                        <div className="flex items-center gap-4 text-sm font-bold">
+                          <span>{activeLines.total_daily_entries} entries/day</span>
+                          <span className="opacity-75">·</span>
+                          <span>₦{activeLines.total_daily_cost_ngn}/day</span>
+                        </div>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
+
+                {/* ── Subscription history table ── */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                   <div className="p-5 border-b border-gray-100">
                     <h3 className="font-bold text-gray-900">Subscription History</h3>
+                    <p className="text-xs text-gray-500 mt-0.5">All lines ever created (points awarded on confirmed daily payments only)</p>
                   </div>
                   <div className="overflow-x-auto">
                     <Table>
@@ -905,19 +1027,23 @@ export const UserDashboard: React.FC = () => {
                     </Table>
                   </div>
                 </div>
+
+                {/* ── Add more CTA ── */}
                 <div className="rounded-2xl p-6 text-white flex items-center justify-between"
                      style={{ background: 'linear-gradient(135deg, #7c3aed, #a855f7)' }}>
                   <div>
-                    <h4 className="font-bold text-lg" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Add More Entries</h4>
-                    <p className="text-purple-200 text-sm mt-0.5">Subscribe for more daily draw entries</p>
+                    <h4 className="font-bold text-lg">Add Another Subscription Line</h4>
+                    <p className="text-purple-200 text-sm mt-0.5">
+                      Stack lines to get more daily draw entries. Each line is billed independently.
+                    </p>
                   </div>
                   <motion.button
                     onClick={() => window.location.href = '/subscription'}
-                    className="bg-white text-purple-700 font-bold px-5 py-2.5 rounded-xl text-sm"
+                    className="bg-white text-purple-700 font-bold px-5 py-2.5 rounded-xl text-sm flex items-center gap-2 shrink-0"
                     whileHover={{ scale: 1.04 }}
                     whileTap={{ scale: 0.97 }}
                   >
-                    Subscribe
+                    <Plus className="w-4 h-4" /> Subscribe
                   </motion.button>
                 </div>
               </div>

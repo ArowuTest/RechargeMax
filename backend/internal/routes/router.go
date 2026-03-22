@@ -147,10 +147,12 @@ func registerPublic(v1 *gin.RouterGroup, hdlrs *handlers.Registry, db *gorm.DB) 
 
 	subPublic := v1.Group("/subscription", middleware.OptionalAuthMiddleware())
 	{
-		subPublic.POST("/create",  hdlrs.Subscription.CreateSubscription)
-		subPublic.GET("/status",   hdlrs.Subscription.GetSubscription)
-		subPublic.POST("/cancel",  hdlrs.Subscription.CancelSubscription)
-		subPublic.GET("/history",  hdlrs.Subscription.GetHistory)
+		subPublic.POST("/create",       hdlrs.Subscription.CreateSubscription)
+		subPublic.GET("/status",        hdlrs.Subscription.GetSubscription)
+		subPublic.GET("/active-lines",  hdlrs.Subscription.GetActiveLines)
+		subPublic.POST("/cancel",       hdlrs.Subscription.CancelSubscription)
+		subPublic.POST("/cancel/:id",   hdlrs.Subscription.CancelLine)
+		subPublic.GET("/history",       hdlrs.Subscription.GetHistory)
 	}
 
 	// /subscriptions/daily/* aliases — frontend api.ts also calls these paths
@@ -158,7 +160,8 @@ func registerPublic(v1 *gin.RouterGroup, hdlrs *handlers.Registry, db *gorm.DB) 
 	{
 		subDailyPublic.POST("",                        hdlrs.Subscription.CreateSubscription)
 		subDailyPublic.GET("/status",                  hdlrs.Subscription.GetSubscription)
-		subDailyPublic.POST("/:subscriptionId/cancel", hdlrs.Subscription.CancelSubscription)
+		subDailyPublic.GET("/active-lines",            hdlrs.Subscription.GetActiveLines)
+		subDailyPublic.POST("/:subscriptionId/cancel", hdlrs.Subscription.CancelLine)
 		subDailyPublic.GET("/history",                 hdlrs.Subscription.GetHistory)
 	}
 

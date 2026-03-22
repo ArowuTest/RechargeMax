@@ -1,368 +1,440 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import apiClient from '@/lib/api-client'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
 import { useToast } from '@/hooks/useToast'
 import { processDailySubscription, validatePhoneNetwork } from '@/lib/api'
-import { 
-  Calendar, 
-  Gift, 
-  Star, 
-  TrendingUp, 
-  Clock, 
-  CheckCircle, 
-  Phone,
-  CreditCard,
-  Loader2,
-  Trophy,
-  Target,
-  Sparkles
+import {
+  Calendar, Gift, Star, Clock, CheckCircle, Phone,
+  CreditCard, Loader2, Trophy, Target, Sparkles, Plus,
+  Zap, Layers, XCircle, TrendingUp, ChevronRight
 } from 'lucide-react'
 
-interface SubscriptionFormData {
-  phoneNumber: string
-  networkProvider: string
-  entries: number
-  amount: number
-}
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 interface SubscriptionConfig {
-  amount: number
+  amount: number           // naira per entry per day
   draw_entries_earned: number
   is_active: boolean
 }
 
+interface ActiveLine {
+  id: string
+  code: string
+  entries: number
+  daily_amount_ngn: number
+  status: string
+  next_billing: string
+  created_at: string
+}
+
+interface ActiveLinesData {
+  lines: ActiveLine[]
+  total_active_lines: number
+  total_daily_entries: number
+  total_daily_cost_ngn: number
+}
+
+// ─── Bundle quick-picks ───────────────────────────────────────────────────────
+// Recalculated dynamically from config.amount, these are just the entry counts.
+const BUNDLE_PRESETS = [
+  { entries: 1,  label: 'Starter',    description: '1 draw entry/day',    color: 'blue' },
+  { entries: 5,  label: 'Plus',       description: '5 draw entries/day',   color: 'purple', popular: true },
+  { entries: 10, label: 'Power',      description: '10 draw entries/day',  color: 'amber' },
+  { entries: 20, label: 'Champion',   description: '20 draw entries/day',  color: 'green' },
+]
+
+// ─── Component ───────────────────────────────────────────────────────────────
+
 export function DailySubscription() {
   const [loading, setLoading] = useState(false)
-  const [processingPayment, setProcessingPayment] = useState(false)
   const [configLoading, setConfigLoading] = useState(true)
-  const [subscriptionConfig, setSubscriptionConfig] = useState<SubscriptionConfig>({
-    amount: 20,
-    draw_entries_earned: 1,
-    is_active: true
-  })
-  const [formData, setFormData] = useState<SubscriptionFormData>({
-    phoneNumber: '',
-    networkProvider: '',
-    entries: 1,
-    amount: 20
-  })
+  const [linesLoading, setLinesLoading] = useState(false)
+  const [cancellingId, setCancellingId] = useState<string | null>(null)
+
+  const [config, setConfig] = useState<SubscriptionConfig>({ amount: 20, draw_entries_earned: 1, is_active: true })
+  const [activeLines, setActiveLines] = useState<ActiveLinesData | null>(null)
+
+  const [phone, setPhone] = useState('')
+  const [network, setNetwork] = useState('')
+  const [entries, setEntries] = useState(1)
+  const [customEntries, setCustomEntries] = useState(false)
+
+  const loadedPhoneRef = useRef(false)
   const { toast } = useToast()
 
-  // Fetch subscription configuration on component mount
+  // ── Load config ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    const fetchSubscriptionConfig = async () => {
-      try {
-        setConfigLoading(true)
-        
-        // Use Go backend API instead of Supabase
-        
-        const response = await apiClient.get<{ success: boolean; config: typeof subscriptionConfig }>('/subscription/config')
-        
-        const result = response.data
-        
-        if (result.success && result.config) {
-          setSubscriptionConfig(result.config)
-          // Update form data with new pricing
-          setFormData(prev => ({
-            ...prev,
-            amount: prev.entries * result.config.amount
-          }))
-        } else {
+    apiClient.get<{ success: boolean; config: SubscriptionConfig }>('/subscription/config')
+      .then(r => {
+        if (r.data?.success && r.data?.config) {
+          setConfig(r.data.config)
         }
-      } catch (error) {
-        console.error('Error fetching subscription config:', error)
-      } finally {
-        setConfigLoading(false)
-      }
-    }
-    
-    fetchSubscriptionConfig()
+      })
+      .catch(() => {})
+      .finally(() => setConfigLoading(false))
   }, [])
 
-  // Calculate amount based on entries and current config
-  useEffect(() => {
-    setFormData(prev => ({
-      ...prev,
-      amount: prev.entries * subscriptionConfig.amount
-    }))
-  }, [formData.entries, subscriptionConfig.amount])
-
-  // Handle success status from URL parameters
-  // fetchSubscriptionStatus polls the backend and returns the active sub
-  const fetchSubscriptionStatus = useCallback(async (msisdn: string) => {
+  // ── Load active lines ────────────────────────────────────────────────────────
+  const fetchActiveLines = useCallback(async (msisdn: string) => {
+    if (!msisdn || msisdn.replace(/\s/g, '').length < 10) return
+    setLinesLoading(true)
     try {
-      const res = await apiClient.get(`/subscription/status?msisdn=${encodeURIComponent(msisdn)}`)
-      return res.data?.data || null
+      const r = await apiClient.get<{ success: boolean; data: ActiveLinesData }>(
+        `/subscription/active-lines?msisdn=${encodeURIComponent(msisdn.replace(/\s/g, ''))}`
+      )
+      if (r.data?.success) setActiveLines(r.data.data)
     } catch {
-      return null
+      setActiveLines(null)
+    } finally {
+      setLinesLoading(false)
     }
   }, [])
 
+  // Reload lines whenever phone reaches 11 digits
   useEffect(() => {
-    // BrowserRouter: params live in window.location.search (?key=val)
-    const urlParams = new URLSearchParams(window.location.search)
-    const status = urlParams.get('status')
-    const type   = urlParams.get('type')
-    const ref    = urlParams.get('ref')
+    const digits = phone.replace(/\D/g, '')
+    if (digits.length === 11) {
+      fetchActiveLines(digits)
+    } else {
+      setActiveLines(null)
+    }
+  }, [phone, fetchActiveLines])
+
+  // ── Handle return from Paystack payment ────────────────────────────────────
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const status = params.get('status')
+    const type   = params.get('type')
+    const ref    = params.get('ref')
 
     if (!status || type !== 'subscription') return
-
-    // Clean the URL immediately so a page refresh doesn't re-trigger the toast
     window.history.replaceState({}, '', '/subscription')
 
     if (status === 'success') {
-      // Show an immediate success toast
       toast({
-        title: "Payment Successful! 🎉",
-        description: "Your subscription is being activated. Your entries will appear shortly.",
+        title: '🎉 Payment Successful!',
+        description: 'Your subscription line is being activated. Entries will appear shortly.',
         duration: 8000,
       })
 
-      // Poll the backend up to 5×2s to get the activated subscription details
+      // Poll once we know the MSISDN
       if (ref) {
         let attempts = 0
         const poll = setInterval(async () => {
           attempts++
-          // Try to get sub by MSISDN — use the phone field if already entered
-          const msisdn = (document.querySelector('input[placeholder*="08"]') as HTMLInputElement)?.value
-          if (msisdn) {
-            const sub = await fetchSubscriptionStatus(msisdn)
-            if (sub && sub.status === 'active') {
-              clearInterval(poll)
-              toast({
-                title: "Daily Subscription Activated! 🎉",
-                description: `₦${sub.daily_amount_ngn || 20}/day subscription is now live. Good luck in today's draw!`,
-                duration: 10000,
-              })
-            }
+          const digits = phone.replace(/\D/g, '') || ''
+          if (digits.length >= 10) {
+            try {
+              const r = await apiClient.get<{ success: boolean; data: ActiveLinesData }>(
+                `/subscription/active-lines?msisdn=${digits}`
+              )
+              if (r.data?.success && r.data.data.total_active_lines > 0) {
+                clearInterval(poll)
+                setActiveLines(r.data.data)
+                const d = r.data.data
+                toast({
+                  title: '✅ Subscription Active!',
+                  description: `Line added! You now have ${d.total_daily_entries} entr${d.total_daily_entries === 1 ? 'y' : 'ies'}/day (₦${d.total_daily_cost_ngn}/day total).`,
+                  duration: 10000,
+                })
+              }
+            } catch {}
           }
           if (attempts >= 5) clearInterval(poll)
         }, 2000)
       }
-    } else if (status === 'error') {
-      const error = urlParams.get('error')
+    } else {
+      const err = params.get('error')
       toast({
-        title: "Payment Failed",
-        description: error || "There was an issue with your subscription. Please try again.",
-        variant: "destructive",
+        title: 'Payment Failed',
+        description: err || 'There was an issue with your payment. Please try again.',
+        variant: 'destructive',
         duration: 8000,
       })
     }
-  }, [])
+  }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleSubscribe = async () => {
+  // ── Cancel a specific line ──────────────────────────────────────────────────
+  const handleCancelLine = async (lineId: string, lineCode: string) => {
+    if (!confirm(`Cancel subscription line ${lineCode}?\n\nThis will stop future daily charges for this line.`)) return
+    setCancellingId(lineId)
     try {
-      // Validate phone number
-      if (!formData.phoneNumber || formData.phoneNumber.length < 11) {
-        toast({
-          title: "Invalid Phone Number",
-          description: "Please enter a valid Nigerian phone number",
-          variant: "destructive"
-        })
-        return
-      }
-
-      // Validate network selection
-      if (!formData.networkProvider) {
-        toast({
-          title: "Network Required",
-          description: "Please select your network provider",
-          variant: "destructive"
-        })
-        return
-      }
-
-      // Validate phone number with network
-      const networkValidationResult = await validatePhoneNetwork(
-        formData.phoneNumber.replace(/\s/g, ''),
-        formData.networkProvider
-      );
-      
-      if (!networkValidationResult.success) {
-        toast({
-          title: "Validation Failed",
-          description: "Failed to validate phone number",
-          variant: "destructive"
-        })
-        return
-      }
-      
-      if ((networkValidationResult as any).detectedNetwork !== formData.networkProvider) {
-        toast({
-          title: "Network Mismatch",
-          description: `Phone number ${formData.phoneNumber} belongs to ${(networkValidationResult as any).detectedNetwork}, but you selected ${formData.networkProvider}. Please select the correct network.`,
-          variant: "destructive"
-        })
-        return
-      }
-
-      // Validate entries
-      if (formData.entries < 1 || formData.entries > 100) {
-        toast({
-          title: "Invalid Entries",
-          description: "Please enter between 1 and 100 entries",
-          variant: "destructive"
-        })
-        return
-      }
-
-      setLoading(true)
-      setProcessingPayment(true)
-
-      // Initialize subscription payment with Paystack
-      const subscriptionData = {
-
-        action: 'INITIALIZE_PAYMENT',
-        msisdn: formData.phoneNumber.replace(/\s/g, ''),
-        entries: formData.entries,
-        amount: formData.amount,
-        subscription_amount: subscriptionConfig.amount // Dynamic subscription amount per entry
-      };
-      
-      
-      const response = await processDailySubscription(subscriptionData);
-
-      // Remove diagnostic block (was leftover debug code)
-
-      if (!response.success) {
-        throw new Error(response.error || 'Subscription payment initialization failed')
-      }
-
-      // Backend wraps the DTO inside response.data.
-      // Try all known field names in case of future API changes.
-      const subData = response.data || response
-      const payURL = subData.authorization_url || subData.payment_url
-
-      // Redirect to Paystack payment page
-      if (payURL) {
-        window.location.href = payURL
-      } else {
-        throw new Error('Payment URL not received from server')
-      }
-
-    } catch (error: any) {
-      console.error('Subscription error:', error)
-      toast({
-        title: "Subscription Failed",
-        description: error.message || "Failed to initialize subscription payment",
-        variant: "destructive"
-      })
+      await apiClient.post(`/subscription/cancel/${lineId}`, { msisdn: phone.replace(/\s/g, '') })
+      toast({ title: 'Line Cancelled', description: `Subscription ${lineCode} has been cancelled.` })
+      await fetchActiveLines(phone.replace(/\s/g, ''))
+    } catch {
+      toast({ title: 'Cancel Failed', description: 'Could not cancel line. Please try again.', variant: 'destructive' })
     } finally {
-      setLoading(false)
-      setProcessingPayment(false)
+      setCancellingId(null)
     }
   }
 
-  const formatPhoneNumber = (value: string) => {
-    // Remove all non-digits
-    const digits = value.replace(/\D/g, '')
-    
-    // Format as Nigerian number
-    if (digits.length <= 4) return digits
-    if (digits.length <= 7) return `${digits.slice(0, 4)} ${digits.slice(4)}`
-    if (digits.length <= 11) return `${digits.slice(0, 4)} ${digits.slice(4, 7)} ${digits.slice(7)}`
-    return `${digits.slice(0, 4)} ${digits.slice(4, 7)} ${digits.slice(7, 11)}`
+  // ── Subscribe ───────────────────────────────────────────────────────────────
+  const handleSubscribe = async () => {
+    const digits = phone.replace(/\s/g, '')
+
+    if (digits.length < 11) {
+      toast({ title: 'Invalid Phone Number', description: 'Please enter a valid 11-digit Nigerian number.', variant: 'destructive' })
+      return
+    }
+    if (!network) {
+      toast({ title: 'Network Required', description: 'Please select your network provider.', variant: 'destructive' })
+      return
+    }
+    if (entries < 1 || entries > 100) {
+      toast({ title: 'Invalid Entries', description: 'Choose between 1 and 100 entries.', variant: 'destructive' })
+      return
+    }
+
+    // Network validation
+    try {
+      const nv = await validatePhoneNetwork(digits, network)
+      if (!nv.success) throw new Error('Validation failed')
+      if ((nv as any).detectedNetwork !== network) {
+        toast({
+          title: 'Network Mismatch',
+          description: `${digits} is on ${(nv as any).detectedNetwork}, not ${network}.`,
+          variant: 'destructive',
+        })
+        return
+      }
+    } catch {
+      toast({ title: 'Validation Error', description: 'Could not validate number. Please check and retry.', variant: 'destructive' })
+      return
+    }
+
+    setLoading(true)
+    try {
+      const amount = entries * config.amount
+      const res = await processDailySubscription({
+        action: 'INITIALIZE_PAYMENT',
+        msisdn: digits,
+        entries,
+        amount,
+        subscription_amount: config.amount,
+      })
+
+      if (!res.success) throw new Error(res.error || 'Payment initialisation failed')
+
+      const d = res.data || res
+      const url = d.authorization_url || d.payment_url
+      if (!url) throw new Error('Payment URL not received')
+      window.location.href = url
+    } catch (e: any) {
+      toast({ title: 'Subscription Failed', description: e.message || 'Unable to start payment.', variant: 'destructive' })
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = formatPhoneNumber(e.target.value)
-    setFormData(prev => ({ ...prev, phoneNumber: formatted }))
+  // ── Phone formatter ──────────────────────────────────────────────────────────
+  const formatPhone = (v: string) => {
+    const d = v.replace(/\D/g, '')
+    if (d.length <= 4) return d
+    if (d.length <= 7) return `${d.slice(0, 4)} ${d.slice(4)}`
+    if (d.length <= 11) return `${d.slice(0, 4)} ${d.slice(4, 7)} ${d.slice(7)}`
+    return `${d.slice(0, 4)} ${d.slice(4, 7)} ${d.slice(7, 11)}`
   }
 
+  const pricePerEntry = config.amount   // ₦20 (or whatever is configured)
+  const totalAmount   = entries * pricePerEntry
+
+  // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-indigo-50 p-4">
       <div className="max-w-4xl mx-auto space-y-8">
-        {/* Hero Section */}
-        <div className="text-center space-y-4">
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <Calendar className="w-12 h-12 text-blue-600" />
+
+        {/* ── Hero ─────────────────────────────────────────────────────── */}
+        <div className="text-center space-y-3 pt-4">
+          <div className="inline-flex items-center gap-2 bg-blue-100 text-blue-700 rounded-full px-4 py-1 text-sm font-semibold mb-2">
+            <Zap className="w-4 h-4" /> Daily Subscription
           </div>
-          <h1 className="text-4xl font-bold text-gray-900">Daily Subscription</h1>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            {configLoading ? 'Loading configuration...' : `Subscribe for guaranteed daily draw entries. Only ₦${subscriptionConfig.amount} per entry!`}
+          <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">
+            ₦{pricePerEntry}<span className="text-xl font-normal text-gray-500"> per entry / day</span>
+          </h1>
+          <p className="text-gray-600 max-w-xl mx-auto">
+            Add as many daily entry lines as you want. Each line renews automatically —
+            entries and points are only awarded when payment is confirmed.
           </p>
-          {/* Debug info */}
-          <div className="text-xs text-gray-400 mt-2">
-            Debug: Config={JSON.stringify(subscriptionConfig)} | Loading={configLoading.toString()}
+        </div>
+
+        {/* ── Active lines panel ───────────────────────────────────────── */}
+        {activeLines && activeLines.total_active_lines > 0 && (
+          <Card className="border-2 border-green-200 bg-green-50/60 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-green-800">
+                <Layers className="w-5 h-5" />
+                Your Active Subscription Lines
+              </CardTitle>
+              <div className="flex gap-6 mt-1">
+                <span className="text-sm text-gray-600">
+                  <span className="font-bold text-green-700 text-lg">{activeLines.total_daily_entries}</span> total entries/day
+                </span>
+                <span className="text-sm text-gray-600">
+                  <span className="font-bold text-green-700 text-lg">₦{activeLines.total_daily_cost_ngn}</span> total/day
+                </span>
+                <span className="text-sm text-gray-500">
+                  {activeLines.total_active_lines} line{activeLines.total_active_lines > 1 ? 's' : ''}
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {activeLines.lines.map(line => (
+                <div key={line.id}
+                  className="flex items-center justify-between bg-white rounded-xl px-4 py-3 border border-green-100 shadow-xs">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-green-100 flex items-center justify-center">
+                      <Trophy className="w-4 h-4 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-800 text-sm">
+                        {line.entries} {line.entries === 1 ? 'entry' : 'entries'}/day
+                        <span className="text-gray-400 font-normal ml-1">— ₦{line.daily_amount_ngn}/day</span>
+                      </p>
+                      <p className="text-xs text-gray-400 font-mono">{line.code}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-500">
+                      Next: {new Date(line.next_billing).toLocaleDateString('en-NG', { month: 'short', day: 'numeric' })}
+                    </span>
+                    <Badge className="bg-emerald-100 text-emerald-700 border-0 text-xs">active</Badge>
+                    <button
+                      onClick={() => handleCancelLine(line.id, line.code)}
+                      disabled={cancellingId === line.id}
+                      className="text-red-400 hover:text-red-600 transition-colors p-1 rounded"
+                      title="Cancel this line"
+                    >
+                      {cancellingId === line.id
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : <XCircle className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {/* Totals bar */}
+              <div className="flex items-center justify-between bg-green-700 text-white rounded-xl px-4 py-3 mt-2">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4" />
+                  <span className="font-bold">Total daily guaranteed</span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="font-bold">{activeLines.total_daily_entries} entries</span>
+                  <span className="opacity-75">·</span>
+                  <span className="font-bold">₦{activeLines.total_daily_cost_ngn}/day</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ── Bundle presets ───────────────────────────────────────────── */}
+        <div>
+          <h2 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
+            <Plus className="w-5 h-5 text-blue-600" />
+            {activeLines && activeLines.total_active_lines > 0
+              ? 'Add Another Subscription Line'
+              : 'Choose Your Daily Entries'}
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {BUNDLE_PRESETS.map(preset => {
+              const amount = preset.entries * pricePerEntry
+              const isSelected = !customEntries && entries === preset.entries
+              return (
+                <button
+                  key={preset.entries}
+                  onClick={() => { setEntries(preset.entries); setCustomEntries(false) }}
+                  className={`relative rounded-2xl border-2 p-4 text-left transition-all ${
+                    isSelected
+                      ? 'border-blue-500 bg-blue-50 shadow-md'
+                      : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm'
+                  }`}
+                >
+                  {preset.popular && (
+                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-purple-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                      Popular
+                    </span>
+                  )}
+                  <p className="text-2xl font-extrabold text-gray-900">{preset.entries}</p>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{preset.label}</p>
+                  <p className="text-sm text-gray-600 mt-1">{preset.description}</p>
+                  <p className="text-blue-600 font-bold mt-2">₦{amount}/day</p>
+                </button>
+              )
+            })}
           </div>
+
+          {/* Custom entry count */}
+          <button
+            onClick={() => setCustomEntries(true)}
+            className={`mt-3 w-full rounded-2xl border-2 px-4 py-3 text-sm font-medium transition-all flex items-center justify-between ${
+              customEntries ? 'border-blue-500 bg-blue-50' : 'border-dashed border-gray-300 text-gray-500 hover:border-blue-400'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <Target className="w-4 h-4" /> Enter a custom number of entries (1–100)
+            </span>
+            <ChevronRight className="w-4 h-4" />
+          </button>
+          {customEntries && (
+            <div className="mt-2 flex items-center gap-3">
+              <Input
+                type="number"
+                min={1}
+                max={100}
+                value={entries}
+                onChange={e => setEntries(Math.min(100, Math.max(1, parseInt(e.target.value) || 1)))}
+                className="max-w-[120px] text-lg font-bold text-center"
+                autoFocus
+              />
+              <span className="text-gray-600 text-sm">entries/day = <strong className="text-blue-600">₦{entries * pricePerEntry}/day</strong></span>
+            </div>
+          )}
         </div>
 
-        {/* Benefits Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <Card className="text-center">
-            <CardContent className="p-6">
-              <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Guaranteed Entry</h3>
-              <p className="text-gray-600">Every subscription gives you confirmed draw entries</p>
-            </CardContent>
-          </Card>
-          
-          <Card className="text-center">
-            <CardContent className="p-6">
-              <Trophy className="w-12 h-12 text-yellow-600 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Win Big</h3>
-              <p className="text-gray-600">Cash prizes up to ₦500,000 in daily draws</p>
-            </CardContent>
-          </Card>
-          
-          <Card className="text-center">
-            <CardContent className="p-6">
-              <Clock className="w-12 h-12 text-blue-600 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Daily Draws</h3>
-              <p className="text-gray-600">Multiple draws every day, more chances to win</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Subscription Form */}
-        <Card className="max-w-2xl mx-auto">
+        {/* ── Subscription form ────────────────────────────────────────── */}
+        <Card className="shadow-md border border-gray-100">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Gift className="w-6 h-6" />
+              <Gift className="w-5 h-5 text-blue-600" />
               Subscribe Now
             </CardTitle>
             <CardDescription>
-              Enter your phone number and select how many entries you want
+              Each subscription is an independent daily line — you can stack as many as you like.
+              Points and entries are awarded only when that day's payment is confirmed.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Phone Number Input */}
-            <div className="space-y-2">
-              <Label htmlFor="phoneNumber" className="flex items-center gap-2">
-                <Phone className="w-4 h-4" />
-                Phone Number *
+          <CardContent className="space-y-5">
+
+            {/* Phone */}
+            <div className="space-y-1.5">
+              <Label htmlFor="phone" className="flex items-center gap-1.5 text-sm font-medium">
+                <Phone className="w-4 h-4" /> Phone Number *
               </Label>
               <Input
-                id="phoneNumber"
+                id="phone"
                 type="tel"
-                value={formData.phoneNumber}
-                onChange={handlePhoneChange}
+                value={phone}
+                onChange={e => setPhone(formatPhone(e.target.value))}
                 placeholder="0801 234 5678"
                 className="text-lg"
                 maxLength={13}
               />
-              <p className="text-sm text-gray-500">
-                Enter the phone number you want to subscribe with
-              </p>
             </div>
 
-            {/* Network Selection */}
-            <div className="space-y-2">
-              <Label htmlFor="networkProvider" className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4" />
-                Network Provider *
+            {/* Network */}
+            <div className="space-y-1.5">
+              <Label className="flex items-center gap-1.5 text-sm font-medium">
+                <Sparkles className="w-4 h-4" /> Network Provider *
               </Label>
-              <Select 
-                value={formData.networkProvider} 
-                onValueChange={(value) => setFormData(prev => ({ ...prev, networkProvider: value }))}
-              >
-                <SelectTrigger className="text-lg">
+              <Select value={network} onValueChange={setNetwork}>
+                <SelectTrigger className="text-base">
                   <SelectValue placeholder="Select your network" />
                 </SelectTrigger>
                 <SelectContent>
@@ -372,115 +444,95 @@ export function DailySubscription() {
                   <SelectItem value="9mobile">9mobile</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-sm text-gray-500">
-                Select the network provider for your phone number
-              </p>
             </div>
 
-            {/* Entries Selection */}
-            <div className="space-y-2">
-              <Label htmlFor="entries" className="flex items-center gap-2">
-                <Target className="w-4 h-4" />
-                Number of Entries *
-              </Label>
-              <Input
-                id="entries"
-                type="number"
-                min="1"
-                max="100"
-                value={formData.entries}
-                onChange={(e) => setFormData(prev => ({ ...prev, entries: parseInt(e.target.value) || 1 }))}
-                placeholder="Enter number of entries"
-                className="text-lg"
-              />
-              <p className="text-sm text-gray-500">
-                Each entry costs ₦{subscriptionConfig.amount}. Enter 1-100 entries (e.g., 50 entries = ₦{50 * subscriptionConfig.amount})
-              </p>
-            </div>
-
-            {/* Amount Display */}
-            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+            {/* Order summary */}
+            <div className="rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Total Amount</p>
-                  <p className="text-2xl font-bold text-blue-600">₦{formData.amount}</p>
+                  <p className="text-blue-100 text-sm">Subscribing for</p>
+                  <p className="text-3xl font-extrabold">
+                    {entries} {entries === 1 ? 'entry' : 'entries'}/day
+                  </p>
+                  <p className="text-blue-200 text-xs mt-0.5">
+                    ₦{pricePerEntry} × {entries} = ₦{totalAmount} first payment
+                  </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm text-gray-600">Entries</p>
-                  <p className="text-2xl font-bold text-green-600">{formData.entries}</p>
+                  <p className="text-blue-100 text-sm">Daily cost</p>
+                  <p className="text-2xl font-bold">₦{totalAmount}</p>
+                  {activeLines && activeLines.total_active_lines > 0 && (
+                    <p className="text-blue-200 text-xs mt-0.5">
+                      +{entries} = {activeLines.total_daily_entries + entries} total entries/day
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Subscribe Button */}
-            <Button 
+            {/* CTA */}
+            <Button
               onClick={handleSubscribe}
-              disabled={loading || !formData.phoneNumber || !formData.networkProvider || formData.entries < 1}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-6 text-lg"
+              disabled={loading || !phone || !network || entries < 1}
+              className="w-full py-6 text-lg font-bold bg-blue-600 hover:bg-blue-700"
             >
-              {processingPayment ? (
-                <>
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  Processing Payment...
-                </>
-              ) : (
-                <>
-                  <CreditCard className="w-5 h-5 mr-2" />
-                  Pay ₦{formData.amount} - Subscribe Now
-                </>
-              )}
+              {loading
+                ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Processing…</>
+                : <><CreditCard className="w-5 h-5 mr-2" /> Pay ₦{totalAmount} &amp; Subscribe</>}
             </Button>
 
-            <div className="text-center text-sm text-gray-500">
-              <p>After payment, login with your phone number to view your subscription and entries</p>
-            </div>
+            <p className="text-center text-xs text-gray-400">
+              Renews automatically at 08:00 WAT daily. Cancel any line anytime.
+              Points &amp; entries are only awarded when each day's payment is confirmed.
+            </p>
           </CardContent>
         </Card>
 
-        {/* How It Works */}
-        <Card className="max-w-4xl mx-auto">
+        {/* ── How it works ─────────────────────────────────────────────── */}
+        <Card className="border border-gray-100 shadow-sm">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Sparkles className="w-6 h-6" />
-              How It Works
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Star className="w-5 h-5 text-amber-500" /> How Multi-Line Subscriptions Work
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="text-center space-y-2">
-                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto">
-                  <span className="text-blue-600 font-bold">1</span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[
+                {
+                  icon: <Plus className="w-5 h-5 text-blue-600" />,
+                  title: 'Stack subscriptions',
+                  desc: 'Add N20/1 entry now, N200/10 entries later — they run independently side by side.',
+                },
+                {
+                  icon: <CheckCircle className="w-5 h-5 text-green-600" />,
+                  title: 'Points on confirmed payment',
+                  desc: 'Each line awards entries & points only after that day\'s charge succeeds.',
+                },
+                {
+                  icon: <Clock className="w-5 h-5 text-orange-500" />,
+                  title: 'Auto-retry on failure',
+                  desc: 'If a daily charge fails, we retry 3 times (+1h, +3h, +8h) before marking it failed.',
+                },
+                {
+                  icon: <XCircle className="w-5 h-5 text-red-500" />,
+                  title: 'Cancel any line anytime',
+                  desc: 'Each subscription line is independent — cancel one without affecting the others.',
+                },
+              ].map((item, i) => (
+                <div key={i} className="flex gap-3">
+                  <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+                    {item.icon}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-800 text-sm">{item.title}</p>
+                    <p className="text-gray-500 text-xs mt-0.5">{item.desc}</p>
+                  </div>
                 </div>
-                <h4 className="font-semibold">Enter Phone</h4>
-                <p className="text-sm text-gray-600">Enter your phone number</p>
-              </div>
-              
-              <div className="text-center space-y-2">
-                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto">
-                  <span className="text-blue-600 font-bold">2</span>
-                </div>
-                <h4 className="font-semibold">Select Entries</h4>
-                <p className="text-sm text-gray-600">Choose how many entries</p>
-              </div>
-              
-              <div className="text-center space-y-2">
-                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto">
-                  <span className="text-blue-600 font-bold">3</span>
-                </div>
-                <h4 className="font-semibold">Pay Securely</h4>
-                <p className="text-sm text-gray-600">Complete payment via Paystack</p>
-              </div>
-              
-              <div className="text-center space-y-2">
-                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto">
-                  <span className="text-blue-600 font-bold">4</span>
-                </div>
-                <h4 className="font-semibold">Win Prizes</h4>
-                <p className="text-sm text-gray-600">Participate in daily draws</p>
-              </div>
+              ))}
             </div>
           </CardContent>
         </Card>
+
       </div>
     </div>
   )

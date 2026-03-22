@@ -820,57 +820,60 @@ func (s *UserService) getTotalAmountRecharged(ctx context.Context, userID uuid.U
 
 // getSubscriptionStats calculates subscription statistics
 func (s *UserService) getSubscriptionStats(ctx context.Context, msisdn string) (count int64, amount int64, entries int64, points int64) {
-	// Try to find active subscription for this MSISDN
-	activeSub, err := s.subscriptionRepo.FindActiveByMSISDN(ctx, msisdn)
-	if err != nil {
-		// No active subscription found
+	// Count ALL subscriptions (any status) so the dashboard card reflects reality
+	var subs []entities.DailySubscription
+	if err := s.db.WithContext(ctx).
+		Where("msisdn = ?", msisdn).
+		Find(&subs).Error; err != nil {
 		return 0, 0, 0, 0
 	}
-
-	// If active subscription exists, count it
-	if activeSub != nil {
-		count = 1
-		amount = int64(activeSub.Amount)
-		entries = 1
-		// Calculate points (assuming same logic as recharge: 1 point per N100)
-		points = int64(activeSub.Amount) / 100
+	for _, sub := range subs {
+		count++
+		if sub.Status == "active" {
+			amount += sub.Amount
+			// entries and points from lifetime totals on the sub row
+			entries += int64(sub.TotalEntries)
+			points += int64(sub.TotalPointsAwarded)
+		}
 	}
 	return
 }
 
-// getUserSubscriptions gets user's active subscriptions
+// getUserSubscriptions gets user's subscription history (all statuses)
 func (s *UserService) getUserSubscriptions(ctx context.Context, msisdn string) []SubscriptionItem {
-	// Try to find active subscription for this MSISDN
-	activeSub, err := s.subscriptionRepo.FindActiveByMSISDN(ctx, msisdn)
-	if err != nil || activeSub == nil {
-		return []SubscriptionItem{} // Return empty array instead of nil
-	}
-
-	// Map entity fields to response fields
-	var entries int
-	if activeSub.DrawEntriesEarned != nil {
-		entries = *activeSub.DrawEntriesEarned
-	} else {
-		entries = 1 // Default
-	}
-
-	var pointsEarned int
-	if activeSub.PointsEarned != nil {
-		pointsEarned = *activeSub.PointsEarned
-	} else {
-		pointsEarned = 0
+	// Fetch all subscriptions for this MSISDN (active, pending, cancelled, etc.)
+	var subs []entities.DailySubscription
+	err := s.db.WithContext(ctx).
+		Where("msisdn = ?", msisdn).
+		Order("created_at DESC").
+		Limit(20).
+		Find(&subs).Error
+	if err != nil || len(subs) == 0 {
+		return []SubscriptionItem{}
 	}
 
 	var result []SubscriptionItem
-	result = append(result, SubscriptionItem{
-		ID:              activeSub.ID,
-		TransactionDate: activeSub.SubscriptionDate,
-		Reference:       activeSub.SubscriptionCode,
-		Amount:          activeSub.Amount,
-		Entries:         entries,
-		PointsEarned:    pointsEarned,
-		Status:          activeSub.Status,
-	})
+	for _, sub := range subs {
+		var entries int
+		if sub.DrawEntriesEarned != nil {
+			entries = *sub.DrawEntriesEarned
+		} else {
+			entries = sub.BundleQuantity
+		}
+		var pointsEarned int
+		if sub.PointsEarned != nil {
+			pointsEarned = *sub.PointsEarned
+		}
+		result = append(result, SubscriptionItem{
+			ID:              sub.ID,
+			TransactionDate: sub.SubscriptionDate,
+			Reference:       sub.SubscriptionCode,
+			Amount:          sub.Amount,
+			Entries:         entries,
+			PointsEarned:    pointsEarned,
+			Status:          sub.Status,
+		})
+	}
 	return result
 }
 

@@ -234,6 +234,20 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 	// We ALWAYS use the Paystack checkout for the first payment (even if the
 	// user later chooses DCB for renewals).
 	ref := fmt.Sprintf("SUB_%s_%d", sub.ID.String()[:8], now.Unix())
+
+	// *** CRITICAL: Save payment_reference BEFORE calling Paystack ***
+	// If we save it after, a race exists: Paystack webhook fires before
+	// the Update completes → FindByPaymentRef returns nil → ProcessFirstPayment
+	// fails silently → subscription stays "pending" forever.
+	sub.PaymentReference = &ref
+	if saveErr := s.subscriptionRepo.Update(ctx, sub); saveErr != nil {
+		// Log loudly — if this fails, the webhook can never activate this sub.
+		logger.Error("[SubscriptionService] CRITICAL: failed to save payment_reference before Paystack init",
+			zap.String("sub_id", sub.ID.String()),
+			zap.String("ref", ref),
+			zap.Error(saveErr))
+	}
+
 	// callbackURL routes through the backend /payment/callback handler,
 	// which verifies the payment and redirects to the subscription page.
 	callbackURL := fmt.Sprintf("%s/api/v1/payment/callback?reference=%s&gateway=paystack", s.backendURL, ref)
@@ -251,14 +265,12 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 	}
 	payURL, payErr := s.paymentService.InitializePayment(ctx, payReq)
 	if payErr != nil {
-		// Non-fatal: row created, user can retry payment later
+		// Non-fatal: row + payment_reference already saved; user can retry payment later
 		logger.Error("[SubscriptionService] Payment init failed", zap.Error(payErr))
 		resp.PaymentURL = ""
 	} else {
 		resp.PaymentURL = payURL
 		resp.AuthorizationURL = payURL // alias so frontend can use either field name
-		sub.PaymentReference = &ref
-		_ = s.subscriptionRepo.Update(ctx, sub)
 	}
 
 	// Compute user's total daily commitment across all active subscriptions

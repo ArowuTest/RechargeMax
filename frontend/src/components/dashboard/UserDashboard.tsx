@@ -887,7 +887,11 @@ export const UserDashboard: React.FC = () => {
                               <TableCell className="text-amber-600 font-bold">+{sub.points_earned}</TableCell>
                               <TableCell>
                                 <span className={`text-xs font-bold px-2 py-1 rounded-full ${
-                                  sub.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'
+                                  sub.status === 'active'    ? 'bg-emerald-100 text-emerald-700' :
+                                  sub.status === 'pending'   ? 'bg-amber-100 text-amber-700' :
+                                  sub.status === 'cancelled' ? 'bg-red-100 text-red-600' :
+                                  sub.status === 'paused'    ? 'bg-orange-100 text-orange-700' :
+                                  'bg-gray-100 text-gray-600'
                                 }`}>{sub.status}</span>
                               </TableCell>
                             </TableRow>

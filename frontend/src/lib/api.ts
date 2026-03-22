@@ -137,7 +137,15 @@ export const getActiveDraws = async () => drawApi.getActiveDraws();
 export const getDrawResults = async (drawId: string) => drawApi.getDrawResults(drawId);
 
 // ─── Daily subscription ───────────────────────────────────────────────────────
-export const processDailySubscription = async (d: { msisdn: string; tier_id?: string; payment_method?: string }) =>
+export const processDailySubscription = async (d: {
+  msisdn: string;
+  entries?: number;
+  amount?: number;
+  subscription_amount?: number;
+  action?: string;
+  tier_id?: string;
+  payment_method?: string;
+}) =>
   (await apiClient.post('/subscriptions/daily', d)).data;
 export const getDailySubscriptionStatus = async (msisdn: string) =>
   (await apiClient.get(`/subscriptions/daily/status?msisdn=${msisdn}`)).data;

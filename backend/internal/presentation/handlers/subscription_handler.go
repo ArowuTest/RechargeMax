@@ -24,6 +24,8 @@ type createSubscriptionBody struct {
 	PhoneNumber   string `json:"phone_number"`  // alternate field name frontend may send
 	Network       string `json:"network"`
 	PaymentMethod string `json:"payment_method"`
+	Entries       int    `json:"entries"`        // number of daily draw entries (1–100)
+	Amount        int64  `json:"amount"`         // total amount in kobo (informational — backend recalculates)
 }
 
 // resolveMSISDN returns the MSISDN to use for this request.
@@ -66,6 +68,7 @@ func (h *SubscriptionHandler) CreateSubscription(c *gin.Context) {
 		MSISDN:        msisdn,
 		Network:       body.Network,
 		PaymentMethod: body.PaymentMethod,
+		Entries:       body.Entries, // pass through — service defaults to 1 if 0
 	})
 	if err != nil {
 		middleware.RespondWithError(c, err)

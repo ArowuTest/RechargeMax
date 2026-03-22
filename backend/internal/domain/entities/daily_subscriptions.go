@@ -37,7 +37,7 @@ type DailySubscription struct {
 	TotalEntries              int        `json:"total_entries"               gorm:"column:total_entries;not null;default:0"`
 	// DailyAmount in kobo (₦20 = 2000 kobo, ₦200 = 20000 kobo, etc.)
 	DailyAmount               int64      `json:"daily_amount"                gorm:"column:daily_amount;not null;default:2000"`
-	Amount                    int64      `json:"amount"                      gorm:"column:amount;type:bigint"` // legacy compat
+	Amount                    int64      `json:"amount"                      gorm:"column:amount;type:numeric(12,2)"` // legacy compat — stores NAIRA (not kobo)
 	DrawEntriesEarned         *int       `json:"draw_entries_earned"         gorm:"column:draw_entries_earned;default:1"`
 	PointsEarned              *int       `json:"points_earned"               gorm:"column:points_earned;default:0"`
 	// Lifetime totals (updated by billing job after each successful day)

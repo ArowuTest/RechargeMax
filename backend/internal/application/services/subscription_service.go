@@ -157,7 +157,7 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 		BundleQuantity:   entries,
 		TotalEntries:     0, // incremented per successful billing day
 		DailyAmount:      dailyAmountKobo,
-		Amount:           dailyAmountKobo, // legacy column
+		Amount:           dailyAmountKobo / 100, // legacy column is numeric(5,2) — store naira, not kobo
 		DrawEntriesEarned: &entries,
 		PointsEarned:     &entries,
 		Status:           "pending",

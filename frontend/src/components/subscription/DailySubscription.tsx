@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import apiClient from '@/lib/api-client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -94,46 +94,65 @@ export function DailySubscription() {
   }, [formData.entries, subscriptionConfig.amount])
 
   // Handle success status from URL parameters
+  // fetchSubscriptionStatus polls the backend and returns the active sub
+  const fetchSubscriptionStatus = useCallback(async (msisdn: string) => {
+    try {
+      const res = await apiClient.get(`/subscription/status?msisdn=${encodeURIComponent(msisdn)}`)
+      return res.data?.data || null
+    } catch {
+      return null
+    }
+  }, [])
+
   useEffect(() => {
-    // Extract parameters from URL search string (BrowserRouter uses standard ?key=val)
+    // BrowserRouter: params live in window.location.search (?key=val)
     const urlParams = new URLSearchParams(window.location.search)
-    
     const status = urlParams.get('status')
-    const amount = urlParams.get('amount')
-    const entries = urlParams.get('entries')
-    const totalEntries = urlParams.get('totalEntries')
-    const totalPoints = urlParams.get('totalPoints')
-    const points = urlParams.get('points')
-    const ref = urlParams.get('ref')
-    const type = urlParams.get('type')
+    const type   = urlParams.get('type')
+    const ref    = urlParams.get('ref')
 
-    // Debug: Log URL parameters
+    if (!status || type !== 'subscription') return
 
-    // Only handle subscription success, not recharge success
-    if (status === 'success' && type === 'subscription') {
-      const isAdditional = totalEntries && parseInt(totalEntries) > parseInt(entries || '0')
-      
+    // Clean the URL immediately so a page refresh doesn't re-trigger the toast
+    window.history.replaceState({}, '', '/subscription')
+
+    if (status === 'success') {
+      // Show an immediate success toast
       toast({
-        title: isAdditional ? "Subscription Added! 🎉" : "Daily Subscription Activated! 🎉",
-        description: isAdditional 
-          ? `Successfully added ${entries} entries for ₦${amount}! Your total daily entries: ${totalEntries} (${totalPoints} points). Good luck in today's draw!`
-          : `Your daily draw subscription is now active! You have ${entries} entries for ₦${amount} and earned ${points} points. Good luck in today's draw!`,
-        duration: 10000,
+        title: "Payment Successful! 🎉",
+        description: "Your subscription is being activated. Your entries will appear shortly.",
+        duration: 8000,
       })
-      
-      // Clear URL parameters by updating hash
-      window.history.replaceState({}, '', '#/subscription')
+
+      // Poll the backend up to 5×2s to get the activated subscription details
+      if (ref) {
+        let attempts = 0
+        const poll = setInterval(async () => {
+          attempts++
+          // Try to get sub by MSISDN — use the phone field if already entered
+          const msisdn = (document.querySelector('input[placeholder*="08"]') as HTMLInputElement)?.value
+          if (msisdn) {
+            const sub = await fetchSubscriptionStatus(msisdn)
+            if (sub && sub.status === 'active') {
+              clearInterval(poll)
+              toast({
+                title: "Daily Subscription Activated! 🎉",
+                description: `₦${sub.daily_amount_ngn || 20}/day subscription is now live. Good luck in today's draw!`,
+                duration: 10000,
+              })
+            }
+          }
+          if (attempts >= 5) clearInterval(poll)
+        }, 2000)
+      }
     } else if (status === 'error') {
       const error = urlParams.get('error')
       toast({
-        title: "Subscription Failed",
+        title: "Payment Failed",
         description: error || "There was an issue with your subscription. Please try again.",
         variant: "destructive",
         duration: 8000,
       })
-      
-      // Clear URL parameters by updating hash
-      window.history.replaceState({}, '', '#/subscription')
     }
   }, [])
 

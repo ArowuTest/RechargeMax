@@ -360,7 +360,7 @@ func (h *PaymentHandler) HandleCallback(c *gin.Context) {
 		} else if isSubscription {
 			// Subscription payment: redirect to /subscription page with status params.
 			// DailySubscription.tsx reads: ?status=success&type=subscription&ref=SUB_xxx
-			redirectURL := fmt.Sprintf("%s/#/subscription?status=success&type=subscription&ref=%s",
+			redirectURL := fmt.Sprintf("%s/subscription?status=success&type=subscription&ref=%s",
 				h.frontendURL, reference)
 			c.Redirect(http.StatusFound, redirectURL)
 		} else {
@@ -376,7 +376,7 @@ func (h *PaymentHandler) HandleCallback(c *gin.Context) {
 				"reference": reference,
 			})
 		} else if len(reference) >= 4 && reference[:4] == "SUB_" {
-			c.Redirect(http.StatusFound, h.frontendURL+"/#/subscription?status=error&type=subscription&error=Payment+verification+failed&ref="+reference)
+			c.Redirect(http.StatusFound, h.frontendURL+"/subscription?status=error&type=subscription&error=Payment+verification+failed&ref="+reference)
 		} else {
 			c.Redirect(http.StatusFound, h.frontendURL+"/?payment=failed&reference="+reference)
 		}

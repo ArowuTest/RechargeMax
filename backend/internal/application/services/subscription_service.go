@@ -164,7 +164,7 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 		BundleQuantity:   entries,
 		TotalEntries:     0, // incremented per successful billing day
 		DailyAmount:      dailyAmountKobo,
-		Amount:           dailyAmountKobo / 100, // legacy column is numeric(5,2) — store naira, not kobo
+		Amount:           float64(dailyAmountKobo) / 100, // legacy column numeric(12,2) stores naira; must be float64
 		DrawEntriesEarned: &entries,
 		PointsEarned:     &entries,
 		Status:           "pending",
@@ -713,7 +713,7 @@ func (s *SubscriptionService) toResponse(sub *entities.DailySubscription) *Subsc
 	}
 	amt := sub.DailyAmount
 	if amt == 0 {
-		amt = sub.Amount
+		amt = int64(sub.Amount * 100) // Amount is naira (float64), convert to kobo
 	}
 	if amt == 0 {
 		amt = entities.PricePerEntry * int64(sub.BundleQuantity)

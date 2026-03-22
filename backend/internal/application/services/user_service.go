@@ -109,7 +109,7 @@ type SubscriptionItem struct {
 	ID              uuid.UUID `json:"id"`
 	TransactionDate time.Time `json:"transaction_date"`
 	Reference       string    `json:"reference"`
-	Amount          int64     `json:"amount"`
+	Amount          float64   `json:"amount"` // naira value from numeric(12,2) column
 	Entries         int       `json:"entries"`
 	PointsEarned    int       `json:"points_earned"`
 	Status          string    `json:"status"`
@@ -830,7 +830,7 @@ func (s *UserService) getSubscriptionStats(ctx context.Context, msisdn string) (
 	for _, sub := range subs {
 		count++
 		if sub.Status == "active" {
-			amount += sub.Amount
+			amount += int64(sub.Amount) // Amount is naira float64; cast to int64 for summary
 			// entries and points from lifetime totals on the sub row
 			entries += int64(sub.TotalEntries)
 			points += int64(sub.TotalPointsAwarded)

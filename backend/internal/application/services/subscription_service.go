@@ -554,11 +554,11 @@ func (s *SubscriptionService) UpdateConfig(ctx context.Context, config map[strin
 	if v, ok := config["amount"]; ok {
 		switch val := v.(type) {
 		case float64:
-			cfg.Amount = int64(val)
-		case int64:
 			cfg.Amount = val
+		case int64:
+			cfg.Amount = float64(val)
 		case int:
-			cfg.Amount = int64(val)
+			cfg.Amount = float64(val)
 		}
 	}
 	if v, ok := config["draw_entries_earned"]; ok {

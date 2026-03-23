@@ -99,6 +99,26 @@ func (h *AdminComprehensiveHandler) CreatePrize(c *gin.Context) {
 		return
 	}
 
+	// De-duplicate: if a prize with the same name, type, and value already exists, return it
+	type existingPrize struct {
+		ID string `gorm:"column:id"`
+	}
+	var existing existingPrize
+	dupErr := h.db.WithContext(ctx).
+		Table("spin_prizes").
+		Select("id").
+		Where("prize_name = ? AND prize_type = ? AND prize_value = ?",
+			prizeData.Name, prizeData.Type, int64(prizeData.Value)).
+		First(&existing).Error
+	if dupErr == nil && existing.ID != "" {
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "Prize already exists (duplicate suppressed)",
+			"data":    map[string]interface{}{"id": existing.ID},
+		})
+		return
+	}
+
 	prizeMap := map[string]interface{}{
 		"name":        prizeData.Name,
 		"type":        prizeData.Type,

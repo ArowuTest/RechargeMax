@@ -70,7 +70,7 @@ func registerInfra(r *gin.Engine) {
 			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"service":   "rechargemax-api",
 			"version":   "1.1.0",
-			"build":     "20260322-amount-float64-fix",
+			"build":     "20260323-uat-fixes",
 		})
 	})
 
@@ -280,6 +280,10 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	// Dashboard
 	admin.GET("/dashboard", hdlrs.Admin.GetDashboardStats)
 	admin.GET("/users",     hdlrs.Admin.GetUsers)
+	// Aliases that the admin frontend calls — map to existing handlers
+	admin.GET("/stats",     hdlrs.Platform.GetStatistics)     // alias: /platform/statistics
+	admin.GET("/analytics", hdlrs.Admin.GetDashboardStats)    // alias: /admin/dashboard
+	admin.GET("/data-plans", hdlrs.AdminComprehensive.GetDataPlans) // alias: /admin/recharge/data-plans
 
 	// ── Draws ────────────────────────────────────────────────────────────────
 	admin.GET("/draws",                          hdlrs.Admin.GetDraws)

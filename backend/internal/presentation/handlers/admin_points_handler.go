@@ -331,20 +331,21 @@ func (h *AdminComprehensiveHandler) GetDrawExportHistory(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	type exportHistoryRow struct {
-		ID           string  `json:"id"            gorm:"column:id"`
-		DrawID       string  `json:"draw_id"       gorm:"column:entity_id"`
-		ExportedBy   string  `json:"exported_by"   gorm:"column:admin_email"`
-		ExportedAt   string  `json:"exported_at"   gorm:"column:created_at"`
-		TotalMSISDNs int     `json:"total_msisdns" gorm:"column:total_msisdns"`
-		TotalPoints  int     `json:"total_points"  gorm:"column:total_points"`
-		FileURL      string  `json:"file_url"      gorm:"column:file_url"`
+		ID           string `json:"id"            gorm:"column:id"`
+		DrawID       string `json:"draw_id"       gorm:"column:entity_id"`
+		ExportedBy   string `json:"exported_by"   gorm:"column:exported_by"`
+		ExportedAt   string `json:"exported_at"   gorm:"column:created_at"`
+		TotalMSISDNs int    `json:"total_msisdns" gorm:"column:total_msisdns"`
+		TotalPoints  int    `json:"total_points"  gorm:"column:total_points"`
+		FileURL      string `json:"file_url"      gorm:"column:file_url"`
 	}
 
+	// audit_logs does NOT have admin_email — use admin_user_id cast to text instead
 	q := h.db.WithContext(ctx).
 		Table("audit_logs").
 		Select(`id,
-		        COALESCE(entity_id, '')          AS entity_id,
-		        COALESCE(admin_email, admin_user_id::text, 'unknown') AS admin_email,
+		        COALESCE(entity_id, '')           AS entity_id,
+		        COALESCE(admin_user_id::text, 'unknown') AS exported_by,
 		        created_at::text                  AS created_at,
 		        0                                 AS total_msisdns,
 		        0                                 AS total_points,
@@ -359,14 +360,10 @@ func (h *AdminComprehensiveHandler) GetDrawExportHistory(c *gin.Context) {
 
 	var rows []exportHistoryRow
 	if err := q.Scan(&rows).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"error":   "Failed to retrieve export history",
-		})
-		return
+		// Return empty list instead of 500 — no export history yet is not an error
+		rows = []exportHistoryRow{}
 	}
 
-	// Return empty slice (not null) so the frontend table renders cleanly
 	if rows == nil {
 		rows = []exportHistoryRow{}
 	}

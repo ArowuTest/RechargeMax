@@ -435,12 +435,13 @@ func max(a, b int) int {
 //   admin       → most management operations
 //   moderator   → read-only + limited actions
 func RequireRole(allowedRoles ...string) gin.HandlerFunc {
+	// Normalise to lowercase for comparison (DB/JWT may return "SUPER_ADMIN" or "super_admin")
 	roleSet := make(map[string]bool, len(allowedRoles))
 	for _, r := range allowedRoles {
-		roleSet[r] = true
+		roleSet[strings.ToLower(r)] = true
 	}
 	return func(c *gin.Context) {
-		role := c.GetString("admin_role")
+		role := strings.ToLower(c.GetString("admin_role"))
 		if role == "" {
 			c.JSON(http.StatusForbidden, gin.H{
 				"success": false,
@@ -452,7 +453,7 @@ func RequireRole(allowedRoles ...string) gin.HandlerFunc {
 		if !roleSet[role] {
 			c.JSON(http.StatusForbidden, gin.H{
 				"success": false,
-				"error":   "Your role (" + role + ") does not have permission for this action",
+				"error":   "Your role does not have permission for this action",
 			})
 			c.Abort()
 			return

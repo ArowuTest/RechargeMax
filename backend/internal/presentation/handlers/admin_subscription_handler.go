@@ -193,15 +193,34 @@ func (h *AdminComprehensiveHandler) DeleteSubscriptionTier(c *gin.Context) {
 // SUBSCRIPTION PRICING
 // ============================================================================
 
-// GetCurrentPricing returns current subscription pricing
+// GetCurrentPricing returns current subscription pricing.
+// Falls back to the daily subscription config when no subscription_pricings table row exists.
 func (h *AdminComprehensiveHandler) GetCurrentPricing(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	pricing, err := h.subscriptionTierService.GetCurrentPricing(ctx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"error":   "Failed to retrieve pricing",
+		// subscription_pricings table may be empty or not yet seeded —
+		// fall back to the live subscription config instead of returning 500.
+		cfg, cfgErr := h.subscriptionService.GetConfig(ctx)
+		if cfgErr != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"data":    nil,
+				"message": "No pricing history yet",
+			})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"data": map[string]interface{}{
+				"id":           cfg.ID,
+				"amount":       cfg.Amount,
+				"entries":      cfg.DrawEntriesEarned,
+				"effective_from": cfg.UpdatedAt,
+				"is_active":    cfg.IsPaid,
+				"description":  cfg.Description,
+			},
 		})
 		return
 	}

@@ -244,3 +244,4 @@ func (h *AdminComprehensiveHandler) DeletePrize(c *gin.Context) {
 		"message": "Prize deleted successfully",
 	})
 }
+

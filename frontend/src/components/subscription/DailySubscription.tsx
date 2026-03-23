@@ -98,26 +98,31 @@ export function DailySubscription() {
     window.history.replaceState({}, '', '/subscription')
 
     if (status === 'success') {
-      // Restore phone from sessionStorage (saved before Paystack redirect)
+      // Restore phone saved before Paystack redirect — works for both guest and logged-in users.
+      // The phone number is the primary identifier for subscriptions; JWT is secondary.
       const savedPhone = sessionStorage.getItem('sub_phone') || ''
-      if (savedPhone && phoneRef.current) {
-        setPhone(savedPhone)
-      }
       sessionStorage.removeItem('sub_phone')
       sessionStorage.removeItem('sub_entries')
 
+      // Pre-fill the input so the user sees their number and fetchActiveLines auto-fires
+      if (savedPhone) setPhone(savedPhone)
+
       toast({ title: '🎉 Payment Successful!', description: 'Activating your subscription line…', duration: 7000 })
 
-      // Poll /subscription/active-lines using the auth cookie (JWT) — no phone param needed.
-      // The backend resolves MSISDN from the JWT when no query param is provided.
+      // Poll for activation.
+      // Primary path: phone number (works for guests AND logged-in users).
+      // Fallback path: no phone param — backend resolves from JWT cookie (logged-in only).
       let attempts = 0
       const poll = setInterval(async () => {
         attempts++
+        // savedPhone is captured in closure — available immediately even before React re-renders
+        const digits = savedPhone.replace(/\D/g, '') || (phoneRef.current?.value || '').replace(/\D/g, '')
+        // Build the URL — use phone when available (both guest + auth), otherwise rely on JWT cookie
+        const url = digits.length >= 10
+          ? `/subscription/active-lines?msisdn=${digits}`
+          : '/subscription/active-lines'
         try {
-          // Try auth-cookie route first (logged-in users)
-          const r = await apiClient.get<{ success: boolean; data: ActiveLinesData }>(
-            '/subscription/active-lines'
-          )
+          const r = await apiClient.get<{ success: boolean; data: ActiveLinesData }>(url)
           if (r.data?.success && r.data.data.total_active_lines > 0) {
             clearInterval(poll)
             setActiveLines(r.data.data)
@@ -127,29 +132,8 @@ export function DailySubscription() {
               description: `You now have ${d.total_daily_entries} entr${d.total_daily_entries === 1 ? 'y' : 'ies'}/day · ₦${d.total_daily_cost_ngn}/day`,
               duration: 10000,
             })
-            return
           }
-        } catch {
-          // If auth-cookie call fails, fall back to phone param
-          const digits = (phoneRef.current?.value || savedPhone).replace(/\D/g, '')
-          if (digits.length >= 10) {
-            try {
-              const r2 = await apiClient.get<{ success: boolean; data: ActiveLinesData }>(
-                `/subscription/active-lines?msisdn=${digits}`
-              )
-              if (r2.data?.success && r2.data.data.total_active_lines > 0) {
-                clearInterval(poll)
-                setActiveLines(r2.data.data)
-                const d = r2.data.data
-                toast({
-                  title: '✅ Subscription Active!',
-                  description: `You now have ${d.total_daily_entries} entr${d.total_daily_entries === 1 ? 'y' : 'ies'}/day · ₦${d.total_daily_cost_ngn}/day`,
-                  duration: 10000,
-                })
-              }
-            } catch {}
-          }
-        }
+        } catch { /* network hiccup — retry next tick */ }
         if (attempts >= 8) clearInterval(poll)
       }, 2000)
     } else {

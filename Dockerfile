@@ -1,6 +1,9 @@
 # ── Build stage ──────────────────────────────────────────────────────────────
 FROM golang:1.23-alpine AS builder
 
+# Cache-bust ARG: increment to force full rebuild when Render artifact cache is stale
+ARG CACHE_BUST=20260323-v3
+
 RUN apk add --no-cache git
 
 WORKDIR /app

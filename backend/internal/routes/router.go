@@ -70,7 +70,7 @@ func registerInfra(r *gin.Engine) {
 			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"service":   "rechargemax-api",
 			"version":   "1.1.0",
-			"build":     "20260323-uat-fixes",
+			"build":     "20260323-uat-fixes-v2",
 		})
 	})
 
@@ -281,9 +281,12 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	admin.GET("/dashboard", hdlrs.Admin.GetDashboardStats)
 	admin.GET("/users",     hdlrs.Admin.GetUsers)
 	// Aliases that the admin frontend calls — map to existing handlers
-	admin.GET("/stats",     hdlrs.Platform.GetStatistics)     // alias: /platform/statistics
-	admin.GET("/analytics", hdlrs.Admin.GetDashboardStats)    // alias: /admin/dashboard
-	admin.GET("/data-plans", hdlrs.AdminComprehensive.GetDataPlans) // alias: /admin/recharge/data-plans
+	admin.GET("/stats",                  hdlrs.Platform.GetStatistics)                     // alias: /platform/statistics
+	admin.GET("/analytics",              hdlrs.Admin.GetDashboardStats)                    // alias: /admin/dashboard
+	admin.GET("/data-plans",             hdlrs.AdminComprehensive.GetDataPlans)            // alias: /admin/recharge/data-plans
+	admin.GET("/subscription-config",    hdlrs.AdminComprehensive.GetSubscriptionConfig)   // alias: /admin/daily-subscriptions/config
+	admin.GET("/subscriptions",          hdlrs.AdminComprehensive.GetDailySubscriptions)   // alias: /admin/daily-subscriptions
+	admin.GET("/platform-statistics",    hdlrs.Platform.GetStatistics)                     // alias: /platform/statistics (kebab)
 
 	// ── Draws ────────────────────────────────────────────────────────────────
 	admin.GET("/draws",                          hdlrs.Admin.GetDraws)

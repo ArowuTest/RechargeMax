@@ -455,6 +455,7 @@ func (s *PointsService) AdjustUserPoints(ctx context.Context, userID uuid.UUID, 
 		Reason:      reason,
 		Description: description,
 		AdminID:     adminID,
+		CreatedBy:   adminID, // mirrors AdminID — satisfies created_by NOT NULL constraint
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 	}

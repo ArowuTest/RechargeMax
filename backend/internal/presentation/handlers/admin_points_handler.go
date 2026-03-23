@@ -103,14 +103,16 @@ func (h *AdminComprehensiveHandler) AdjustUserPoints(c *gin.Context) {
 		return
 	}
 
-	adminID, ok := adminIDStr.(uuid.UUID)
-	if !ok {
+	// admin_id is stored as a string by AdminAuthMiddleware — parse it to uuid.UUID
+	adminIDParsed, parseErr := uuid.Parse(fmt.Sprintf("%v", adminIDStr))
+	if parseErr != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
 			"error":   "Invalid admin ID format",
 		})
 		return
 	}
+	adminID := adminIDParsed
 
 	if err := h.pointsService.AdjustUserPoints(ctx, userID, req.Points, req.Reason, req.Description, adminID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{

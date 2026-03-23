@@ -2,7 +2,7 @@
 FROM golang:1.23-alpine AS builder
 
 # Cache-bust ARG: increment to force full rebuild when Render artifact cache is stale
-ARG CACHE_BUST=20260323-v3
+ARG CACHE_BUST=20260323-v4
 
 RUN apk add --no-cache git
 
@@ -15,7 +15,9 @@ RUN go mod download
 # Copy backend source
 COPY backend/ .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o rechargemax ./cmd/server
+# Emit build timestamp to invalidate Render's go build artifact cache
+RUN echo "Build timestamp: $(date -u) | Cache: ${CACHE_BUST}" && \
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o rechargemax ./cmd/server
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────
 FROM alpine:latest

@@ -26,6 +26,13 @@ type createSubscriptionBody struct {
 	PaymentMethod string `json:"payment_method"`
 	Entries       int    `json:"entries"`        // number of daily draw entries (1–100)
 	Amount        int64  `json:"amount"`         // total amount in kobo (informational — backend recalculates)
+
+	// Explicit consent fields — frontend must send these when the user ticks
+	// the recurring-charge authorisation checkbox.
+	ConsentGiven     bool    `json:"consent_given"`      // must be true or request is rejected
+	ConsentAmountNGN float64 `json:"consent_amount_ngn"` // daily NGN amount shown to user
+	ConsentEntries   int     `json:"consent_entries"`    // entry count shown to user
+	ConsentText      string  `json:"consent_text"`       // full authorisation sentence shown to user
 }
 
 // resolveMSISDN returns the MSISDN to use for this request.
@@ -64,11 +71,30 @@ func (h *SubscriptionHandler) CreateSubscription(c *gin.Context) {
 		return
 	}
 
+	// Enforce explicit consent — reject the request server-side if the user
+	// did not tick the recurring-charge authorisation checkbox.
+	if !body.ConsentGiven {
+		middleware.RespondWithError(c, errors.BadRequest("You must authorise the recurring daily charge before subscribing"))
+		return
+	}
+
+	// Capture consent metadata for the audit trail
+	clientIP := c.GetHeader("X-Forwarded-For")
+	if clientIP == "" {
+		clientIP = c.ClientIP()
+	}
+	userAgent := c.GetHeader("User-Agent")
+
 	result, err := h.subscriptionService.CreateSubscription(c.Request.Context(), services.CreateSubscriptionRequest{
-		MSISDN:        msisdn,
-		Network:       body.Network,
-		PaymentMethod: body.PaymentMethod,
-		Entries:       body.Entries, // pass through — service defaults to 1 if 0
+		MSISDN:           msisdn,
+		Network:          body.Network,
+		PaymentMethod:    body.PaymentMethod,
+		Entries:          body.Entries,
+		ConsentAmountNGN: body.ConsentAmountNGN,
+		ConsentEntries:   body.ConsentEntries,
+		ConsentText:      body.ConsentText,
+		ConsentIP:        clientIP,
+		ConsentUserAgent: userAgent,
 	})
 	if err != nil {
 		middleware.RespondWithError(c, err)

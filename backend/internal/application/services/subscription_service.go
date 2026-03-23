@@ -40,6 +40,14 @@ type CreateSubscriptionRequest struct {
 	// Each entry costs ₦20 (PricePerEntry kobo).
 	// Min 1, max 100.  Defaults to 1 if not provided.
 	Entries int `json:"entries"`
+
+	// Consent audit trail — populated by the handler from the HTTP request.
+	// The service writes these directly to the subscription row.
+	ConsentAmountNGN float64 `json:"consent_amount_ngn"`
+	ConsentEntries   int     `json:"consent_entries"`
+	ConsentText      string  `json:"consent_text"`
+	ConsentIP        string  `json:"consent_ip"`
+	ConsentUserAgent string  `json:"consent_user_agent"`
 }
 
 // SubscriptionResponse is the API-facing subscription DTO.
@@ -154,7 +162,7 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 	code := fmt.Sprintf("SUB%s%s", msisdn[len(msisdn)-4:], strings.ToUpper(newID.String()[:8]))
 	entries := req.Entries
 	nextBilling := tomorrow(now)
-
+	consentAt := now // consent timestamp = subscription creation time
 	sub := &entities.DailySubscription{
 		ID:               newID,
 		SubscriptionCode: code,
@@ -173,6 +181,14 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 		PaymentMethod:    req.PaymentMethod,
 		SubscriptionDate: now,
 		CustomerEmail:    ptrString(userEmail),
+
+		// Consent audit trail — stored immutably at creation time
+		ConsentGivenAt:   &consentAt,
+		ConsentIP:        req.ConsentIP,
+		ConsentUserAgent: req.ConsentUserAgent,
+		ConsentAmountNGN: req.ConsentAmountNGN,
+		ConsentEntries:   req.ConsentEntries,
+		ConsentText:      req.ConsentText,
 	}
 
 	if err := s.subscriptionRepo.Create(ctx, sub); err != nil {

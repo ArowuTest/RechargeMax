@@ -63,6 +63,15 @@ type DailySubscription struct {
 	CancelledAt               *time.Time `json:"cancelled_at"                gorm:"column:cancelled_at"`
 	CancellationReason        string     `json:"cancellation_reason"         gorm:"column:cancellation_reason"`
 	PausedAt                  *time.Time `json:"paused_at"                   gorm:"column:paused_at"`
+
+	// Explicit recurring-charge consent — captured at subscription creation.
+	// These fields form the server-side audit trail for chargeback defence.
+	ConsentGivenAt   *time.Time `json:"consent_given_at"    gorm:"column:consent_given_at"`
+	ConsentIP        string     `json:"consent_ip"          gorm:"column:consent_ip"`
+	ConsentUserAgent string     `json:"consent_user_agent"  gorm:"column:consent_user_agent"`
+	ConsentAmountNGN float64    `json:"consent_amount_ngn"  gorm:"column:consent_amount_ngn;type:numeric(12,2)"`
+	ConsentEntries   int        `json:"consent_entries"     gorm:"column:consent_entries"`
+	ConsentText      string     `json:"consent_text"        gorm:"column:consent_text"`
 	CustomerEmail             *string    `json:"customer_email"              gorm:"column:customer_email"`
 	CustomerName              *string    `json:"customer_name"               gorm:"column:customer_name"`
 	CreatedAt                 time.Time  `json:"created_at"                  gorm:"column:created_at;autoCreateTime"`

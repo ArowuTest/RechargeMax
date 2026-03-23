@@ -145,6 +145,11 @@ export const processDailySubscription = async (d: {
   action?: string;
   tier_id?: string;
   payment_method?: string;
+  // Explicit consent audit trail
+  consent_given?: boolean;
+  consent_amount_ngn?: number;
+  consent_entries?: number;
+  consent_text?: string;
 }) =>
   (await apiClient.post('/subscriptions/daily', d)).data;
 export const getDailySubscriptionStatus = async (msisdn: string) =>

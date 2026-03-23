@@ -188,7 +188,20 @@ export function DailySubscription() {
     setLoading(true)
     try {
       const amount = entries * config.amount
-      const res = await processDailySubscription({ msisdn: digits, entries, amount, subscription_amount: config.amount })
+      // Build the consent text snapshot — must match exactly what is displayed
+      const consentText = `I authorise RechargeMax to charge my card ₦${amount} per day for ${entries} draw ${entries === 1 ? 'entry' : 'entries'}/day, starting today and renewing automatically every day at 08:00 WAT until I cancel. I understand I can cancel any line at any time from my dashboard or subscription page.`
+
+      const res = await processDailySubscription({
+        msisdn: digits,
+        entries,
+        amount,
+        subscription_amount: config.amount,
+        // Consent audit trail — backend will reject if consent_given is false
+        consent_given: true,
+        consent_amount_ngn: amount,
+        consent_entries: entries,
+        consent_text: consentText,
+      })
       if (!res.success) throw new Error(res.error || 'Payment initialisation failed')
       const d = res.data || res
       const url = d.authorization_url || d.payment_url

@@ -58,6 +58,7 @@ export function DailySubscription() {
   const [phone, setPhone]           = useState('')
   const [entries, setEntries]       = useState(1)
   const [selectedBundle, setSelectedBundle] = useState<number | null>(1)
+  const [consent, setConsent]       = useState(false)
   const phoneRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
 
@@ -159,15 +160,18 @@ export function DailySubscription() {
     const next = Math.min(100, entries + 1)
     setEntries(next)
     setSelectedBundle(BUNDLES.find(b => b.entries === next)?.entries ?? null)
+    setConsent(false)
   }
   const decrement = () => {
     const next = Math.max(1, entries - 1)
     setEntries(next)
     setSelectedBundle(BUNDLES.find(b => b.entries === next)?.entries ?? null)
+    setConsent(false)
   }
   const selectBundle = (b: typeof BUNDLES[0]) => {
     setEntries(b.entries)
     setSelectedBundle(b.entries)
+    setConsent(false)
   }
 
   // ── Subscribe ───────────────────────────────────────────────────────────────
@@ -391,6 +395,7 @@ export function DailySubscription() {
                     const v = Number(e.target.value)
                     setEntries(v)
                     setSelectedBundle(BUNDLES.find(b => b.entries === v)?.entries ?? null)
+                    setConsent(false)
                   }}
                   className="w-full accent-blue-600 cursor-pointer"
                 />
@@ -462,10 +467,48 @@ export function DailySubscription() {
               </p>
             )}
 
+            {/* ── Consent checkbox ── */}
+            <div
+              onClick={() => setConsent(v => !v)}
+              className={`flex items-start gap-3 rounded-xl border-2 p-4 cursor-pointer transition-all select-none ${
+                consent
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-200 bg-gray-50 hover:border-blue-300'
+              }`}
+            >
+              {/* Custom checkbox */}
+              <div className={`mt-0.5 w-5 h-5 rounded flex items-center justify-center shrink-0 border-2 transition-all ${
+                consent ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-300'
+              }`}>
+                {consent && (
+                  <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 12 12">
+                    <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </div>
+              <p className="text-xs text-gray-700 leading-relaxed">
+                I authorise <span className="font-semibold">RechargeMax</span> to charge my card
+                {' '}<span className="font-semibold text-blue-700">₦{total} per day</span> for
+                {' '}<span className="font-semibold">{entries} draw {entries === 1 ? 'entry' : 'entries'}/day</span>,
+                starting today and renewing automatically every day at 08:00 WAT until I cancel.
+                I understand I can cancel any line at any time from my dashboard or subscription page.
+              </p>
+            </div>
+
+            {!consent && (
+              <p className="text-center text-xs text-amber-600 font-medium">
+                Please read and accept the authorisation above to continue.
+              </p>
+            )}
+
             <Button
               onClick={handleSubscribe}
-              disabled={loading || phone.replace(/\D/g,'').length < 11 || entries < 1}
-              className="w-full h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 rounded-xl"
+              disabled={loading || phone.replace(/\D/g,'').length < 11 || entries < 1 || !consent}
+              className={`w-full h-14 text-lg font-bold rounded-xl transition-all ${
+                consent
+                  ? 'bg-blue-600 hover:bg-blue-700'
+                  : 'bg-gray-300 cursor-not-allowed'
+              }`}
             >
               {loading
                 ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Processing…</>
@@ -473,7 +516,6 @@ export function DailySubscription() {
             </Button>
 
             <p className="text-center text-xs text-gray-400">
-              Renews daily at 08:00 WAT via card. Cancel any line anytime.
               Points &amp; entries awarded only when each day's payment is confirmed.
             </p>
           </CardContent>

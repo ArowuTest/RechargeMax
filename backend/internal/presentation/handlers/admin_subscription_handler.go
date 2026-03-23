@@ -211,16 +211,10 @@ func (h *AdminComprehensiveHandler) GetCurrentPricing(c *gin.Context) {
 			})
 			return
 		}
+		// cfg is map[string]interface{} — pass it directly, it already has the right keys
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,
-			"data": map[string]interface{}{
-				"id":           cfg.ID,
-				"amount":       cfg.Amount,
-				"entries":      cfg.DrawEntriesEarned,
-				"effective_from": cfg.UpdatedAt,
-				"is_active":    cfg.IsPaid,
-				"description":  cfg.Description,
-			},
+			"data":    cfg,
 		})
 		return
 	}

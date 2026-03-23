@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -105,10 +106,10 @@ func (h *AdminComprehensiveHandler) CreatePrize(c *gin.Context) {
 	}
 	var existing existingPrize
 	dupErr := h.db.WithContext(ctx).
-		Table("spin_prizes").
+		Table("wheel_prizes").
 		Select("id").
 		Where("prize_name = ? AND prize_type = ? AND prize_value = ?",
-			prizeData.Name, prizeData.Type, int64(prizeData.Value)).
+			prizeData.Name, strings.ToUpper(prizeData.Type), int64(prizeData.Value)).
 		First(&existing).Error
 	if dupErr == nil && existing.ID != "" {
 		c.JSON(http.StatusOK, gin.H{

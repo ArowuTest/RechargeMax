@@ -25,3 +25,16 @@ ALTER TABLE draws
 UPDATE draws
     SET total_winners = winners_count
     WHERE total_winners = 0 AND winners_count > 0;
+
+-- ── Fix foreign key: created_by → admin_users (not users) ────────────────────
+-- The original schema had: created_by FK → users.id
+-- But created_by is populated from admin_id (which is an admin_users.id).
+-- Drop the wrong FK and either remove the constraint or point it to admin_users.
+
+ALTER TABLE points_adjustments
+    DROP CONSTRAINT IF EXISTS fk_points_adjustments_admin;
+
+-- Make created_by nullable so it doesn't block inserts when admin ID
+-- doesn't exist in users table (admin_users is a separate table).
+ALTER TABLE points_adjustments
+    ALTER COLUMN created_by DROP NOT NULL;

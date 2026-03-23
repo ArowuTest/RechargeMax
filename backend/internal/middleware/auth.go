@@ -177,7 +177,7 @@ func AdminAuthMiddleware(authService interface{}, blacklister ...TokenBlackliste
 
 		c.Set("admin_id", adminID)
 		c.Set("admin_token", tokenString)
-		c.Set("msisdn", claims.MSISDN)
+		c.Set("admin_role", claims.Role) // "super_admin" | "admin" | "moderator"
 		c.Set("is_admin", true)
 		c.Set("authenticated", true)
 		log.Println("[AdminAuth] Middleware passed, admin_id:", adminID)
@@ -425,4 +425,38 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// RequireRole returns a middleware that enforces admin role on specific routes.
+// Usage: admin.DELETE("/users/:id", middleware.RequireRole("super_admin"), hdlrs.Admin.DeleteUser)
+//
+// Role hierarchy (highest to lowest):
+//   super_admin → can do everything
+//   admin       → most management operations
+//   moderator   → read-only + limited actions
+func RequireRole(allowedRoles ...string) gin.HandlerFunc {
+	roleSet := make(map[string]bool, len(allowedRoles))
+	for _, r := range allowedRoles {
+		roleSet[r] = true
+	}
+	return func(c *gin.Context) {
+		role := c.GetString("admin_role")
+		if role == "" {
+			c.JSON(http.StatusForbidden, gin.H{
+				"success": false,
+				"error":   "Admin role not found in token — please log in again",
+			})
+			c.Abort()
+			return
+		}
+		if !roleSet[role] {
+			c.JSON(http.StatusForbidden, gin.H{
+				"success": false,
+				"error":   "Your role (" + role + ") does not have permission for this action",
+			})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
 }

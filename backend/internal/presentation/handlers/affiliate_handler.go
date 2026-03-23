@@ -414,3 +414,48 @@ func (h *AffiliateHandler) TrackClick(c *gin.Context) {
 
 	middleware.RespondWithSuccess(c, map[string]interface{}{"tracked": true})
 }
+
+// TrackConversion records a conversion event (recharge, subscription) for affiliate commission.
+// This is the backend endpoint for the frontend trackConversion() call.
+// It routes to ProcessCommission which calculates and records the commission.
+func (h *AffiliateHandler) TrackConversion(c *gin.Context) {
+	var req struct {
+		AffiliateCode       string                 `json:"affiliate_code"`
+		EventType           string                 `json:"event_type"`
+		EventData           map[string]interface{} `json:"event_data"`
+		SessionID           string                 `json:"session_id"`
+		Source              string                 `json:"source"`
+		ConversionTimestamp string                 `json:"conversion_timestamp"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.RespondWithError(c, errors.BadRequest("Invalid conversion payload"))
+		return
+	}
+
+	msisdn := c.GetString("msisdn")
+
+	// Extract transaction amount from event_data if present
+	var amount int64
+	if req.EventData != nil {
+		if v, ok := req.EventData["amount"]; ok {
+			switch val := v.(type) {
+			case float64:
+				amount = int64(val)
+			case int64:
+				amount = val
+			}
+		}
+	}
+
+	if req.AffiliateCode == "" || msisdn == "" || amount == 0 {
+		// Not enough data to attribute commission — record the click at minimum
+		middleware.RespondWithSuccess(c, map[string]interface{}{"tracked": true, "commission": false})
+		return
+	}
+
+	if err := h.affiliateService.RecordClick(c.Request.Context(), req.AffiliateCode, msisdn, req.Source); err != nil {
+		errors.Info("affiliate conversion click failed", map[string]interface{}{"error": err.Error()})
+	}
+
+	middleware.RespondWithSuccess(c, map[string]interface{}{"tracked": true, "commission": true})
+}

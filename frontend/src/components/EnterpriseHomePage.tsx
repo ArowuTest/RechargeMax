@@ -87,15 +87,7 @@ const FloatingParticle: React.FC<{ delay: number; x: number; size: number }> = (
   />
 );
 
-/* ─── ticker item ─────────────────────────────────────────────── */
-const TICKER_WINNERS = [
-  '🏆 Adaeze W. just won ₦50,000!',
-  '🎰 Chukwuemeka O. spun and won ₦10,000!',
-  '🎉 Fatimah B. won a Data Bundle!',
-  '💰 Obinna N. won ₦25,000 in daily draw!',
-  '🎯 Ngozi A. won ₦5,000 instantly!',
-  '🥇 Tunde F. won ₦100,000 prize!',
-];
+/* ─── ticker: populated from /winners/recent at runtime ────────── */
 
 /* ══════════════════════════════════════════════════════════════ */
 export const EnterpriseHomePage: React.FC = () => {
@@ -120,6 +112,7 @@ export const EnterpriseHomePage: React.FC = () => {
   const [statsVisible, setStatsVisible] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState('');
   const [tickerIndex, setTickerIndex] = useState(0);
+  const [tickerWinners, setTickerWinners] = useState<string[]>([]);
   const statsRef = useRef<HTMLDivElement>(null);
 
   /* animated counters */
@@ -136,9 +129,15 @@ export const EnterpriseHomePage: React.FC = () => {
     return () => obs.disconnect();
   }, []);
 
-  /* ticker */
+  /* ticker — built from real winners once fetchPlatformData populates recentWinners */
   useEffect(() => {
-    const id = setInterval(() => setTickerIndex((i) => (i + 1) % TICKER_WINNERS.length), 3000);
+    if (recentWinners.length > 0) {
+      setTickerWinners(recentWinners.map(w => `🏆 ${w.name} just won ${w.prize}!`))
+    }
+  }, [recentWinners])
+
+  useEffect(() => {
+    const id = setInterval(() => setTickerIndex((i) => (i + 1) % Math.max(tickerWinners.length, 1)), 3000);
     return () => clearInterval(id);
   }, []);
 
@@ -234,8 +233,9 @@ export const EnterpriseHomePage: React.FC = () => {
   const handleRechargeSuccess = (result: any) => {
     setRechargeSuccess(result);
     fetchPlatformData();
-    // After a successful recharge, verify eligibility server-side before showing wheel
-    if (result.amount >= 1000) {
+    // Spin eligibility is determined by the backend (spin_eligible flag on the transaction).
+    // We do NOT use the client-side amount to decide — the threshold may change.
+    if (result.spin_eligible === true) {
       openSpinWheelIfEligible(false); // auto-called after form recharge, not user-initiated
     }
   };
@@ -285,7 +285,7 @@ export const EnterpriseHomePage: React.FC = () => {
                 const amount       = txn.amount / 100;                          // kobo → naira
                 const points       = txn.points_earned || 0;
                 const drawEntries  = txn.draw_entries  || 0;
-                const spinEligible = txn.spin_eligible || amount >= 1000;
+                const spinEligible = txn.spin_eligible === true; // trust backend only — never override with client-side amount check
                 const displayPhone = toLocalPhone(txn.msisdn || '');
 
                 if (txn.msisdn && txn.msisdn !== 'null') setUserPhone(txn.msisdn);
@@ -457,7 +457,9 @@ export const EnterpriseHomePage: React.FC = () => {
               key={tickerIndex}
               className="absolute inset-0 flex items-center justify-center text-center animate-ticker-in"
             >
-              {TICKER_WINNERS[tickerIndex]}
+              {tickerWinners.length > 0
+                ? tickerWinners[tickerIndex % tickerWinners.length]
+                : '🎯 Subscribe to the daily draw and you could be next!'}
             </p>
           </div>
         </div>
@@ -970,30 +972,11 @@ export const EnterpriseHomePage: React.FC = () => {
               ))}
             </div>
           ) : (
-            /* Placeholder cards when no data */
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[
-                { name: 'Adaeze W.', prize: '₦50,000 Cash Prize', network: 'MTN', time: '2 hours ago' },
-                { name: 'Obinna N.', prize: '10GB Data Bundle', network: 'Airtel', time: '3 hours ago' },
-                { name: 'Fatimah B.', prize: '₦25,000 Cash Prize', network: 'Glo', time: '5 hours ago' },
-                { name: 'Tunde F.', prize: '₦100,000 Grand Prize', network: 'MTN', time: 'Yesterday' },
-                { name: 'Ngozi A.', prize: '₦5,000 Instant Win', network: '9mobile', time: 'Yesterday' },
-                { name: 'Chidi O.', prize: '20GB Data Bundle', network: 'Airtel', time: '2 days ago' },
-              ].map((w, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-4 p-4 rounded-2xl border border-gray-100 hover:border-yellow-200 transition-all"
-                >
-                  <div className="w-11 h-11 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center flex-shrink-0 shadow">
-                    <Trophy className="w-5 h-5 text-white" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-semibold text-gray-900 truncate">{w.name}</p>
-                    <p className="text-sm text-orange-600 font-medium truncate">{w.prize}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{w.time} · {w.network}</p>
-                  </div>
-                </div>
-              ))}
+            /* Empty state — no winners yet / draws not run yet */
+            <div className="text-center py-12 text-gray-400">
+              <Trophy className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p className="font-medium">Winners will appear here after each draw</p>
+              <p className="text-sm mt-1">Be the first — subscribe to the daily draw today</p>
             </div>
           )}
         </div>

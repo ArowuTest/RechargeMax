@@ -239,7 +239,8 @@ func registerProtected(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *serv
 		affiliate.GET("/commissions",   hdlrs.Affiliate.GetCommissions)
 		affiliate.GET("/earnings",      hdlrs.Affiliate.GetEarnings)
 		affiliate.POST("/payout",       hdlrs.Affiliate.RequestPayout)
-		affiliate.POST("/track-click",  hdlrs.Affiliate.TrackClick) // click attribution
+		affiliate.POST("/track-click",      hdlrs.Affiliate.TrackClick)      // click attribution
+		affiliate.POST("/track-conversion", hdlrs.Affiliate.TrackConversion) // conversion + commission
 	}
 
 	// Prize claims
@@ -282,25 +283,25 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 
 	// ── Draws ────────────────────────────────────────────────────────────────
 	admin.GET("/draws",                          hdlrs.Admin.GetDraws)
-	admin.POST("/draws",                         hdlrs.Draw.CreateDraw)
-	admin.PUT("/draws/:id",                      hdlrs.Draw.UpdateDraw)
-	admin.POST("/draws/:id/execute",             hdlrs.Draw.ExecuteDraw)
+	admin.POST("/draws",                         middleware.RequireRole("super_admin","admin"), hdlrs.Draw.CreateDraw)
+	admin.PUT("/draws/:id",                      middleware.RequireRole("super_admin","admin"), hdlrs.Draw.UpdateDraw)
+	admin.POST("/draws/:id/execute",             middleware.RequireRole("super_admin"), hdlrs.Draw.ExecuteDraw)
 	admin.GET("/draws/:id/export",               hdlrs.Draw.ExportEntries)
-	admin.POST("/draws/:id/import-winners",      hdlrs.Draw.ImportWinners)
+	admin.POST("/draws/:id/import-winners",      middleware.RequireRole("super_admin"), hdlrs.Draw.ImportWinners)
 	admin.GET("/draws/:id/csv/export",           hdlrs.AdminComprehensive.ExportDrawToCSV)
-	admin.POST("/draws/:id/csv/import-winners",  hdlrs.AdminComprehensive.ImportWinnersFromCSV)
+	admin.POST("/draws/:id/csv/import-winners",  middleware.RequireRole("super_admin"), hdlrs.AdminComprehensive.ImportWinnersFromCSV)
 	admin.GET("/draws/export-history",           hdlrs.AdminComprehensive.GetDrawExportHistory)
 
 	// ── Prize tier system ────────────────────────────────────────────────────
 	admin.GET("/draw-types",                         hdlrs.AdminComprehensive.GetDrawTypes)
 	admin.GET("/prize-templates",                    hdlrs.AdminComprehensive.GetPrizeTemplates)
 	admin.GET("/prize-templates/:id",                hdlrs.AdminComprehensive.GetPrizeTemplate)
-	admin.POST("/prize-templates",                   hdlrs.AdminComprehensive.CreatePrizeTemplate)
-	admin.PUT("/prize-templates/:id",                hdlrs.AdminComprehensive.UpdatePrizeTemplate)
-	admin.DELETE("/prize-templates/:id",             hdlrs.AdminComprehensive.DeletePrizeTemplate)
+	admin.POST("/prize-templates",                   middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.CreatePrizeTemplate)
+	admin.PUT("/prize-templates/:id",                middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.UpdatePrizeTemplate)
+	admin.DELETE("/prize-templates/:id",             middleware.RequireRole("super_admin"), hdlrs.AdminComprehensive.DeletePrizeTemplate)
 	admin.POST("/prize-templates/:id/categories",    hdlrs.AdminComprehensive.AddPrizeCategory)
 	admin.PUT("/prize-categories/:id",               hdlrs.AdminComprehensive.UpdatePrizeCategory)
-	admin.DELETE("/prize-categories/:id",            hdlrs.AdminComprehensive.DeletePrizeCategory)
+	admin.DELETE("/prize-categories/:id",            middleware.RequireRole("super_admin"), hdlrs.AdminComprehensive.DeletePrizeCategory)
 
 	// ── Subscriptions ────────────────────────────────────────────────────────
 	admin.GET("/subscription-tiers",                       hdlrs.AdminComprehensive.GetSubscriptionTiers)
@@ -310,11 +311,11 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	admin.PATCH("/subscription-tiers/:id/toggle-active",   hdlrs.AdminComprehensive.ToggleSubscriptionTier)
 	admin.GET("/subscription-pricing/current",    hdlrs.AdminComprehensive.GetCurrentPricing)
 	admin.GET("/subscription-pricing/history",    hdlrs.AdminComprehensive.GetPricingHistory)
-	admin.POST("/subscription-pricing",           hdlrs.AdminComprehensive.UpdatePricing)
+	admin.POST("/subscription-pricing",           middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.UpdatePricing)
 	admin.GET("/daily-subscriptions",                  hdlrs.AdminComprehensive.GetDailySubscriptions)
 	admin.GET("/daily-subscriptions/analytics",        hdlrs.AdminComprehensive.GetSubscriptionAnalytics)
 	admin.GET("/daily-subscriptions/config",           hdlrs.AdminComprehensive.GetSubscriptionConfig)
-	admin.PUT("/daily-subscriptions/config",           hdlrs.AdminComprehensive.UpdateSubscriptionConfig)
+	admin.PUT("/daily-subscriptions/config",           middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.UpdateSubscriptionConfig)
 	admin.GET("/daily-subscriptions/:id",              hdlrs.AdminComprehensive.GetDailySubscriptionDetails)
 	admin.POST("/daily-subscriptions/:id/cancel",      hdlrs.AdminComprehensive.CancelDailySubscription)
 	admin.POST("/daily-subscriptions/:id/pause",       hdlrs.AdminComprehensive.PauseDailySubscription)
@@ -333,7 +334,7 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	// ── Points ───────────────────────────────────────────────────────────────
 	admin.GET("/points/users",          hdlrs.AdminComprehensive.GetUsersWithPoints)
 	admin.GET("/points/history",        hdlrs.AdminComprehensive.GetPointsHistory)
-	admin.POST("/points/adjust",        hdlrs.AdminComprehensive.AdjustUserPoints)
+	admin.POST("/points/adjust",        middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.AdjustUserPoints)
 	admin.GET("/points/statistics",     hdlrs.AdminComprehensive.GetPointsStatistics)
 	admin.GET("/points/stats",          hdlrs.AdminComprehensive.GetPointsStatistics) // alias for frontend
 	admin.GET("/points/export/users",   hdlrs.AdminComprehensive.ExportUsersWithPoints)
@@ -346,10 +347,10 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	admin.GET("/winners/:id",                         hdlrs.AdminComprehensive.GetWinnerByID)
 	admin.POST("/winners/:id/approve-claim",          hdlrs.AdminComprehensive.ApproveWinnerClaim)
 	admin.POST("/winners/:id/reject-claim",           hdlrs.AdminComprehensive.RejectWinnerClaim)
-	admin.POST("/winners/:id/process-payout",         hdlrs.AdminComprehensive.ProcessWinnerPayout)
+	admin.POST("/winners/:id/process-payout",         middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.ProcessWinnerPayout)
 	admin.POST("/winners/:id/mark-shipped",           hdlrs.AdminComprehensive.MarkWinnerShipped)
 	admin.POST("/winners/:id/send-notification",      hdlrs.AdminComprehensive.SendWinnerNotification)
-	admin.POST("/winners/:id/invoke-runner-up",       hdlrs.AdminComprehensive.InvokeWinnerRunnerUp)
+	admin.POST("/winners/:id/invoke-runner-up",       middleware.RequireRole("super_admin"), hdlrs.AdminComprehensive.InvokeWinnerRunnerUp)
 	admin.GET("/prize-fulfillment/failed-provisions", hdlrs.AdminSpinClaims.GetPendingClaims)
 	admin.POST("/prize-fulfillment/retry/:id",        hdlrs.AdminSpinClaims.ApproveClaim)
 	admin.POST("/prize-fulfillment/retry-all",        hdlrs.AdminSpinClaims.GetPendingClaims)
@@ -359,9 +360,9 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	admin.GET("/spin/config",        hdlrs.AdminComprehensive.GetSpinConfig)
 	admin.PUT("/spin/config",        hdlrs.AdminComprehensive.UpdateSpinConfig)
 	admin.GET("/spin/prizes",        hdlrs.AdminComprehensive.GetAllPrizes)
-	admin.POST("/spin/prizes",       hdlrs.AdminComprehensive.CreatePrize)
-	admin.PUT("/spin/prizes/:id",    hdlrs.AdminComprehensive.UpdatePrize)
-	admin.DELETE("/spin/prizes/:id", hdlrs.AdminComprehensive.DeletePrize)
+	admin.POST("/spin/prizes",       middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.CreatePrize)
+	admin.PUT("/spin/prizes/:id",    middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.UpdatePrize)
+	admin.DELETE("/spin/prizes/:id", middleware.RequireRole("super_admin"), hdlrs.AdminComprehensive.DeletePrize)
 	admin.GET("/spin-tiers",         hdlrs.AdminSpinTiers.GetAllTiers)
 	admin.GET("/spin-tiers/:id",     hdlrs.AdminSpinTiers.GetTierByID)
 	admin.POST("/spin-tiers",        hdlrs.AdminSpinTiers.CreateTier)
@@ -381,7 +382,7 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	admin.GET("/recharge/stats",               hdlrs.AdminComprehensive.GetRechargeStats)
 	admin.POST("/recharge/:id/retry",          hdlrs.AdminComprehensive.RetryFailedRecharge)
 	admin.POST("/recharge/bulk-retry-processing", hdlrs.AdminComprehensive.BulkRetryProcessingTransactions)
-	admin.POST("/recharge/:id/refund",         hdlrs.AdminComprehensive.RefundRecharge)
+	admin.POST("/recharge/:id/refund",         middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.RefundRecharge)
 	admin.POST("/recharge/:id/mark-success",   hdlrs.AdminComprehensive.MarkRechargeSuccess)
 	admin.POST("/recharge/:id/mark-failed",    hdlrs.AdminComprehensive.MarkRechargeFailed)
 	admin.GET("/recharge/vtpass/status",       hdlrs.AdminComprehensive.GetVTPassStatus)
@@ -404,8 +405,8 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	admin.GET("/users/:id",                  hdlrs.AdminComprehensive.GetUser)           // alias — no /details suffix
 	admin.PUT("/users/:id",                  hdlrs.AdminComprehensive.UpdateUser)        // status + tier update
 	admin.PUT("/users/:id/status",           hdlrs.AdminComprehensive.UpdateUserStatus)
-	admin.DELETE("/users/:id",               hdlrs.AdminComprehensive.DeleteUser)
-	admin.POST("/users/:id/suspend",         hdlrs.AdminComprehensive.SuspendUser)
+	admin.DELETE("/users/:id",               middleware.RequireRole("super_admin"), hdlrs.AdminComprehensive.DeleteUser)
+	admin.POST("/users/:id/suspend",         middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.SuspendUser)
 	admin.POST("/users/:id/activate",        hdlrs.AdminComprehensive.ActivateUser)
 	admin.GET("/users/:id/points-history",   hdlrs.AdminComprehensive.GetUserPointsHistory)
 
@@ -421,7 +422,7 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	admin.GET("/affiliates/:id/commissions",       hdlrs.AdminComprehensive.GetAffiliateCommissions)
 	admin.PUT("/affiliates/:id/commission-rate",   hdlrs.AdminComprehensive.UpdateAffiliateCommissionRate)
 	admin.GET("/affiliates/:id/payouts",           hdlrs.AdminComprehensive.GetAffiliatePayouts)
-	admin.POST("/affiliates/:id/payout",           hdlrs.AdminComprehensive.ProcessAffiliatePayout)
+	admin.POST("/affiliates/:id/payout",           middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.ProcessAffiliatePayout)
 	admin.POST("/affiliates/:id/process-payout",   hdlrs.AdminComprehensive.ProcessAffiliatePayout)   // alias
 	admin.GET("/affiliates/:id/payout-history",    hdlrs.AdminComprehensive.GetAffiliatePayoutHistory)
 	admin.GET("/affiliates/analytics",             hdlrs.AdminComprehensive.GetAffiliateAnalytics)
@@ -431,7 +432,7 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	admin.GET("/admins/:id",        hdlrs.AdminUserManagement.GetAdminByID)
 	admin.POST("/admins",           hdlrs.AdminUserManagement.CreateAdmin)
 	admin.PUT("/admins/:id",        hdlrs.AdminUserManagement.UpdateAdmin)
-	admin.DELETE("/admins/:id",     hdlrs.AdminUserManagement.DeleteAdmin)
+	admin.DELETE("/admins/:id",     middleware.RequireRole("super_admin"), hdlrs.AdminUserManagement.DeleteAdmin)
 	admin.PUT("/admins/:id/status", hdlrs.AdminUserManagement.UpdateAdminStatus)
 
 	// ── Platform settings ────────────────────────────────────────────────────

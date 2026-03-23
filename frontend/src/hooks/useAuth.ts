@@ -18,6 +18,37 @@ interface AuthState {
   isLoading: boolean;
 }
 
+// Cache TTL: 5 minutes. After this, the profile is always re-fetched from the backend.
+// This ensures admin changes (tier updates, point adjustments, bans) are reflected promptly.
+const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000;
+const CACHE_KEY  = 'rechargemax_user';
+const CACHE_TS_KEY = 'rechargemax_user_ts';
+
+function readCache(): User | null {
+  try {
+    const ts = parseInt(localStorage.getItem(CACHE_TS_KEY) || '0', 10);
+    if (Date.now() - ts > PROFILE_CACHE_TTL_MS) {
+      localStorage.removeItem(CACHE_KEY);
+      localStorage.removeItem(CACHE_TS_KEY);
+      return null;
+    }
+    const raw = localStorage.getItem(CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function writeCache(user: User) {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(user));
+    localStorage.setItem(CACHE_TS_KEY, String(Date.now()));
+  } catch { /* storage full or disabled */ }
+}
+
+function clearCache() {
+  localStorage.removeItem(CACHE_KEY);
+  localStorage.removeItem(CACHE_TS_KEY);
+}
+
 export const useAuth = () => {
   const [authState, setAuthState] = useState<AuthState>({
     user: null,
@@ -26,32 +57,34 @@ export const useAuth = () => {
   });
   const { toast } = useToast();
 
-  // On mount: verify session by calling /user/profile (uses httpOnly cookie)
-  // Non-sensitive profile data may be cached in localStorage for UI speed
   useEffect(() => {
     const checkSession = async () => {
-      try {
-        // Try to restore from localStorage cache (non-sensitive profile data only)
-        const storedUser = localStorage.getItem('rechargemax_user');
-        if (storedUser) {
-          const userData = JSON.parse(storedUser);
-          setAuthState({ user: userData, isAuthenticated: true, isLoading: false });
-          return;
-        }
+      // 1. Show cached data immediately for a fast UI render (avoids blank flash)
+      const cached = readCache();
+      if (cached) {
+        setAuthState({ user: cached, isAuthenticated: true, isLoading: true });
+      }
 
-        // Verify with backend via cookie
+      // 2. ALWAYS verify with the backend — cache is only a render hint, not the source of truth.
+      //    This ensures bans, tier changes, and point adjustments are picked up within 5 min.
+      try {
         const res = await userApi.getProfile();
         if (res.success && res.data) {
           const userData = res.data as unknown as User;
-          localStorage.setItem('rechargemax_user', JSON.stringify(userData));
+          writeCache(userData);
           setAuthState({ user: userData, isAuthenticated: true, isLoading: false });
         } else {
-          setAuthState(prev => ({ ...prev, isLoading: false }));
+          clearCache();
+          setAuthState({ user: null, isAuthenticated: false, isLoading: false });
         }
       } catch {
-        // No valid session
-        localStorage.removeItem('rechargemax_user');
-        setAuthState({ user: null, isAuthenticated: false, isLoading: false });
+        if (cached) {
+          // Backend unreachable but cache is fresh — keep the user logged in with stale data
+          setAuthState({ user: cached, isAuthenticated: true, isLoading: false });
+        } else {
+          clearCache();
+          setAuthState({ user: null, isAuthenticated: false, isLoading: false });
+        }
       }
     };
 
@@ -60,11 +93,8 @@ export const useAuth = () => {
 
   const login = useCallback((userData: User) => {
     try {
-      // Store only non-sensitive profile data in localStorage (token is in httpOnly cookie)
-      localStorage.setItem('rechargemax_user', JSON.stringify(userData));
-
+      writeCache(userData);
       setAuthState({ user: userData, isAuthenticated: true, isLoading: false });
-
       toast({
         title: "Login Successful! 🎉",
         description: `Welcome back, ${userData.full_name || 'User'}!`,
@@ -76,11 +106,10 @@ export const useAuth = () => {
 
   const logout = useCallback(async () => {
     try {
-      await authApi.logout(); // clears httpOnly cookie via Set-Cookie
+      await authApi.logout();
     } catch { /* ignore */ } finally {
-      localStorage.removeItem('rechargemax_user');
+      clearCache();
       setAuthState({ user: null, isAuthenticated: false, isLoading: false });
-
       toast({ title: "Logged Out", description: "You have been successfully logged out." });
       window.location.href = '/';
     }
@@ -89,9 +118,7 @@ export const useAuth = () => {
   const updateUser = useCallback((updates: Partial<User>) => {
     if (!authState.user) return;
     const updatedUser = { ...authState.user, ...updates };
-    try {
-      localStorage.setItem('rechargemax_user', JSON.stringify(updatedUser));
-    } catch { /* ignore */ }
+    writeCache(updatedUser);
     setAuthState(prev => ({ ...prev, user: updatedUser }));
   }, [authState.user]);
 

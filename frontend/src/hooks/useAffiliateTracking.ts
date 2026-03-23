@@ -110,11 +110,11 @@ export const useAdvancedAffiliateTracking = () => {
     return trackingData?.affiliate_code || null;
   };
   
-  // Track conversion events
+  // Track conversion events — POST to backend so affiliate commissions are recorded
   const trackConversion = async (eventType: string, eventData: any = {}) => {
     const trackingData = getTrackingData();
     if (!trackingData) return;
-    
+
     try {
       const conversionData = {
         ...trackingData,
@@ -122,16 +122,23 @@ export const useAdvancedAffiliateTracking = () => {
         event_data: eventData,
         conversion_timestamp: new Date().toISOString()
       };
-      
-      // You would send this to your backend
-      
-      // Store conversion in session for potential retry
-      const conversions = JSON.parse(sessionStorage.getItem('affiliate_conversions') || '[]');
-      conversions.push(conversionData);
-      sessionStorage.setItem('affiliate_conversions', JSON.stringify(conversions));
-      
+
+      // POST to backend — this is what actually records the commission
+      await fetch(`${import.meta.env.VITE_API_BASE_URL || '/api/v1'}/affiliate/track-conversion`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // send auth cookie
+        body: JSON.stringify(conversionData),
+      });
+
     } catch (error) {
       console.error('Failed to track conversion:', error);
+      // Store locally as a retry queue — a background sync can pick these up
+      try {
+        const conversions = JSON.parse(sessionStorage.getItem('affiliate_conversions_retry') || '[]');
+        conversions.push({ eventType, eventData, timestamp: new Date().toISOString() });
+        sessionStorage.setItem('affiliate_conversions_retry', JSON.stringify(conversions.slice(-10)));
+      } catch { /* storage unavailable */ }
     }
   };
   

@@ -235,8 +235,8 @@ func (s *UserService) GetDashboard(ctx context.Context, msisdn string) (*Dashboa
 	// Get stats
 	stats := make(map[string]interface{})
 
-	// Total recharges
-	totalRecharges, err := s.rechargeRepo.CountByUserID(ctx, user.ID)
+	// Total recharges — use MSISDN-based count to handle legacy rows where user_id is NULL
+	totalRecharges, err := s.rechargeRepo.CountByMSISDN(ctx, user.MSISDN)
 	if err == nil {
 		stats["total_recharges"] = totalRecharges
 	}

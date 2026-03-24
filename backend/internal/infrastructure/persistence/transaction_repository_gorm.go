@@ -195,6 +195,17 @@ func (r *transactionRepositoryGORM) CountByUserID(ctx context.Context, userID uu
 	return count, err
 }
 
+// CountByMSISDN counts successful transactions by MSISDN regardless of user_id.
+// Used as a reliable fallback because legacy transactions have user_id = NULL.
+func (r *transactionRepositoryGORM) CountByMSISDN(ctx context.Context, msisdn string) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&entities.Transactions{}).
+		Where("msisdn = ? AND status = 'SUCCESS'", msisdn).
+		Count(&count).Error
+	return count, err
+}
+
 // FindByPaymentRef finds a transaction by payment reference
 func (r *transactionRepositoryGORM) FindByPaymentRef(ctx context.Context, paymentRef string) (*entities.Transactions, error) {
 	var transaction entities.Transactions

@@ -33,6 +33,9 @@ type TransactionRepository interface {
 	FindEligibleForSpin(ctx context.Context, userID uuid.UUID) (*entities.Transactions, error)
 	// CountByUserID counts transactions for a specific user
 	CountByUserID(ctx context.Context, userID uuid.UUID) (int64, error)
+	// CountByMSISDN counts successful transactions for a given MSISDN (used as
+	// a user_id-independent fallback when user_id is NULL on legacy rows)
+	CountByMSISDN(ctx context.Context, msisdn string) (int64, error)
 	
 	// Recharge-specific methods (Transactions are recharges)
 	FindByPaymentRef(ctx context.Context, paymentRef string) (*entities.Transactions, error)

@@ -293,7 +293,7 @@ func (s *UserService) GetDashboard(ctx context.Context, msisdn string) (*Dashboa
 		subscriptions := s.getUserSubscriptions(ctx, user.MSISDN)
 
 		// Get prizes — combined from spin_results + draw_winners
-		prizes := s.getUserPrizes(ctx, user.ID)
+		prizes := s.getUserPrizes(ctx, user.ID, user.MSISDN)
 
 		// Recalculate prize summary counts to include draw wins
 		drawWinTotal := int64(0)
@@ -923,11 +923,23 @@ func (s *UserService) getRecentTransactions(ctx context.Context, userID uuid.UUI
 //   2. draw_winners  — prizes won via the daily/weekly draws
 //
 // Results are sorted newest-first.
-func (s *UserService) getUserPrizes(ctx context.Context, userID uuid.UUID) []PrizeItem {
+func (s *UserService) getUserPrizes(ctx context.Context, userID uuid.UUID, msisdn string) []PrizeItem {
 	var result []PrizeItem
 
 	// ── 1. Spin-wheel prizes ────────────────────────────────────────────────
+	// Query by user_id first; fall back to msisdn for rows created before
+	// the user account existed (guest spins where user_id may be null).
 	spins, err := s.spinRepo.FindByUserID(ctx, userID, 100, 0)
+	if err == nil && len(spins) == 0 && msisdn != "" && s.db != nil {
+		// Fallback: rows stored with only msisdn (user_id NULL or different UUID)
+		var fallbackSpins []*entities.SpinResult
+		s.db.WithContext(ctx).
+			Preload("Prize").
+			Where("msisdn = ? AND (user_id IS NULL OR user_id != ?)", msisdn, userID).
+			Order("created_at DESC").Limit(100).
+			Find(&fallbackSpins)
+		spins = fallbackSpins
+	}
 	if err == nil {
 		for _, spin := range spins {
 			prizeNaira := int64(resolvePrizeValueNaira(spin.PrizeValue, spin.PrizeName, spin.Prize))

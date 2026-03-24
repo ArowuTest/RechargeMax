@@ -138,10 +138,13 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 
 	// ── 5. Resolve user (optional — guest subscriptions are allowed) ──────────
 	var userID *uuid.UUID
-	var userEmail string
+	// Always generate a fallback email from MSISDN — Paystack requires a non-empty
+	// email for transaction initialisation. Guests don't have an account yet, so we
+	// synthesise one from their MSISDN (same pattern used for registered users).
+	userEmail := fmt.Sprintf("%s@rechargemax.ng", msisdn)
 	if user, err := s.userRepo.FindByMSISDN(ctx, msisdn); err == nil && user != nil {
 		userID = &user.ID
-		userEmail = fmt.Sprintf("%s@rechargemax.ng", msisdn)
+		// Use the same MSISDN-derived email — keeps it consistent with the guest path
 	}
 
 	// ── 6. Resolve default tier ────────────────────────────────────────────────

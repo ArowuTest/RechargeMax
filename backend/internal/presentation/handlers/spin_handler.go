@@ -285,16 +285,16 @@ func (h *SpinHandler) GetPrizes(c *gin.Context) {
 }
 
 // DebugSpins is a TEMPORARY admin diagnostic endpoint — remove after investigation.
+// Use msisdn=__ALL__ to dump all rows in the table.
 func (h *SpinHandler) DebugSpins(c *gin.Context) {
 	msisdn := c.Query("msisdn")
 	if msisdn == "" {
-		c.JSON(400, gin.H{"error": "msisdn query param required"})
-		return
+		msisdn = "__ALL__"
 	}
-	rows, err := h.spinService.DebugSpinResults(c.Request.Context(), msisdn)
+	rows, total, err := h.spinService.DebugSpinResults(c.Request.Context(), msisdn)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(200, gin.H{"msisdn": msisdn, "count": len(rows), "rows": rows})
+	c.JSON(200, gin.H{"msisdn": msisdn, "total_in_table": total, "returned": len(rows), "rows": rows})
 }

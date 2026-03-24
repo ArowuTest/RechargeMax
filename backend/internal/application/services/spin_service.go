@@ -1369,8 +1369,8 @@ func (s *SpinService) GetTierProgress(ctx context.Context, msisdn string) (*Tier
 }
 
 // DebugSpinResults is a TEMPORARY diagnostic function — remove after investigation.
-// Returns raw spin_results rows for a given MSISDN regardless of user_id.
-func (s *SpinService) DebugSpinResults(ctx context.Context, msisdn string) ([]map[string]interface{}, error) {
+// If msisdn == "__ALL__", returns ALL rows (up to 50). Otherwise filters by msisdn.
+func (s *SpinService) DebugSpinResults(ctx context.Context, msisdn string) ([]map[string]interface{}, int64, error) {
 	type row struct {
 		ID          string  `gorm:"column:id"`
 		SpinCode    string  `gorm:"column:spin_code"`
@@ -1383,13 +1383,15 @@ func (s *SpinService) DebugSpinResults(ctx context.Context, msisdn string) ([]ma
 		CreatedAt   string  `gorm:"column:created_at"`
 	}
 	var rows []row
-	err := s.db.WithContext(ctx).
-		Table("spin_results").
-		Where("msisdn = ?", msisdn).
-		Order("created_at DESC").
-		Find(&rows).Error
+	var total int64
+	q := s.db.WithContext(ctx).Table("spin_results")
+	if msisdn != "__ALL__" {
+		q = q.Where("msisdn = ?", msisdn)
+	}
+	q.Count(&total)
+	err := q.Order("created_at DESC").Limit(50).Find(&rows).Error
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	result := make([]map[string]interface{}, len(rows))
 	for i, r := range rows {
@@ -1405,5 +1407,5 @@ func (s *SpinService) DebugSpinResults(ctx context.Context, msisdn string) ([]ma
 			"claim_status": r.ClaimStatus, "created_at": r.CreatedAt,
 		}
 	}
-	return result, nil
+	return result, total, nil
 }

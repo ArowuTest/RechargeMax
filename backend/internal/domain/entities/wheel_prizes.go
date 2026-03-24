@@ -21,6 +21,13 @@ type WheelPrize struct {
 	SortOrder          *int      `json:"sort_order" gorm:"column:sort_order"`
 	Description        string    `json:"description" gorm:"column:description"`
 	TermsAndConditions string    `json:"terms_and_conditions" gorm:"column:terms_and_conditions"`
+	// IsNoWin marks this slot as a "no prize" outcome (e.g. "Try Again", "Better Luck Next Time").
+	// When the wheel lands on an IsNoWin slot the backend does NOT create a spin_result record
+	// and returns no_win=true so the frontend shows a "try again" message instead of a win toast.
+	// NoWinMessage is the text displayed to the user (overrides the default if set).
+	IsNoWin     *bool  `json:"is_no_win"     gorm:"column:is_no_win;default:false"`
+	NoWinMessage string `json:"no_win_message" gorm:"column:no_win_message;size:200"`
+
 	CreatedAt          time.Time `json:"created_at" gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt          time.Time `json:"updated_at" gorm:"column:updated_at;autoUpdateTime"`
 }

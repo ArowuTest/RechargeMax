@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Gift, DollarSign, Phone, Wifi, Star, Ticket, AlertTriangle } from 'lucide-react';
+import { Loader2, Gift, DollarSign, Phone, Wifi, Star, Ticket, AlertTriangle, RotateCcw } from 'lucide-react';
 import type { WheelPrize } from '@/types/admin-api.types';
 
 interface WheelPrizeDialogProps {
@@ -20,11 +20,12 @@ interface WheelPrizeDialogProps {
 }
 
 const PRIZE_TYPES = [
-  { value: 'CASH', label: 'Cash Prize', icon: DollarSign, color: 'text-green-600' },
-  { value: 'AIRTIME', label: 'Airtime', icon: Phone, color: 'text-blue-600' },
-  { value: 'DATA', label: 'Data Bundle', icon: Wifi, color: 'text-purple-600' },
-  { value: 'POINTS', label: 'Loyalty Points', icon: Star, color: 'text-yellow-600' },
-  { value: 'TICKETS', label: 'Draw Tickets', icon: Ticket, color: 'text-orange-600' }
+  { value: 'CASH',    label: 'Cash Prize',            icon: DollarSign,  color: 'text-green-600' },
+  { value: 'AIRTIME', label: 'Airtime',                icon: Phone,       color: 'text-blue-600' },
+  { value: 'DATA',    label: 'Data Bundle',            icon: Wifi,        color: 'text-purple-600' },
+  { value: 'POINTS',  label: 'Loyalty Points',         icon: Star,        color: 'text-yellow-600' },
+  { value: 'TICKETS', label: 'Draw Tickets',           icon: Ticket,      color: 'text-orange-600' },
+  { value: 'NO_WIN',  label: 'No Win / Try Again',     icon: RotateCcw,   color: 'text-gray-500' },
 ];
 
 const COLOR_SCHEMES = [
@@ -46,7 +47,7 @@ export const WheelPrizeDialog: React.FC<WheelPrizeDialogProps> = ({
   onSave,
   loading = false
 }) => {
-  const [formData, setFormData] = useState<Omit<WheelPrize, 'id' | 'created_at' | 'updated_at'>>({
+  const [formData, setFormData] = useState<Omit<WheelPrize, 'id' | 'created_at' | 'updated_at'> & { is_no_win?: boolean; no_win_message?: string }>({
     prize_name: '',
     prize_type: 'CASH',
     prize_value: 0,
@@ -59,7 +60,9 @@ export const WheelPrizeDialog: React.FC<WheelPrizeDialogProps> = ({
     color: 'green',
     color_scheme: 'green',
     icon: 'gift',
-    icon_name: 'gift'
+    icon_name: 'gift',
+    is_no_win: false,
+    no_win_message: '',
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -80,7 +83,9 @@ export const WheelPrizeDialog: React.FC<WheelPrizeDialogProps> = ({
         color: prize.color,
         color_scheme: prize.color_scheme,
         icon: prize.icon,
-        icon_name: prize.icon_name
+        icon_name: prize.icon_name,
+        is_no_win: (prize as any).is_no_win ?? false,
+        no_win_message: (prize as any).no_win_message ?? '',
       });
     } else {
       setFormData({
@@ -96,7 +101,9 @@ export const WheelPrizeDialog: React.FC<WheelPrizeDialogProps> = ({
         color: 'green',
         color_scheme: 'green',
         icon: 'gift',
-        icon_name: 'gift'
+        icon_name: 'gift',
+        is_no_win: false,
+        no_win_message: '',
       });
     }
     setErrors({});
@@ -126,7 +133,7 @@ export const WheelPrizeDialog: React.FC<WheelPrizeDialogProps> = ({
       newErrors.prize_name = 'Prize name is required';
     }
 
-    if (formData.prize_value <= 0) {
+    if (!formData.is_no_win && formData.prize_value <= 0) {
       newErrors.prize_value = 'Prize value must be greater than 0';
     }
 
@@ -171,10 +178,18 @@ export const WheelPrizeDialog: React.FC<WheelPrizeDialogProps> = ({
   };
 
   const handleInputChange = (field: keyof typeof formData, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    
-    // Clear error for this field when user starts typing
-    if (errors[field]) {
+    let updatedData = { ...formData, [field]: value };
+    // Auto-sync is_no_win flag when prize_type changes
+    if (field === 'prize_type') {
+      updatedData.is_no_win = value === 'NO_WIN';
+      if (value === 'NO_WIN') updatedData.prize_value = 0;
+    }
+    if (field === 'is_no_win' && value === true) {
+      updatedData.prize_type = 'NO_WIN';
+      updatedData.prize_value = 0;
+    }
+    setFormData(updatedData as any);
+    if (errors[field as string]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
     }
   };
@@ -258,33 +273,55 @@ export const WheelPrizeDialog: React.FC<WheelPrizeDialogProps> = ({
             </Select>
           </div>
 
-          {/* Prize Value */}
-          <div>
-            <Label htmlFor="prize_value">
-              Prize Value 
-              {formData.prize_type === 'CASH' && ' (₦)'}
-              {formData.prize_type === 'AIRTIME' && ' (₦)'}
-              {formData.prize_type === 'DATA' && ' (MB)'}
-              {formData.prize_type === 'POINTS' && ' (Points)'}
-            </Label>
-            <Input
-              id="prize_value"
-              type="number"
-              min="1"
-              step={formData.prize_type === 'CASH' || formData.prize_type === 'AIRTIME' ? '0.01' : '1'}
-              value={formData.prize_value}
-              onChange={(e) => handleInputChange('prize_value', parseFloat(e.target.value) || 0)}
-              className={errors.prize_value ? 'border-red-500' : ''}
-            />
-            {errors.prize_value && (
-              <p className="text-red-500 text-sm mt-1">{errors.prize_value}</p>
-            )}
-            {formData.prize_value > 0 && (
-              <p className="text-sm text-gray-600 mt-1">
-                Display: {formatPrizeValue(formData.prize_type, formData.prize_value)}
+          {/* Prize Value — hidden for NO_WIN type */}
+          {!formData.is_no_win && formData.prize_type !== 'NO_WIN' && (
+            <div>
+              <Label htmlFor="prize_value">
+                Prize Value
+                {formData.prize_type === 'CASH' && ' (₦)'}
+                {formData.prize_type === 'AIRTIME' && ' (₦)'}
+                {formData.prize_type === 'DATA' && ' (MB)'}
+                {formData.prize_type === 'POINTS' && ' (Points)'}
+              </Label>
+              <Input
+                id="prize_value"
+                type="number"
+                min="1"
+                step={formData.prize_type === 'CASH' || formData.prize_type === 'AIRTIME' ? '0.01' : '1'}
+                value={formData.prize_value}
+                onChange={(e) => handleInputChange('prize_value', parseFloat(e.target.value) || 0)}
+                className={errors.prize_value ? 'border-red-500' : ''}
+              />
+              {errors.prize_value && (
+                <p className="text-red-500 text-sm mt-1">{errors.prize_value}</p>
+              )}
+              {formData.prize_value > 0 && (
+                <p className="text-sm text-gray-600 mt-1">
+                  Display: {formatPrizeValue(formData.prize_type, formData.prize_value)}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* No Win Message — shown only for NO_WIN type */}
+          {(formData.is_no_win || formData.prize_type === 'NO_WIN') && (
+            <div>
+              <Label htmlFor="no_win_message">Message to Show User</Label>
+              <Input
+                id="no_win_message"
+                value={formData.no_win_message || ''}
+                onChange={(e) => handleInputChange('no_win_message', e.target.value)}
+                placeholder="e.g. Better luck next time! Recharge ₦500 to spin again."
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Displayed when the wheel lands on this slot. Leave blank for default message.
               </p>
-            )}
-          </div>
+              <div className="mt-2 p-3 rounded-lg bg-gray-50 border border-dashed border-gray-300 text-sm text-gray-600">
+                <RotateCcw className="w-4 h-4 inline-block mr-1 text-gray-400" />
+                <strong>No Win slot:</strong> No prize is awarded. The spin counts as used. The user sees this message and a CTA to spin again or recharge.
+              </div>
+            </div>
+          )}
 
           {/* Probability and Minimum Recharge */}
           <div className="grid grid-cols-2 gap-4">

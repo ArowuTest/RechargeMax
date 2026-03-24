@@ -83,13 +83,15 @@ func (h *AdminComprehensiveHandler) CreatePrize(c *gin.Context) {
 	var prizeData struct {
 		Name            string   `json:"name" binding:"required"`
 		Type            string   `json:"type" binding:"required"`
-		Value           float64  `json:"value" binding:"required"`
+		Value           float64  `json:"value"` // not required for NO_WIN type
 		Probability     float64  `json:"probability" binding:"required"`
 		IsActive        bool     `json:"is_active"`
 		MinimumRecharge *float64 `json:"minimum_recharge"`
 		ColorScheme     string   `json:"color_scheme"`
 		Color           string   `json:"color"`
 		SortOrder       *float64 `json:"sort_order"`
+		IsNoWin         bool     `json:"is_no_win"`
+		NoWinMessage    string   `json:"no_win_message"`
 	}
 
 	if err := c.ShouldBindJSON(&prizeData); err != nil {
@@ -121,11 +123,13 @@ func (h *AdminComprehensiveHandler) CreatePrize(c *gin.Context) {
 	}
 
 	prizeMap := map[string]interface{}{
-		"name":        prizeData.Name,
-		"type":        prizeData.Type,
-		"value":       prizeData.Value,
-		"probability": prizeData.Probability,
-		"is_active":   prizeData.IsActive,
+		"name":          prizeData.Name,
+		"type":          prizeData.Type,
+		"value":         prizeData.Value,
+		"probability":   prizeData.Probability,
+		"is_active":     prizeData.IsActive,
+		"is_no_win":     prizeData.IsNoWin,
+		"no_win_message": prizeData.NoWinMessage,
 	}
 	if prizeData.MinimumRecharge != nil {
 		prizeMap["minimum_recharge"] = *prizeData.MinimumRecharge

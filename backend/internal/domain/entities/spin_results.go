@@ -22,7 +22,7 @@ type SpinResult struct {
 	PrizeValue int64      `json:"prize_value" gorm:"column:prize_value;type:bigint;not null" validate:"required"` // Value in kobo
 
 	// Claim status
-	ClaimStatus    string     `json:"claim_status" gorm:"column:claim_status;default:PENDING;check:claim_status IN ('PENDING','CLAIMED','EXPIRED','PENDING_ADMIN_REVIEW','APPROVED','REJECTED')" validate:"oneof=PENDING CLAIMED EXPIRED PENDING_ADMIN_REVIEW APPROVED REJECTED"`
+	ClaimStatus    string     `json:"claim_status" gorm:"column:claim_status;default:PENDING;check:claim_status IN ('PENDING','CLAIMED','EXPIRED','PENDING_ADMIN_REVIEW','APPROVED','REJECTED','NO_WIN')" validate:"oneof=PENDING CLAIMED EXPIRED PENDING_ADMIN_REVIEW APPROVED REJECTED NO_WIN"`
 	ClaimedAt      *time.Time `json:"claimed_at" gorm:"column:claimed_at"`
 	ClaimReference string     `json:"claim_reference" gorm:"column:claim_reference"`
 

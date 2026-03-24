@@ -66,16 +66,20 @@ type SpinEligibilityResponse struct {
 
 // SpinResultResponse represents spin result
 type SpinResultResponse struct {
-ID           uuid.UUID `json:"id"`
-PrizeWon     string    `json:"prize_won"`
-PrizeType    string    `json:"prize_type"`
-PrizeValue   int64     `json:"prize_value"`
-PointsEarned int64     `json:"points_earned"`
-// ClaimStatus sent as both "status" (legacy) and "claim_status" (frontend modal reads this)
-Status       string    `json:"status"`
-ClaimStatus  string    `json:"claim_status"`
-SpinCode     string    `json:"spin_code,omitempty"`
-CreatedAt    time.Time `json:"created_at"`
+	ID           uuid.UUID `json:"id"`
+	PrizeWon     string    `json:"prize_won"`
+	PrizeType    string    `json:"prize_type"`
+	PrizeValue   int64     `json:"prize_value"`
+	PointsEarned int64     `json:"points_earned"`
+	// ClaimStatus sent as both "status" (legacy) and "claim_status" (frontend modal reads this)
+	Status      string    `json:"status"`
+	ClaimStatus string    `json:"claim_status"`
+	SpinCode    string    `json:"spin_code,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+
+	// No-win slot fields — set when wheel lands on a "Try Again" segment
+	NoWin        bool   `json:"no_win"`
+	NoWinMessage string `json:"no_win_message,omitempty"`
 }
 
 // NewSpinService creates a new spin service
@@ -292,7 +296,44 @@ if err != nil || len(prizes) == 0 {
 
 	// Select a random prize based on probability
 	selectedPrize := s.selectPrizeByProbability(prizes)
-	
+
+	// ── No-win slot: return immediately without creating a spin_result record ──
+	// IsNoWin prizes are wheel segments like "Try Again" / "Better Luck Next Time"
+	// that should NOT consume a prize slot or create a DB record.
+	// The spin eligibility is still consumed (the user used their spin) so we mark
+	// the transaction spin_used flag to prevent re-spinning on the same transaction.
+	if selectedPrize.IsNoWin != nil && *selectedPrize.IsNoWin {
+		msg := selectedPrize.NoWinMessage
+		if msg == "" {
+			msg = "Better luck next time! Recharge again for another spin."
+		}
+		// Mark spin as used so user cannot spin again on the same eligibility window
+		if user != nil {
+			_ = s.db.Model(&entities.WheelSpin{}).
+				Create(&entities.WheelSpin{
+					ID:          uuid.New(),
+					SpinCode:    fmt.Sprintf("NOWIN_%s_%d", msisdn[len(msisdn)-4:], time.Now().Unix()),
+					UserID:      &user.ID,
+					MSISDN:      msisdn,
+					PrizeID:     &selectedPrize.ID,
+					PrizeName:   selectedPrize.PrizeName,
+					PrizeType:   "NO_WIN",
+					PrizeValue:  0,
+					ClaimStatus: "NO_WIN",
+				})
+		}
+		return &SpinResultResponse{
+			NoWin:        true,
+			NoWinMessage: msg,
+			PrizeWon:     selectedPrize.PrizeName,
+			PrizeType:    "NO_WIN",
+			PrizeValue:   0,
+			Status:       "NO_WIN",
+			ClaimStatus:  "NO_WIN",
+			CreatedAt:    time.Now(),
+		}, nil
+	}
+
 	// CRITICAL: Wrap in database transaction for atomicity
 	// If any operation fails, all changes are rolled back
 	var spin *entities.WheelSpin
@@ -925,7 +966,7 @@ func (s *SpinService) CreatePrize(ctx context.Context, data map[string]interface
 	
 	// Normalize prize type to uppercase for DB
 	prizeTypeUpper := strings.ToUpper(prizeType)
-	validTypes := []string{"CASH", "AIRTIME", "DATA", "POINTS"}
+	validTypes := []string{"CASH", "AIRTIME", "DATA", "POINTS", "NO_WIN"}
 	isValidType := false
 	for _, t := range validTypes {
 		if prizeTypeUpper == t {
@@ -958,13 +999,14 @@ func (s *SpinService) CreatePrize(ctx context.Context, data map[string]interface
 	}
 
 	// Enforce global cap: sum of all active prizes must not exceed 100%
+	// NO_WIN slots are part of the wheel but the cap still applies (total must equal ~100%)
 	if s.db != nil {
 		var currentTotal float64
 		s.db.Model(&entities.WheelPrizes{}).
 			Where("is_active = ?", true).
 			Select("COALESCE(SUM(probability), 0)").
 			Scan(&currentTotal)
-		if currentTotal+probability > 100 {
+		if currentTotal+probability > 100.5 { // small tolerance for rounding
 			return nil, fmt.Errorf("adding this prize (%.2f%%) would exceed 100%% total probability (current total: %.2f%%)", probability, currentTotal)
 		}
 	}
@@ -998,6 +1040,17 @@ func (s *SpinService) CreatePrize(ctx context.Context, data map[string]interface
 	prizeID := uuid.New()
 	prizeCode := fmt.Sprintf("%s-%s", prizeTypeUpper, prizeID.String()[:8])
 	
+	// Extract no-win fields
+	isNoWin := false
+	if ib, ok := data["is_no_win"].(bool); ok {
+		isNoWin = ib
+	}
+	noWinMessage, _ := data["no_win_message"].(string)
+	if isNoWin && prizeTypeUpper != "NO_WIN" {
+		prizeTypeUpper = "NO_WIN" // force type to NO_WIN when flag is set
+		prizeCode = fmt.Sprintf("NOWIN-%s", prizeID.String()[:8])
+	}
+
 	// Create the entity
 	prize := &entities.WheelPrizes{
 		ID:              prizeID,
@@ -1010,6 +1063,8 @@ func (s *SpinService) CreatePrize(ctx context.Context, data map[string]interface
 		IsActive:        &isActive,
 		ColorScheme:     colorScheme,
 		SortOrder:       sortOrder,
+		IsNoWin:         &isNoWin,
+		NoWinMessage:    noWinMessage,
 	}
 	
 	err := s.prizeRepo.Create(ctx, prize)
@@ -1027,6 +1082,8 @@ func (s *SpinService) CreatePrize(ctx context.Context, data map[string]interface
 		"probability":      prize.Probability,
 		"minimum_recharge": prize.MinimumRecharge,
 		"is_active":        prize.IsActive,
+		"is_no_win":        prize.IsNoWin,
+		"no_win_message":   prize.NoWinMessage,
 		"color_scheme":     prize.ColorScheme,
 		"sort_order":       prize.SortOrder,
 		"created_at":       prize.CreatedAt,

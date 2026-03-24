@@ -26,6 +26,8 @@ interface WheelPrize {
   value: number;
   probability: number;
   color: string;
+  is_no_win?: boolean;
+  no_win_message?: string;
 }
 
 interface SpinWheelProps {
@@ -67,6 +69,7 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
   const [selectedPrize, setSelectedPrize] = useState<any>(null);
   const [hasSpun, setHasSpun] = useState(false);
   const [showWin, setShowWin] = useState(false);
+  const [noWinResult, setNoWinResult] = useState<{ message: string } | null>(null);
   const wheelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -79,11 +82,13 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
           const mapped: WheelPrize[] = raw
             .filter((p) => p.is_active !== false)
             .map((p) => ({
-              name:        p.prize_name ?? p.name ?? 'Prize',
-              type:        (p.prize_type ?? p.type ?? 'AIRTIME').toUpperCase(),
-              value:       Number(p.prize_value ?? p.value ?? 0),
-              probability: Number(p.probability ?? 0),
-              color:       p.color_scheme ?? p.color ?? '#6b7280',
+              name:          p.prize_name ?? p.name ?? 'Prize',
+              type:          (p.prize_type ?? p.type ?? 'AIRTIME').toUpperCase(),
+              value:         Number(p.prize_value ?? p.value ?? 0),
+              probability:   Number(p.probability ?? 0),
+              color:         p.is_no_win ? '#4b5563' : (p.color_scheme ?? p.color ?? '#6b7280'),
+              is_no_win:     p.is_no_win ?? false,
+              no_win_message: p.no_win_message ?? '',
             }));
           if (mapped.length > 0) setPrizes(mapped);
         }
@@ -118,8 +123,23 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
 
       setTimeout(() => {
         setIsSpinning(false);
-        setSelectedPrize({ ...winningPrize, claimStatus: spinResult.claim_status });
         setHasSpun(true);
+
+        // ── No-win slot ──────────────────────────────────────────────────────
+        if (spinResult.no_win) {
+          setNoWinResult({
+            message: spinResult.no_win_message || 'Better luck next time! Recharge again to spin.',
+          });
+          toast({
+            title: 'Not this time…',
+            description: spinResult.no_win_message || 'Keep recharging for more spin chances!',
+            duration: 6000,
+          });
+          return;
+        }
+
+        // ── Prize won ────────────────────────────────────────────────────────
+        setSelectedPrize({ ...winningPrize, claimStatus: spinResult.claim_status });
         setShowWin(true);
         fireWinConfetti();
 
@@ -174,6 +194,7 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
     setSelectedPrize(null);
     setHasSpun(false);
     setShowWin(false);
+    setNoWinResult(null);
     onClose();
   };
 
@@ -364,6 +385,35 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
                 )}
               </AnimatePresence>
 
+              {/* No-win result panel */}
+              <AnimatePresence>
+                {noWinResult && (
+                  <motion.div
+                    initial={{ scale: 0.85, opacity: 0, y: 20 }}
+                    animate={{ scale: 1, opacity: 1, y: 0 }}
+                    transition={{ type: 'spring', damping: 20, stiffness: 250 }}
+                    className="rounded-2xl p-5 text-center space-y-3"
+                    style={{ background: 'linear-gradient(135deg, rgba(55,65,81,0.6), rgba(30,20,60,0.7))', border: '1px solid rgba(255,255,255,0.1)' }}
+                  >
+                    <motion.div
+                      animate={{ rotate: [0, -15, 15, -8, 8, 0] }}
+                      transition={{ duration: 0.7, delay: 0.1 }}
+                    >
+                      <RotateCcw className="w-10 h-10 text-purple-400 mx-auto" />
+                    </motion.div>
+                    <div>
+                      <p className="text-white/60 text-sm font-semibold uppercase tracking-wider">Not this time</p>
+                      <p className="text-white text-lg font-bold mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        {noWinResult.message}
+                      </p>
+                    </div>
+                    <p className="text-purple-300 text-xs">
+                      Recharge again to earn another free spin!
+                    </p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               {/* Action buttons */}
               <div className="space-y-2">
                 {!hasSpun ? (
@@ -389,7 +439,31 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
                       Skip
                     </motion.button>
                   </div>
+                ) : noWinResult ? (
+                  /* No-win CTA buttons */
+                  <div className="space-y-2">
+                    <motion.button
+                      onClick={handleClose}
+                      className="w-full py-3.5 rounded-2xl font-bold text-white flex items-center justify-center gap-2"
+                      style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)' }}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.3 }}
+                    >
+                      <Zap className="w-4 h-4" /> Recharge to Spin Again
+                    </motion.button>
+                    <motion.button
+                      onClick={handleClose}
+                      className="w-full py-2.5 rounded-2xl font-medium text-white/50 hover:text-white/70 transition-colors text-sm"
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      Maybe Later
+                    </motion.button>
+                  </div>
                 ) : (
+                  /* Prize won CTA buttons */
                   <div className="space-y-2">
                     <motion.button
                       onClick={() => window.location.href = '/login'}
@@ -414,14 +488,17 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
               </div>
 
               {/* Prize list */}
-              {!showWin && (
+              {!showWin && !noWinResult && (
                 <div className="border-t border-white/10 pt-4">
                   <p className="text-center text-xs text-purple-300 font-semibold uppercase tracking-wider mb-3">Possible Prizes</p>
                   <div className="grid grid-cols-2 gap-2">
                     {prizes.map((prize) => (
                       <div key={prize.name} className="flex items-center gap-2 text-xs text-white/70">
                         <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: prize.color }} />
-                        {prize.name}
+                        {(prize as any).is_no_win
+                          ? <span className="text-white/40 italic">{prize.name}</span>
+                          : prize.name
+                        }
                       </div>
                     ))}
                   </div>

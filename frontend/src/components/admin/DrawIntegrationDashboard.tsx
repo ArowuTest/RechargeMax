@@ -76,8 +76,8 @@ const DrawIntegrationDashboard: React.FC = () => {
   // Prize Tier System state
   const [drawTypes, setDrawTypes] = useState<any[]>([]);
   const [prizeTemplates, setPrizeTemplates] = useState<any[]>([]);
-  const [selectedDrawType, setSelectedDrawType] = useState<number | null>(null);
-  const [selectedTemplate, setSelectedTemplate] = useState<number | null>(null);
+  const [selectedDrawType, setSelectedDrawType] = useState<string | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [prizeCategories, setPrizeCategories] = useState<any[]>([]);
   const [totalPrizePool, setTotalPrizePool] = useState(0);
 
@@ -85,8 +85,8 @@ const DrawIntegrationDashboard: React.FC = () => {
   const [newDraw, setNewDraw] = useState({
     name: '',
     type: 'DAILY' as const,
-    draw_type_id: null as number | null,
-    prize_template_id: null as number | null,
+    draw_type_id: null as string | null,
+    prize_template_id: null as string | null,
     duration_hours: 24
   });
   const [csvFile, setCsvFile] = useState<File | null>(null);
@@ -151,7 +151,7 @@ const DrawIntegrationDashboard: React.FC = () => {
     }
   };
 
-  const fetchPrizeTemplates = async (drawTypeId: number) => {
+  const fetchPrizeTemplates = async (drawTypeId: string) => {
     try {
       const response = await adminApi.get(`/admin/prize-templates?draw_type_id=${drawTypeId}`);
       // adminApi.get returns the full response body: { success, data: [...] }
@@ -166,7 +166,7 @@ const DrawIntegrationDashboard: React.FC = () => {
     }
   };
 
-  const fetchPrizeCategories = async (templateId: number) => {
+  const fetchPrizeCategories = async (templateId: string) => {
     try {
       const response = await adminApi.get(`/admin/prize-templates/${templateId}`);
       // adminApi.get returns the full response body: { success, data: {...} }
@@ -189,7 +189,7 @@ const DrawIntegrationDashboard: React.FC = () => {
   };
 
   const handleDrawTypeChange = async (value: string) => {
-    const drawTypeId = parseInt(value);
+    const drawTypeId = value;
     setSelectedDrawType(drawTypeId);
     setSelectedTemplate(null);
     setPrizeCategories([]);
@@ -199,7 +199,7 @@ const DrawIntegrationDashboard: React.FC = () => {
   };
 
   const handleTemplateChange = async (value: string) => {
-    const templateId = parseInt(value);
+    const templateId = value;
     setSelectedTemplate(templateId);
     setNewDraw(prev => ({ ...prev, prize_template_id: templateId }));
     await fetchPrizeCategories(templateId);

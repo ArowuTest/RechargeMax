@@ -131,7 +131,7 @@ export const AdminProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     admin: adminUser,
     isAdminAuthenticated: !!adminUser,
     isAuthenticated: !!adminUser,
-    sessionToken: null, // Token is in httpOnly cookie — not exposed to JS
+    sessionToken: localStorage.getItem('rechargemax_admin_token'), // Read from localStorage for Bearer auth
     adminLogin,
     login: (username: string, password: string) => adminLogin({ username, password }),
     adminLogout,

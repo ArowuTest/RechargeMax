@@ -73,7 +73,7 @@ function App() {
                   <Route path="/admin/comprehensive" element={<ProtectedRoute><ComprehensiveAdminPortal /></ProtectedRoute>} />
                   <Route path="/admin/draws" element={<ProtectedRoute><DrawIntegrationDashboard /></ProtectedRoute>} />
                   <Route path="/admin/winners" element={<ProtectedRoute><WinnerClaimProcessing /></ProtectedRoute>} />
-                  <Route path="/admin/wheel-prizes" element={<ProtectedRoute><div>Wheel Prize Management (Coming Soon)</div></ProtectedRoute>} />
+                  <Route path="/admin/wheel-prizes" element={<ProtectedRoute><ComprehensiveAdminPortal /></ProtectedRoute>} />
                   <Route path="/admin/subscriptions" element={<ProtectedRoute><SubscriptionTierManagement /></ProtectedRoute>} />
                   <Route path="/admin/pricing" element={<ProtectedRoute><SubscriptionPricingConfig /></ProtectedRoute>} />
                   <Route path="/admin/daily-subscriptions" element={<ProtectedRoute><DailySubscriptionMonitoring /></ProtectedRoute>} />

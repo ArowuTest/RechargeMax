@@ -362,6 +362,11 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 				return fmt.Errorf("failed to update user points: %w", err)
 			}
 			txUser = user
+			// Link transaction to existing user (was missing — user_id was always NULL for existing users)
+			if err := tx.Model(&entities.Transactions{}).Where("id = ?", recharge.ID).Update("user_id", user.ID).Error; err != nil {
+				logger.Error("ProcessSuccessfulPayment: failed to link transaction to existing user", zap.Error(err))
+				return fmt.Errorf("failed to link transaction to user: %w", err)
+			}
 		}
 
 		// Process affiliate commission atomically inside this transaction (BUG-002).

@@ -69,7 +69,7 @@ ON CONFLICT DO NOTHING;
 INSERT INTO prize_categories (template_id, category_name, prize_amount, winners_count, runner_ups_count, display_order) VALUES
     ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Winner', 10000.00, 1, 2, 1),
     ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Consolation', 2000.00, 3, 2, 2)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (template_id, category_name) DO NOTHING;
 
 -- 10. Insert default prize categories for Weekly template
 INSERT INTO prize_categories (template_id, category_name, prize_amount, winners_count, runner_ups_count, display_order) VALUES
@@ -78,4 +78,4 @@ INSERT INTO prize_categories (template_id, category_name, prize_amount, winners_
     ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'Second Prize', 100000.00, 1, 2, 3),
     ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'Third Prize', 50000.00, 1, 2, 4),
     ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'Consolation', 10000.00, 5, 3, 5)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (template_id, category_name) DO NOTHING;

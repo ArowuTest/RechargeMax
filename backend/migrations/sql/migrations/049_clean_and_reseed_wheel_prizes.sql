@@ -1,12 +1,16 @@
--- Migration 048: Clean up corrupted test wheel_prizes and re-seed canonical set
+-- Migration 049: Clean up corrupted test wheel_prizes and re-seed canonical set
 -- The wheel_prizes table accumulated 384 duplicate/corrupted prizes from
--- UAT testing before the dedup guard was added. This migration:
---   1. Deletes ALL existing wheel_prizes (they were all created during testing)
---   2. Re-inserts the canonical 8 prizes with ON CONFLICT DO NOTHING
--- 
--- Safe to re-run: ON CONFLICT DO NOTHING means re-runs are no-ops.
+-- UAT testing before the dedup guard was added.
+--
+-- ⚠️  IMPORTANT: This migration is now tracked in schema_migrations and runs
+-- EXACTLY ONCE per database.  The TRUNCATE ... CASCADE below is intentional
+-- for the one-time cleanup and is safe because it only runs on first deploy.
+--
+-- If you need to re-seed prizes in production, create a NEW numbered migration
+-- (e.g. 055_reseed_prizes.sql) using INSERT ... ON CONFLICT DO NOTHING instead
+-- of TRUNCATE.
 
--- Step 1: Remove all test/duplicate prizes
+-- Step 1: Remove all test/duplicate prizes (ONE TIME ONLY — tracked migration)
 TRUNCATE TABLE wheel_prizes RESTART IDENTITY CASCADE;
 
 -- Step 2: Re-seed the canonical 8 prizes (total probability = 100%)

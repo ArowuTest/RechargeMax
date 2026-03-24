@@ -17,7 +17,14 @@ import (
 var sqlFiles embed.FS
 
 // RunAll executes all base schema SQL files then versioned migrations.
-// Each STATEMENT runs independently so a failing trigger/index doesn't block table creation.
+//
+// BASE SCHEMA (sql/*.sql): always re-run on every deploy — all statements are
+// CREATE TABLE IF NOT EXISTS / CREATE INDEX IF NOT EXISTS / etc., so they are
+// fully idempotent.
+//
+// VERSIONED MIGRATIONS (sql/migrations/*.sql): tracked in the schema_migrations
+// table.  Each file is run EXACTLY ONCE; subsequent deploys skip already-applied
+// files.  This prevents destructive statements like TRUNCATE from running again.
 func RunAll(db *gorm.DB) {
 	sqlDB, err := db.DB()
 	if err != nil {
@@ -27,7 +34,13 @@ func RunAll(db *gorm.DB) {
 
 	log.Println("📦 Running embedded SQL migrations...")
 
-	// Base schema files (creates tables, indexes, triggers)
+	// ── 1. Ensure the migration-tracking table exists ──────────────────────
+	_, _ = sqlDB.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+		version     VARCHAR(255) PRIMARY KEY,
+		applied_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	)`)
+
+	// ── 2. Base schema (always idempotent — run every deploy) ──────────────
 	baseFiles := listFiles("sql")
 	log.Printf("  📋 %d base schema files", len(baseFiles))
 	totalOK, totalFail := 0, 0
@@ -38,16 +51,37 @@ func RunAll(db *gorm.DB) {
 	}
 	log.Printf("  ✓ base schema: %d statements ok, %d warned", totalOK, totalFail)
 
-	// Versioned migrations
+	// ── 3. Versioned migrations (run each file exactly once) ────────────────
 	migFiles := listFiles("sql/migrations")
-	log.Printf("  📋 %d migration files", len(migFiles))
-	totalOK, totalFail = 0, 0
+	log.Printf("  📋 %d versioned migration files found", len(migFiles))
+
+	applied, skipped := 0, 0
 	for _, f := range migFiles {
+		version := filepath.Base(f) // e.g. "049_clean_and_reseed_wheel_prizes.sql"
+
+		// Check if already applied
+		var count int
+		row := sqlDB.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version = $1`, version)
+		if err := row.Scan(&count); err != nil || count > 0 {
+			skipped++
+			continue
+		}
+
+		// Run the migration
 		ok, fail := execFileByStatement(sqlDB, f)
-		totalOK += ok
-		totalFail += fail
+		if ok > 0 || fail == 0 {
+			// Record as applied even if some statements warned — the file ran
+			if _, err := sqlDB.Exec(`INSERT INTO schema_migrations (version) VALUES ($1) ON CONFLICT DO NOTHING`, version); err != nil {
+				log.Printf("  ⚠️  Could not record migration %s: %v", version, err)
+			} else {
+				log.Printf("  ✅ Applied migration: %s (%d ok, %d warned)", version, ok, fail)
+				applied++
+			}
+		} else {
+			log.Printf("  ❌ Migration %s failed (%d ok, %d failed)", version, ok, fail)
+		}
 	}
-	log.Printf("  ✓ migrations: %d statements ok, %d warned", totalOK, totalFail)
+	log.Printf("  ✓ versioned migrations: %d newly applied, %d already done", applied, skipped)
 
 	log.Println("📦 Migrations complete")
 }

@@ -283,3 +283,18 @@ func (h *SpinHandler) GetPrizes(c *gin.Context) {
 		"data": prizes,
 	})
 }
+
+// DebugSpins is a TEMPORARY admin diagnostic endpoint — remove after investigation.
+func (h *SpinHandler) DebugSpins(c *gin.Context) {
+	msisdn := c.Query("msisdn")
+	if msisdn == "" {
+		c.JSON(400, gin.H{"error": "msisdn query param required"})
+		return
+	}
+	rows, err := h.spinService.DebugSpinResults(c.Request.Context(), msisdn)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"msisdn": msisdn, "count": len(rows), "rows": rows})
+}

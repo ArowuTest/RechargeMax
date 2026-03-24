@@ -1367,3 +1367,43 @@ func (s *SpinService) GetTierProgress(ctx context.Context, msisdn string) (*Tier
 		DailySpinCap:     dailyCap,
 	}, nil
 }
+
+// DebugSpinResults is a TEMPORARY diagnostic function — remove after investigation.
+// Returns raw spin_results rows for a given MSISDN regardless of user_id.
+func (s *SpinService) DebugSpinResults(ctx context.Context, msisdn string) ([]map[string]interface{}, error) {
+	type row struct {
+		ID          string  `gorm:"column:id"`
+		SpinCode    string  `gorm:"column:spin_code"`
+		UserID      *string `gorm:"column:user_id"`
+		MSISDN      string  `gorm:"column:msisdn"`
+		PrizeName   string  `gorm:"column:prize_name"`
+		PrizeType   string  `gorm:"column:prize_type"`
+		PrizeValue  int64   `gorm:"column:prize_value"`
+		ClaimStatus string  `gorm:"column:claim_status"`
+		CreatedAt   string  `gorm:"column:created_at"`
+	}
+	var rows []row
+	err := s.db.WithContext(ctx).
+		Table("spin_results").
+		Where("msisdn = ?", msisdn).
+		Order("created_at DESC").
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	result := make([]map[string]interface{}, len(rows))
+	for i, r := range rows {
+		uid := "<null>"
+		if r.UserID != nil {
+			uid = *r.UserID
+		}
+		result[i] = map[string]interface{}{
+			"id": r.ID, "spin_code": r.SpinCode,
+			"user_id": uid, "msisdn": r.MSISDN,
+			"prize_name": r.PrizeName, "prize_type": r.PrizeType,
+			"prize_value_kobo": r.PrizeValue,
+			"claim_status": r.ClaimStatus, "created_at": r.CreatedAt,
+		}
+	}
+	return result, nil
+}

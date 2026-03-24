@@ -22,8 +22,11 @@ CREATE INDEX idx_points_adjustments_created_by ON public.points_adjustments USIN
 
 CREATE INDEX idx_points_adjustments_user_id ON public.points_adjustments USING btree (user_id);
 
-ALTER TABLE ONLY public.points_adjustments
-    ADD CONSTRAINT fk_points_adjustments_admin FOREIGN KEY (created_by) REFERENCES public.users(id);
+-- NOTE: FK fk_points_adjustments_admin intentionally removed here.
+-- created_by is populated from admin_users.id (a separate table from users).
+-- Adding a FK to users.id causes a 23503 violation because admin UUIDs
+-- don't exist in the users table. Migration 050 drops this wrong FK and
+-- makes created_by nullable. See migration 050 for the correct constraint state.
 
 ALTER TABLE ONLY public.points_adjustments
     ADD CONSTRAINT fk_points_adjustments_user FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;

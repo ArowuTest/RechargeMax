@@ -25,8 +25,12 @@ CREATE TABLE public.daily_subscriptions (
 ALTER TABLE ONLY public.daily_subscriptions
     ADD CONSTRAINT daily_subscriptions_pkey PRIMARY KEY (id);
 
-ALTER TABLE ONLY public.daily_subscriptions
-    ADD CONSTRAINT daily_subscriptions_user_id_subscription_date_key UNIQUE (user_id, subscription_date);
+-- NOTE: UNIQUE(user_id, subscription_date) intentionally removed here.
+-- Migration 043 drops this constraint to support multi-line subscriptions
+-- (multiple lines on the same day for the same user). Adding it here causes
+-- a 23505 error on every restart because duplicate rows already exist.
+-- The non-unique index idx_daily_subscriptions_user_date (added by 043) covers
+-- query performance without enforcing the unwanted uniqueness.
 
 CREATE INDEX idx_daily_subscriptions_msisdn ON public.daily_subscriptions USING btree (msisdn);
 

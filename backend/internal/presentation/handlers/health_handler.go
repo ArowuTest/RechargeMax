@@ -128,56 +128,37 @@ ON CONFLICT (email) DO UPDATE SET
 // Safe to call multiple times (UPDATE is idempotent).
 // Uses SET LOCAL row_security = off to bypass RLS for the duration of the statement.
 func (h *HealthHandler) BackfillTransactionUserIDs(c *gin.Context) {
-	sqlDB, err := h.db.DB()
-	if err != nil {
-		c.JSON(500, gin.H{"error": "db pool error: " + err.Error()})
-		return
-	}
-
-	// Count NULL user_ids before
+	// Count NULL user_ids before using GORM (raw SQL is blocked by RLS on this connection)
 	var nullBefore int64
-	_ = h.db.Raw("SELECT COUNT(*) FROM transactions WHERE user_id IS NULL").Scan(&nullBefore)
+	_ = h.db.Model(&struct{ ID string `gorm:"column:id"` }{}).
+		Table("transactions").
+		Where("user_id IS NULL").
+		Count(&nullBefore)
 
-	// Use a transaction so SET LOCAL row_security = off is scoped properly
-	tx, err := sqlDB.BeginTx(c.Request.Context(), nil)
-	if err != nil {
-		c.JSON(500, gin.H{"error": "begin tx: " + err.Error()})
-		return
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(c.Request.Context(), "SET LOCAL row_security = off"); err != nil {
-		c.JSON(500, gin.H{"error": "set rls off: " + err.Error()})
-		return
-	}
-
-	result, err := tx.ExecContext(c.Request.Context(), `
+	// Run backfill via GORM Exec (uses the same authenticated session as Model queries)
+	result := h.db.Exec(`
 		UPDATE transactions t
 		SET    user_id = u.id
 		FROM   users u
 		WHERE  t.msisdn = u.msisdn
 		  AND  t.user_id IS NULL
 	`)
-	if err != nil {
-		c.JSON(500, gin.H{"error": "update: " + err.Error()})
+	if result.Error != nil {
+		c.JSON(500, gin.H{"error": "update: " + result.Error.Error()})
 		return
 	}
-
-	if err := tx.Commit(); err != nil {
-		c.JSON(500, gin.H{"error": "commit: " + err.Error()})
-		return
-	}
-
-	rows, _ := result.RowsAffected()
 
 	// Count NULL user_ids after
 	var nullAfter int64
-	_ = h.db.Raw("SELECT COUNT(*) FROM transactions WHERE user_id IS NULL").Scan(&nullAfter)
+	_ = h.db.Model(&struct{ ID string `gorm:"column:id"` }{}).
+		Table("transactions").
+		Where("user_id IS NULL").
+		Count(&nullAfter)
 
 	c.JSON(200, gin.H{
-		"message":       "backfill complete",
-		"rows_updated":  rows,
-		"null_before":   nullBefore,
-		"null_after":    nullAfter,
+		"message":      "backfill complete",
+		"rows_updated": result.RowsAffected,
+		"null_before":  nullBefore,
+		"null_after":   nullAfter,
 	})
 }

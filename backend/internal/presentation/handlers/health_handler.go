@@ -122,3 +122,24 @@ ON CONFLICT (email) DO UPDATE SET
 		"tables":        tableNames,
 	})
 }
+
+// BackfillTransactionUserIDs is a one-shot maintenance endpoint.
+// It backfills user_id on transactions that have NULL user_id by joining on msisdn.
+// Safe to call multiple times (UPDATE is idempotent).
+func (h *HealthHandler) BackfillTransactionUserIDs(c *gin.Context) {
+	result := h.db.Exec(`
+		UPDATE transactions t
+		SET    user_id = u.id
+		FROM   users u
+		WHERE  t.msisdn = u.msisdn
+		  AND  t.user_id IS NULL
+	`)
+	if result.Error != nil {
+		c.JSON(500, gin.H{"error": result.Error.Error()})
+		return
+	}
+	c.JSON(200, gin.H{
+		"message":       "backfill complete",
+		"rows_updated":  result.RowsAffected,
+	})
+}

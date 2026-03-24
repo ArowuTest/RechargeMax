@@ -110,6 +110,9 @@ interface DashboardData {
     fulfillment_error?: string;
     claim_reference?: string;
   }>;
+  // Rewards summary fields (may be absent on older API responses)
+  total_entries?: number;
+  next_draw?: string;
 }
 
 interface BankDetails {

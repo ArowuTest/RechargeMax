@@ -139,6 +139,10 @@ func registerPublic(v1 *gin.RouterGroup, hdlrs *handlers.Registry, db *gorm.DB) 
 	v1.GET("/platform/statistics", hdlrs.Platform.GetStatistics)
 	v1.GET("/winners/recent",       hdlrs.Platform.GetRecentWinners)
 
+	// Affiliate click tracking — public (fires when anyone visits a referral link,
+	// including unauthenticated guests). No CSRF risk: no session mutation.
+	v1.POST("/affiliate/track-click", hdlrs.Affiliate.TrackClick)
+
 	// Subscription — public & guest-accessible
 	// Config is always public (pricing display before sign-up).
 	// Create / status / cancel / history use OptionalAuth: if a JWT is present the
@@ -239,7 +243,7 @@ func registerProtected(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *serv
 		affiliate.GET("/commissions",   hdlrs.Affiliate.GetCommissions)
 		affiliate.GET("/earnings",      hdlrs.Affiliate.GetEarnings)
 		affiliate.POST("/payout",       hdlrs.Affiliate.RequestPayout)
-		affiliate.POST("/track-click",      hdlrs.Affiliate.TrackClick)      // click attribution
+		// track-click is public (moved to registerPublic) — guests land via ref links
 		affiliate.POST("/track-conversion", hdlrs.Affiliate.TrackConversion) // conversion + commission
 	}
 

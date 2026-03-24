@@ -818,5 +818,26 @@ ON CONFLICT (id) DO NOTHING`
 		}
 	}
 
+	// ── One-time backfill: populate user_id on transactions that have NULL ──────
+	// All transactions created before the ProcessSuccessfulPayment fix had
+	// user_id = NULL (existing-user path never wrote it). This runs on every
+	// startup but only affects rows with user_id IS NULL (safe + idempotent).
+	{
+		result := db.Exec(`
+			UPDATE transactions t
+			SET    user_id = u.id
+			FROM   users u
+			WHERE  t.msisdn = u.msisdn
+			  AND  t.user_id IS NULL
+		`)
+		if result.Error != nil {
+			log.Printf("  ⚠️  transaction user_id backfill warning: %v", result.Error)
+		} else if result.RowsAffected > 0 {
+			log.Printf("  ✅ Backfilled user_id on %d transactions", result.RowsAffected)
+		} else {
+			log.Println("  ✓ transaction user_id backfill: nothing to update")
+		}
+	}
+
 	log.Println("🌱 Seed check complete")
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -291,8 +292,24 @@ func (s *UserService) GetDashboard(ctx context.Context, msisdn string) (*Dashboa
 		// Get subscriptions
 		subscriptions := s.getUserSubscriptions(ctx, user.MSISDN)
 
-		// Get prizes
+		// Get prizes — combined from spin_results + draw_winners
 		prizes := s.getUserPrizes(ctx, user.ID)
+
+		// Recalculate prize summary counts to include draw wins
+		drawWinTotal := int64(0)
+		drawWinPending := int64(0)
+		if s.db != nil {
+			s.db.WithContext(ctx).Table("draw_winners").
+				Where("user_id = ?", user.ID).Count(&drawWinTotal)
+			s.db.WithContext(ctx).Table("draw_winners").
+				Where("user_id = ? AND claim_status = 'PENDING'", user.ID).Count(&drawWinPending)
+		}
+		summary.TotalPrizes  = totalSpins + drawWinTotal
+		summary.PendingPrizes = pendingSpins + drawWinPending
+		summary.ClaimedPrizes = summary.TotalPrizes - summary.PendingPrizes
+		if summary.ClaimedPrizes < 0 {
+			summary.ClaimedPrizes = 0
+		}
 
 		return &DashboardResponse{
 			User: &UserProfile{
@@ -705,8 +722,8 @@ func (s *UserService) getUnclaimedPrizesCount(ctx context.Context, msisdn string
 	// Real query: count unclaimed winners for this MSISDN
 	if s.db != nil {
 		var count int64
-		s.db.Table("winners").
-			Where("msisdn = ? AND claim_status = ?", msisdn, "PENDING").
+		s.db.WithContext(ctx).Table("draw_winners").
+			Where("(msisdn = ? OR user_id = (SELECT id FROM users WHERE msisdn = ? LIMIT 1)) AND claim_status = ?", msisdn, msisdn, "PENDING").
 			Count(&count)
 		return count
 	}
@@ -901,33 +918,103 @@ func (s *UserService) getRecentTransactions(ctx context.Context, userID uuid.UUI
 	return result
 }
 
-// getUserPrizes gets user's prizes from spin results
+// getUserPrizes returns all prizes for a user, combining BOTH:
+//   1. spin_results  — prizes won via the spin wheel
+//   2. draw_winners  — prizes won via the daily/weekly draws
+//
+// Results are sorted newest-first.
 func (s *UserService) getUserPrizes(ctx context.Context, userID uuid.UUID) []PrizeItem {
+	var result []PrizeItem
+
+	// ── 1. Spin-wheel prizes ────────────────────────────────────────────────
 	spins, err := s.spinRepo.FindByUserID(ctx, userID, 100, 0)
-	if err != nil {
-		return []PrizeItem{} // Return empty array instead of nil
+	if err == nil {
+		for _, spin := range spins {
+			prizeNaira := int64(resolvePrizeValueNaira(spin.PrizeValue, spin.PrizeName, spin.Prize))
+			result = append(result, PrizeItem{
+				ID:                  spin.ID,
+				PrizeName:           spin.PrizeName,
+				PrizeType:           spin.PrizeType,
+				PrizeValue:          prizeNaira,
+				Status:              spin.ClaimStatus,
+				WonAt:               spin.CreatedAt,
+				WonDate:             spin.CreatedAt.Format("2006-01-02 15:04:05"),
+				ClaimedAt:           spin.ClaimedAt,
+				ClaimDate:           func() *string { if spin.ClaimedAt != nil { s := spin.ClaimedAt.Format("2006-01-02 15:04:05"); return &s }; return nil }(),
+				ClaimReference:      spin.ClaimReference,
+				FulfillmentMode:     spin.FulfillmentMode,
+				FulfillmentError:    spin.FulfillmentError,
+				FulfillmentAttempts: spin.FulfillmentAttempts,
+			})
+		}
 	}
 
-	var result []PrizeItem
-	for _, spin := range spins {
-		// Resolve prize value: prefer authoritative wheel_prizes value (via preloaded Prize),
-		// fall back to the copied kobo value if sane, then regex from prize_name as last resort.
-		prizeNaira := int64(resolvePrizeValueNaira(spin.PrizeValue, spin.PrizeName, spin.Prize))
-		result = append(result, PrizeItem{
-			ID:                  spin.ID,
-			PrizeName:           spin.PrizeName,
-			PrizeType:           spin.PrizeType,
-			PrizeValue:          prizeNaira,
-			Status:              spin.ClaimStatus,
-			WonAt:               spin.CreatedAt,
-			WonDate:             spin.CreatedAt.Format("2006-01-02 15:04:05"),
-			ClaimedAt:           spin.ClaimedAt,
-			ClaimDate:           func() *string { if spin.ClaimedAt != nil { s := spin.ClaimedAt.Format("2006-01-02 15:04:05"); return &s }; return nil }(),
-			ClaimReference:      spin.ClaimReference,
-			FulfillmentMode:     spin.FulfillmentMode,
-			FulfillmentError:    spin.FulfillmentError,
-			FulfillmentAttempts: spin.FulfillmentAttempts,
-		})
+	// ── 2. Draw prizes (draw_winners table) ─────────────────────────────────
+	if s.db != nil {
+		type drawWinnerRow struct {
+			ID             uuid.UUID  `gorm:"column:id"`
+			PrizeAmount    int64      `gorm:"column:prize_amount"`
+			ClaimStatus    string     `gorm:"column:claim_status"`
+			ClaimedAt      *time.Time `gorm:"column:claimed_at"`
+			ClaimReference string     `gorm:"column:claim_reference"`
+			CategoryName   *string    `gorm:"column:category_name"`
+			CreatedAt      *time.Time `gorm:"column:created_at"`
+			IsRunnerUp     bool       `gorm:"column:is_runner_up"`
+		}
+		var drawWins []drawWinnerRow
+		s.db.WithContext(ctx).
+			Table("draw_winners").
+			Where("user_id = ?", userID).
+			Order("created_at DESC").
+			Limit(100).
+			Scan(&drawWins)
+
+		for _, w := range drawWins {
+			prizeNaira := w.PrizeAmount / 100
+			status := w.ClaimStatus
+			if status == "" {
+				status = "PENDING"
+			}
+			prizeName := "Draw Prize"
+			if w.CategoryName != nil && *w.CategoryName != "" {
+				prizeName = *w.CategoryName
+			}
+			if w.IsRunnerUp {
+				prizeName += " (Runner-up)"
+			}
+			wonAt := time.Time{}
+			wonDate := ""
+			if w.CreatedAt != nil {
+				wonAt = *w.CreatedAt
+				wonDate = w.CreatedAt.Format("2006-01-02 15:04:05")
+			}
+			var claimDate *string
+			if w.ClaimedAt != nil {
+				s := w.ClaimedAt.Format("2006-01-02 15:04:05")
+				claimDate = &s
+			}
+			result = append(result, PrizeItem{
+				ID:             w.ID,
+				PrizeName:      prizeName,
+				PrizeType:      "cash",
+				PrizeValue:     prizeNaira,
+				Status:         status,
+				WonAt:          wonAt,
+				WonDate:        wonDate,
+				ClaimedAt:      w.ClaimedAt,
+				ClaimDate:      claimDate,
+				ClaimReference: w.ClaimReference,
+			})
+		}
+	}
+
+	// Sort combined list newest-first
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].WonAt.After(result[j].WonAt)
+	})
+
+	if result == nil {
+		return []PrizeItem{}
 	}
 	return result
 }

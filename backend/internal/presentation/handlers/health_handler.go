@@ -126,20 +126,58 @@ ON CONFLICT (email) DO UPDATE SET
 // BackfillTransactionUserIDs is a one-shot maintenance endpoint.
 // It backfills user_id on transactions that have NULL user_id by joining on msisdn.
 // Safe to call multiple times (UPDATE is idempotent).
+// Uses SET LOCAL row_security = off to bypass RLS for the duration of the statement.
 func (h *HealthHandler) BackfillTransactionUserIDs(c *gin.Context) {
-	result := h.db.Exec(`
+	sqlDB, err := h.db.DB()
+	if err != nil {
+		c.JSON(500, gin.H{"error": "db pool error: " + err.Error()})
+		return
+	}
+
+	// Count NULL user_ids before
+	var nullBefore int64
+	_ = h.db.Raw("SELECT COUNT(*) FROM transactions WHERE user_id IS NULL").Scan(&nullBefore)
+
+	// Use a transaction so SET LOCAL row_security = off is scoped properly
+	tx, err := sqlDB.BeginTx(c.Request.Context(), nil)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "begin tx: " + err.Error()})
+		return
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(c.Request.Context(), "SET LOCAL row_security = off"); err != nil {
+		c.JSON(500, gin.H{"error": "set rls off: " + err.Error()})
+		return
+	}
+
+	result, err := tx.ExecContext(c.Request.Context(), `
 		UPDATE transactions t
 		SET    user_id = u.id
 		FROM   users u
 		WHERE  t.msisdn = u.msisdn
 		  AND  t.user_id IS NULL
 	`)
-	if result.Error != nil {
-		c.JSON(500, gin.H{"error": result.Error.Error()})
+	if err != nil {
+		c.JSON(500, gin.H{"error": "update: " + err.Error()})
 		return
 	}
+
+	if err := tx.Commit(); err != nil {
+		c.JSON(500, gin.H{"error": "commit: " + err.Error()})
+		return
+	}
+
+	rows, _ := result.RowsAffected()
+
+	// Count NULL user_ids after
+	var nullAfter int64
+	_ = h.db.Raw("SELECT COUNT(*) FROM transactions WHERE user_id IS NULL").Scan(&nullAfter)
+
 	c.JSON(200, gin.H{
 		"message":       "backfill complete",
-		"rows_updated":  result.RowsAffected,
+		"rows_updated":  rows,
+		"null_before":   nullBefore,
+		"null_after":    nullAfter,
 	})
 }

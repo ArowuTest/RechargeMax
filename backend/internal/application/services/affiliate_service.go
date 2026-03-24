@@ -1136,7 +1136,7 @@ func (s *AffiliateService) ProcessCommissionTx(ctx context.Context, tx *gorm.DB,
 	var successCount int64
 	if err := s.db.WithContext(ctx).
 		Model(&entities.Transactions{}).
-		Where("user_id = ? AND status = 'success'", user.ID).
+		Where("user_id = ? AND status = 'SUCCESS'", user.ID).
 		Count(&successCount).Error; err != nil {
 		return fmt.Errorf("commission: failed to count successful recharges: %w", err)
 	}

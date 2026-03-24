@@ -190,7 +190,7 @@ func (r *transactionRepositoryGORM) CountByUserID(ctx context.Context, userID uu
 	var count int64
 	err := r.db.WithContext(ctx).
 		Model(&entities.Transactions{}).
-		Where("user_id = ? AND status = 'success'", userID).
+		Where("user_id = ? AND status = 'SUCCESS'", userID).
 		Count(&count).Error
 	return count, err
 }

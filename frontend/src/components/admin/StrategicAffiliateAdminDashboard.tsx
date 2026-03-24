@@ -396,10 +396,17 @@ const StrategicAffiliateAdminDashboard: React.FC<StrategicAffiliateAdminDashboar
 
       <Tabs defaultValue="affiliates" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="affiliates">Affiliates</TabsTrigger>
-          <TabsTrigger value="tiers">Commission Tiers</TabsTrigger>
+          <TabsTrigger value="applications">Applications</TabsTrigger>
+          <TabsTrigger value="affiliates">Active Affiliates</TabsTrigger>
+          <TabsTrigger value="commissions">Commissions</TabsTrigger>
+          <TabsTrigger value="payouts">Payouts</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
         </TabsList>
+
+        {/* Applications Tab — shows PENDING affiliates awaiting review */}
+        <TabsContent value="applications">
+          <ApplicationsTab />
+        </TabsContent>
 
         {/* Affiliates Tab */}
         <TabsContent value="affiliates">
@@ -614,6 +621,16 @@ const StrategicAffiliateAdminDashboard: React.FC<StrategicAffiliateAdminDashboar
           </Card>
         </TabsContent>
 
+        {/* Commissions Tab */}
+        <TabsContent value="commissions">
+          <CommissionsTab />
+        </TabsContent>
+
+        {/* Payouts Tab */}
+        <TabsContent value="payouts">
+          <PayoutsTab />
+        </TabsContent>
+
         {/* Analytics Tab */}
         <TabsContent value="analytics">
           <Card>
@@ -815,3 +832,322 @@ const StrategicAffiliateAdminDashboard: React.FC<StrategicAffiliateAdminDashboar
 };
 
 export default StrategicAffiliateAdminDashboard;
+// ═══════════════════════════════════════════════════════════════════════════
+// Applications Tab — pending affiliate applications awaiting admin review
+// ═══════════════════════════════════════════════════════════════════════════
+const ApplicationsTab: React.FC = () => {
+  const { toast } = useToast();
+  const [apps, setApps] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [processingId, setProcessingId] = React.useState<string | null>(null);
+
+  const fetchApps = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch('/api/v1/admin/affiliates/all?status=PENDING&per_page=50', { credentials: 'include' });
+      const json = await res.json();
+      setApps(json.data?.affiliates || json.data || []);
+    } catch { setApps([]); } finally { setLoading(false); }
+  };
+
+  React.useEffect(() => { fetchApps(); }, []);
+
+  const handleAction = async (id: string, action: 'approve' | 'reject') => {
+    setProcessingId(id);
+    try {
+      const res = await fetch(`/api/v1/admin/affiliates/${id}/${action}`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: action === 'reject' ? 'Does not meet criteria' : '' }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      toast({ title: action === 'approve' ? 'Approved ✅' : 'Rejected', description: `Affiliate application ${action}d.` });
+      fetchApps();
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally { setProcessingId(null); }
+  };
+
+  if (loading) return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-purple-600" /></div>;
+  if (!apps.length) return (
+    <Card><CardContent className="py-12 text-center text-gray-400">
+      <UserCheck className="w-10 h-10 mx-auto mb-3 opacity-50" />
+      <p>No pending applications</p>
+    </CardContent></Card>
+  );
+
+  return (
+    <Card>
+      <CardHeader><CardTitle>Pending Applications ({apps.length})</CardTitle></CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Affiliate</TableHead>
+              <TableHead>Bank Account</TableHead>
+              <TableHead>Applied</TableHead>
+              <TableHead>Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {apps.map((app: any) => (
+              <TableRow key={app.id}>
+                <TableCell>
+                  <div>
+                    <p className="font-semibold">{app.first_name} {app.last_name}</p>
+                    <p className="text-sm text-gray-500">{app.email}</p>
+                    <p className="text-xs text-gray-400 font-mono">{app.affiliate_code}</p>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <p className="text-sm">{app.bank_name}</p>
+                  <p className="text-xs font-mono">{app.account_number}</p>
+                  <p className="text-xs text-gray-500">{app.account_name}</p>
+                </TableCell>
+                <TableCell className="text-sm text-gray-500">
+                  {app.created_at ? new Date(app.created_at).toLocaleDateString('en-NG') : '—'}
+                </TableCell>
+                <TableCell>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => handleAction(app.id, 'approve')}
+                      disabled={processingId === app.id} className="bg-green-600 hover:bg-green-700">
+                      {processingId === app.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Approve'}
+                    </Button>
+                    <Button size="sm" variant="destructive" onClick={() => handleAction(app.id, 'reject')}
+                      disabled={processingId === app.id}>
+                      Reject
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Commissions Tab — view/bulk-approve pending commission records
+// ═══════════════════════════════════════════════════════════════════════════
+const CommissionsTab: React.FC = () => {
+  const { toast } = useToast();
+  const [commissions, setCommissions] = React.useState<any[]>([]);
+  const [total, setTotal] = React.useState(0);
+  const [loading, setLoading] = React.useState(true);
+  const [statusFilter, setStatusFilter] = React.useState('PENDING');
+  const [selected, setSelected] = React.useState<string[]>([]);
+  const [approving, setApproving] = React.useState(false);
+
+  const fetchCommissions = async () => {
+    try {
+      setLoading(true);
+      const qs = statusFilter ? `?status=${statusFilter}&per_page=50` : '?per_page=50';
+      const res = await fetch(`/api/v1/admin/affiliates/commissions${qs}`, { credentials: 'include' });
+      const json = await res.json();
+      setCommissions(json.data?.data || []);
+      setTotal(json.data?.total || 0);
+    } catch { setCommissions([]); } finally { setLoading(false); }
+  };
+
+  React.useEffect(() => { fetchCommissions(); }, [statusFilter]);
+
+  const handleBulkApprove = async () => {
+    if (!selected.length) return;
+    setApproving(true);
+    try {
+      const res = await fetch('/api/v1/admin/affiliates/commissions/approve', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commission_ids: selected }),
+      });
+      const json = await res.json();
+      toast({ title: 'Commissions Approved ✅', description: `${json.data?.approved_count || selected.length} commissions marked as approved.` });
+      setSelected([]);
+      fetchCommissions();
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally { setApproving(false); }
+  };
+
+  const formatKobo = (k: number) => `₦${(k / 100).toLocaleString('en-NG', { minimumFractionDigits: 2 })}`;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex gap-2">
+          {['', 'PENDING', 'APPROVED', 'PAID'].map(s => (
+            <button key={s} onClick={() => setStatusFilter(s)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${statusFilter === s ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              {s || 'All'} {!s && `(${total})`}
+            </button>
+          ))}
+        </div>
+        {selected.length > 0 && (
+          <Button onClick={handleBulkApprove} disabled={approving} size="sm" className="bg-green-600 hover:bg-green-700">
+            {approving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+            Approve {selected.length} selected
+          </Button>
+        )}
+      </div>
+      <Card>
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-purple-600" /></div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  {statusFilter === 'PENDING' && <TableHead className="w-10"><input type="checkbox" onChange={e => setSelected(e.target.checked ? commissions.map((c: any) => c.id) : [])} /></TableHead>}
+                  <TableHead>Affiliate</TableHead>
+                  <TableHead>Recharge Amount</TableHead>
+                  <TableHead>Commission</TableHead>
+                  <TableHead>Rate</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {commissions.map((c: any) => (
+                  <TableRow key={c.id}>
+                    {statusFilter === 'PENDING' && (
+                      <TableCell><input type="checkbox" checked={selected.includes(c.id)} onChange={e => setSelected(prev => e.target.checked ? [...prev, c.id] : prev.filter(x => x !== c.id))} /></TableCell>
+                    )}
+                    <TableCell className="text-xs font-mono">{c.affiliate_msisdn || c.affiliate_code || c.affiliate_id?.slice(0,8)}</TableCell>
+                    <TableCell>{formatKobo(c.transaction_amount || 0)}</TableCell>
+                    <TableCell className="font-semibold text-green-700">{formatKobo(c.commission_amount || 0)}</TableCell>
+                    <TableCell>{(c.commission_rate || 0).toFixed(2)}%</TableCell>
+                    <TableCell>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${c.status === 'PAID' ? 'bg-green-100 text-green-700' : c.status === 'APPROVED' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>{c.status}</span>
+                    </TableCell>
+                    <TableCell className="text-xs text-gray-500">{c.created_at ? new Date(c.created_at).toLocaleDateString('en-NG') : '—'}</TableCell>
+                  </TableRow>
+                ))}
+                {!commissions.length && <TableRow><TableCell colSpan={7} className="text-center py-8 text-gray-400">No commissions found</TableCell></TableRow>}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Payouts Tab — view payout records and initiate transfers
+// ═══════════════════════════════════════════════════════════════════════════
+const PayoutsTab: React.FC = () => {
+  const { toast } = useToast();
+  const [payouts, setPayouts] = React.useState<any[]>([]);
+  const [total, setTotal] = React.useState(0);
+  const [loading, setLoading] = React.useState(true);
+  const [statusFilter, setStatusFilter] = React.useState('');
+  const [initiating, setInitiating] = React.useState<string | null>(null);
+  const [notifying, setNotifying] = React.useState(false);
+
+  const fetchPayouts = async () => {
+    try {
+      setLoading(true);
+      const qs = statusFilter ? `?status=${statusFilter}&per_page=50` : '?per_page=50';
+      const res = await fetch(`/api/v1/admin/affiliates/payouts${qs}`, { credentials: 'include' });
+      const json = await res.json();
+      setPayouts(json.data?.data || []);
+      setTotal(json.data?.total || 0);
+    } catch { setPayouts([]); } finally { setLoading(false); }
+  };
+
+  React.useEffect(() => { fetchPayouts(); }, [statusFilter]);
+
+  const handleInitiate = async (payoutId: string) => {
+    setInitiating(payoutId);
+    try {
+      const res = await fetch(`/api/v1/admin/affiliates/payouts/${payoutId}/initiate`, {
+        method: 'POST', credentials: 'include',
+      });
+      if (!res.ok) { const j = await res.json(); throw new Error(j.error || 'Failed'); }
+      toast({ title: 'Transfer Initiated 💸', description: 'Bank transfer has been sent via Paystack.' });
+      fetchPayouts();
+    } catch (e: any) {
+      toast({ title: 'Transfer Failed', description: e.message, variant: 'destructive' });
+    } finally { setInitiating(null); }
+  };
+
+  const handleWeeklyNotify = async () => {
+    setNotifying(true);
+    try {
+      await fetch('/api/v1/admin/affiliates/payouts/notify-weekly', { method: 'POST', credentials: 'include' });
+      toast({ title: 'Weekly Notification Sent ✅', description: 'Admins have been notified of eligible payouts.' });
+    } catch { toast({ title: 'Error', description: 'Could not send notification', variant: 'destructive' }); }
+    finally { setNotifying(false); }
+  };
+
+  const formatKobo = (k: number) => `₦${(k / 100).toLocaleString('en-NG', { minimumFractionDigits: 2 })}`;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex gap-2">
+          {['', 'PENDING', 'IN_TRANSIT', 'COMPLETED', 'FAILED'].map(s => (
+            <button key={s} onClick={() => setStatusFilter(s)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${statusFilter === s ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              {s || 'All'}
+            </button>
+          ))}
+        </div>
+        <Button variant="outline" size="sm" onClick={handleWeeklyNotify} disabled={notifying}>
+          {notifying ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : '📣 '}
+          Notify Weekly Payout
+        </Button>
+      </div>
+      <Card>
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-purple-600" /></div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Affiliate</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Bank</TableHead>
+                  <TableHead>Week</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {payouts.map((p: any) => (
+                  <TableRow key={p.id}>
+                    <TableCell>
+                      <p className="text-sm font-semibold">{p.affiliate_name || p.affiliate_msisdn || '—'}</p>
+                      <p className="text-xs font-mono text-gray-500">{p.affiliate_code}</p>
+                    </TableCell>
+                    <TableCell className="font-bold text-green-700">{formatKobo(p.amount_kobo || 0)}</TableCell>
+                    <TableCell>
+                      <p className="text-sm">{p.bank_name}</p>
+                      <p className="text-xs font-mono">{p.account_number}</p>
+                    </TableCell>
+                    <TableCell className="text-xs font-mono">{p.payout_week || '—'}</TableCell>
+                    <TableCell>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${p.status === 'COMPLETED' ? 'bg-green-100 text-green-700' : p.status === 'IN_TRANSIT' ? 'bg-blue-100 text-blue-700' : p.status === 'FAILED' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>{p.status}</span>
+                    </TableCell>
+                    <TableCell>
+                      {p.status === 'PENDING' && (
+                        <Button size="sm" onClick={() => handleInitiate(p.id)} disabled={initiating === p.id}>
+                          {initiating === p.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Send Transfer'}
+                        </Button>
+                      )}
+                      {p.transfer_reference && <p className="text-xs font-mono text-gray-400 mt-1">{p.transfer_reference}</p>}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {!payouts.length && <TableRow><TableCell colSpan={6} className="text-center py-8 text-gray-400">No payout records found</TableCell></TableRow>}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+};

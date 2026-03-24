@@ -460,6 +460,7 @@ func initServices(repos *Repositories, config *Config, db *gorm.DB) *services.Re
 		repos.Transaction,
 		walletService,
 		notificationService,
+		paymentService, // Needed for real payout transfers
 	)
 
 	telecomService := services.NewTelecomService(config.TermiiKey, "", "") // apiKey, apiSecret, baseURL

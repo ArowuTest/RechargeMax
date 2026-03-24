@@ -26,6 +26,7 @@ type AffiliateService struct {
 	transactionRepo     repositories.TransactionRepository
 	walletService       *WalletService
 	notificationService *NotificationService
+	paymentService      *PaymentService
 	db                  *gorm.DB
 }
 
@@ -97,6 +98,7 @@ func NewAffiliateService(
 	transactionRepo repositories.TransactionRepository,
 	walletService *WalletService,
 	notificationService *NotificationService,
+	paymentService *PaymentService,
 ) *AffiliateService {
 	return &AffiliateService{
 		affiliateRepo:       affiliateRepo,
@@ -105,6 +107,7 @@ func NewAffiliateService(
 		transactionRepo:     transactionRepo,
 		walletService:       walletService,
 		notificationService: notificationService,
+		paymentService:      paymentService,
 		db:                  db,
 	}
 }
@@ -113,21 +116,41 @@ func NewAffiliateService(
 // Falls back to 1.0 (1%) if the key is not found or cannot be parsed.
 func (s *AffiliateService) getDefaultCommissionRate(ctx context.Context) float64 {
 	const fallback = 1.0
+	const floor   = 0.5
+	const ceiling = 1.5
 	if s.db == nil {
 		return fallback
 	}
 	var settingValue string
 	err := s.db.WithContext(ctx).
-		Raw("SELECT setting_value FROM platform_settings WHERE setting_key = ?", "affiliate.commission_rate").
+		Raw("SELECT setting_value FROM platform_settings WHERE setting_key = ?",
+			"affiliate.commission_rate_percent").
 		Scan(&settingValue).Error
 	if err != nil || settingValue == "" {
 		return fallback
 	}
 	rate, err := strconv.ParseFloat(settingValue, 64)
-	if err != nil {
+	if err != nil || rate < floor || rate > ceiling {
 		return fallback
 	}
 	return rate
+}
+
+// getFrontendURL reads FRONTEND_URL from platform_settings or falls back to
+// the production default so referral links always point at the live frontend.
+func (s *AffiliateService) getFrontendURL(ctx context.Context) string {
+	const fallback = "https://rechargemax-frontend.vercel.app"
+	if s.db == nil {
+		return fallback
+	}
+	var val string
+	s.db.WithContext(ctx).
+		Raw("SELECT setting_value FROM platform_settings WHERE setting_key = 'frontend_url'").
+		Scan(&val)
+	if val == "" {
+		return fallback
+	}
+	return val
 }
 
 // RegisterAffiliate registers a new affiliate
@@ -375,7 +398,7 @@ func (s *AffiliateService) affiliateToResponse(ctx context.Context, affiliate *e
 		Email:           user.Email,
 		ReferralCode:    user.ReferralCode,
 		AffiliateCode:   affiliate.AffiliateCode,
-		ReferralLink:    fmt.Sprintf("https://rechargemax.com/ref/%s", user.ReferralCode),
+		ReferralLink:    fmt.Sprintf("%s/recharge?ref=%s", s.getFrontendURL(ctx), affiliate.AffiliateCode),
 		Status:          affiliate.Status,
 		TotalReferrals:  affiliate.TotalReferrals,
 		TotalCommission: affiliate.TotalCommission,
@@ -445,8 +468,8 @@ type AffiliateDashboardResponse struct {
 	ReferralLink       string  `json:"referral_link"`
 }
 
-// GetCommissions returns list of commissions for an affiliate
-func (s *AffiliateService) GetCommissions(ctx context.Context, msisdn string) ([]CommissionResponse, error) {
+// GetCommissionsSimple returns list of commissions for an affiliate (simple, no pagination)
+func (s *AffiliateService) GetCommissionsSimple(ctx context.Context, msisdn string) ([]CommissionResponse, error) {
 	// Get affiliate by MSISDN
 	affiliate, err := s.affiliateRepo.FindByMSISDN(ctx, msisdn)
 	if err != nil {
@@ -487,63 +510,307 @@ type CommissionResponse struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
-// RequestPayout requests a payout for an affiliate
-func (s *AffiliateService) RequestPayout(ctx context.Context, msisdn string, amount int64) (*PayoutResponse, error) {
-	// Get affiliate
+// RequestPayout creates a payout request for an affiliate.
+// Validates minimum threshold (₦1,000), creates a commission_payouts record,
+// then initiates the Paystack bank transfer.
+// Amount is in NAIRA (not kobo) — matches what the frontend displays.
+func (s *AffiliateService) RequestPayout(ctx context.Context, msisdn string, amountNGN float64) (*PayoutResponse, error) {
+	const minPayoutNGN = 1000.0
+
+	if amountNGN < minPayoutNGN {
+		return nil, fmt.Errorf("minimum payout is ₦%.0f (requested ₦%.2f)", minPayoutNGN, amountNGN)
+	}
+
 	affiliate, err := s.affiliateRepo.FindByMSISDN(ctx, msisdn)
 	if err != nil {
 		return nil, fmt.Errorf("affiliate not found: %w", err)
 	}
-
-	// Check if amount is available (convert kobo to Naira)
-	if affiliate.TotalCommission < float64(amount)/100.0 {
-		return nil, fmt.Errorf("insufficient balance: available ₦%.2f, requested ₦%.2f", float64(affiliate.TotalCommission)/100, float64(amount)/100)
+	if affiliate.Status != "APPROVED" {
+		return nil, fmt.Errorf("affiliate account is not active (status: %s)", affiliate.Status)
+	}
+	if affiliate.TotalCommission < amountNGN {
+		return nil, fmt.Errorf("insufficient balance: available ₦%.2f, requested ₦%.2f",
+			affiliate.TotalCommission, amountNGN)
+	}
+	if affiliate.AccountNumber == "" || affiliate.BankName == "" {
+		return nil, fmt.Errorf("bank account details are incomplete — update your profile before requesting a payout")
 	}
 
-	// Create payout request
-	// In production, this would:
-	// 1. Create payout record in commission_payouts table
-	// 2. Validate bank account details
-	// 3. Initiate bank transfer via payment gateway
-	// 4. Update affiliate balance
-	// 5. Send notification
-	//
-	// Example:
-	// payout := &entities.CommissionPayout{
-	//     ID:            uuid.New(),
-	//     AffiliateID:   affiliate.ID,
-	//     Amount:        int64(amount * 100), // Convert to kobo
-	//     Status:        "pending",
-	//     BankName:      affiliate.BankName,
-	//     AccountNumber: affiliate.AccountNumber,
-	//     AccountName:   affiliate.AccountName,
-	//     CreatedAt:     time.Now(),
-	// }
-	// 
-	// err = s.payoutRepo.Create(ctx, payout)
-	// if err != nil {
-	//     return nil, fmt.Errorf("failed to create payout: %w", err)
-	// }
-	// 
-	// // Initiate transfer via payment service
-	// transferRef, err := s.paymentService.InitiateTransfer(ctx, ...)
-	// if err != nil {
-	//     payout.Status = "failed"
-	//     s.payoutRepo.Update(ctx, payout)
-	//     return nil, fmt.Errorf("failed to initiate transfer: %w", err)
-	// }
-	// 
-	// payout.PaymentReference = &transferRef
-	// s.payoutRepo.Update(ctx, payout)
-	
+	amountKobo := int64(amountNGN * 100)
+
+	// ── ISO week identifier for grouping (e.g. "2026-W13") ──────────────────
+	year, week := time.Now().ISOWeek()
+	payoutWeek := fmt.Sprintf("%d-W%02d", year, week)
+
 	payoutID := uuid.New()
+	payoutRef := fmt.Sprintf("PAY-%s-%s", payoutWeek, payoutID.String()[:8])
+
+	// ── Create payout record (PENDING) ───────────────────────────────────────
+	if err := s.db.WithContext(ctx).Exec(`
+		INSERT INTO commission_payouts
+		    (id, affiliate_id, amount_kobo, status, bank_name, account_number,
+		     account_name, payout_week, created_at, updated_at)
+		VALUES (?, ?, ?, 'PENDING', ?, ?, ?, ?, NOW(), NOW())`,
+		payoutID, affiliate.ID, amountKobo,
+		affiliate.BankName, affiliate.AccountNumber, affiliate.AccountName,
+		payoutWeek,
+	).Error; err != nil {
+		return nil, fmt.Errorf("failed to create payout record: %w", err)
+	}
+
+	// ── Initiate Paystack transfer ───────────────────────────────────────────
+	var transferCode, transferRef string
+	if s.paymentService != nil {
+		transferResp, err := s.paymentService.ProcessTransfer(ctx, map[string]interface{}{
+			"amount":         amountKobo,
+			"account_name":   affiliate.AccountName,
+			"account_number": affiliate.AccountNumber,
+			"bank_name":      affiliate.BankName,
+			"narration":      fmt.Sprintf("RechargeMax affiliate commission payout %s", payoutWeek),
+			"reference":      payoutRef,
+		})
+		if err != nil {
+			// Mark payout as FAILED but don't delete — admin can retry
+			s.db.WithContext(ctx).Exec(
+				"UPDATE commission_payouts SET status='FAILED', failed_reason=?, updated_at=NOW() WHERE id=?",
+				err.Error(), payoutID)
+			return nil, fmt.Errorf("bank transfer failed: %w", err)
+		}
+		if data, ok := transferResp["data"].(map[string]interface{}); ok {
+			transferCode, _ = data["transfer_code"].(string)
+			transferRef, _ = data["reference"].(string)
+		}
+		// Update payout with transfer details
+		now := time.Now()
+		s.db.WithContext(ctx).Exec(`
+			UPDATE commission_payouts
+			SET status='IN_TRANSIT', transfer_reference=?, transfer_code=?,
+			    initiated_at=?, updated_at=NOW()
+			WHERE id=?`,
+			transferRef, transferCode, now, payoutID)
+	}
+
+	// ── Deduct from affiliate balance ────────────────────────────────────────
+	s.db.WithContext(ctx).Exec(
+		"UPDATE affiliates SET total_commission = total_commission - ?, updated_at=NOW() WHERE id=?",
+		amountNGN, affiliate.ID)
+
+	// ── Mark related APPROVED commissions as PAID ────────────────────────────
+	s.db.WithContext(ctx).Exec(`
+		UPDATE affiliate_commissions
+		SET status='PAID', payout_id=?
+		WHERE affiliate_id=? AND status='APPROVED'
+		  AND id IN (
+		      SELECT id FROM affiliate_commissions
+		      WHERE affiliate_id=? AND status='APPROVED'
+		      ORDER BY created_at
+		      LIMIT (SELECT COUNT(*) FROM affiliate_commissions
+		             WHERE affiliate_id=? AND status='APPROVED')
+		  )`,
+		payoutID, affiliate.ID, affiliate.ID, affiliate.ID)
+
+	// ── Notify affiliate ─────────────────────────────────────────────────────
+	if s.notificationService != nil && affiliate.UserID != nil {
+		if user, err := s.userRepo.FindByID(ctx, *affiliate.UserID); err == nil {
+			s.notificationService.SendMultiChannel(ctx, user.MSISDN,
+				"Payout Initiated 💸",
+				fmt.Sprintf("Your affiliate payout of ₦%.2f has been initiated and will arrive in 1-2 business days. Reference: %s", amountNGN, payoutRef),
+				"affiliate_payout", map[string]interface{}{
+					"payout_id":  payoutID.String(),
+					"amount_ngn": amountNGN,
+					"reference":  payoutRef,
+				})
+		}
+	}
+
+	logger.Info("[AUDIT] Affiliate payout initiated",
+		zap.String("affiliate_id", affiliate.ID.String()),
+		zap.Float64("amount_ngn", amountNGN),
+		zap.String("payout_week", payoutWeek),
+		zap.String("reference", payoutRef),
+	)
 
 	return &PayoutResponse{
 		ID:        payoutID,
-		Amount:    float64(amount) / 100.0,
-		Status:    "PENDING",
+		Amount:    amountNGN,
+		Status:    "IN_TRANSIT",
 		CreatedAt: time.Now(),
 	}, nil
+}
+
+// NotifyWeeklyPayout notifies admin that weekly payout processing is due.
+// Called by a cron job every Monday at 08:00 WAT.
+func (s *AffiliateService) NotifyWeeklyPayout(ctx context.Context) error {
+	// Count affiliates with balance >= ₦1,000
+	var eligibleCount int64
+	var totalOwed float64
+	s.db.WithContext(ctx).Raw(`
+		SELECT COUNT(*), COALESCE(SUM(total_commission), 0)
+		FROM affiliates
+		WHERE status = 'APPROVED' AND total_commission >= 1000`).
+		Row().Scan(&eligibleCount, &totalOwed)
+
+	if eligibleCount == 0 {
+		logger.Info("[AffiliateWeeklyNotify] No affiliates eligible for payout this week")
+		return nil
+	}
+
+	year, week := time.Now().ISOWeek()
+	payoutWeek := fmt.Sprintf("%d-W%02d", year, week)
+
+	logger.Info("[AffiliateWeeklyNotify] Weekly payout due",
+		zap.Int64("eligible_affiliates", eligibleCount),
+		zap.Float64("total_owed_ngn", totalOwed),
+		zap.String("payout_week", payoutWeek),
+	)
+
+	// Notify admin users
+	if s.notificationService != nil {
+		s.notificationService.NotifyAdmins(ctx,
+			"⚡ Weekly Affiliate Payout Due",
+			fmt.Sprintf("%d affiliates are eligible for payout this week (%s). Total owed: ₦%.2f. Visit Admin → Affiliates → Payouts to process.",
+				eligibleCount, payoutWeek, totalOwed),
+			"weekly_affiliate_payout",
+			map[string]interface{}{
+				"eligible_count": eligibleCount,
+				"total_owed":     totalOwed,
+				"payout_week":    payoutWeek,
+			},
+		)
+	}
+	return nil
+}
+
+// GetCommissions returns paginated commission records for an affiliate.
+func (s *AffiliateService) GetCommissions(ctx context.Context, msisdn string, page, perPage int, status string) ([]map[string]interface{}, int64, error) {
+	affiliate, err := s.affiliateRepo.FindByMSISDN(ctx, msisdn)
+	if err != nil {
+		return nil, 0, fmt.Errorf("affiliate not found: %w", err)
+	}
+
+	offset := (page - 1) * perPage
+	query := s.db.WithContext(ctx).Table("affiliate_commissions").
+		Where("affiliate_id = ?", affiliate.ID)
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+
+	var total int64
+	query.Count(&total)
+
+	var rows []map[string]interface{}
+	query.Order("created_at DESC").Limit(perPage).Offset(offset).Find(&rows)
+	return rows, total, nil
+}
+
+// AdminGetAllCommissions returns commissions for admin view with filters.
+func (s *AffiliateService) AdminGetAllCommissions(ctx context.Context, page, perPage int, status, affiliateID string) ([]map[string]interface{}, int64, error) {
+	offset := (page - 1) * perPage
+	query := s.db.WithContext(ctx).Table("affiliate_commissions ac").
+		Select("ac.*, a.affiliate_code, u.msisdn as affiliate_msisdn").
+		Joins("LEFT JOIN affiliates a ON a.id = ac.affiliate_id").
+		Joins("LEFT JOIN users u ON u.id = a.user_id")
+	if status != "" {
+		query = query.Where("ac.status = ?", status)
+	}
+	if affiliateID != "" {
+		query = query.Where("ac.affiliate_id = ?", affiliateID)
+	}
+
+	var total int64
+	query.Count(&total)
+
+	var rows []map[string]interface{}
+	query.Order("ac.created_at DESC").Limit(perPage).Offset(offset).Find(&rows)
+	return rows, total, nil
+}
+
+// AdminApproveCommissions bulk-approves PENDING commissions for payout.
+func (s *AffiliateService) AdminApproveCommissions(ctx context.Context, commissionIDs []string) (int64, error) {
+	if len(commissionIDs) == 0 {
+		return 0, fmt.Errorf("no commission IDs provided")
+	}
+	result := s.db.WithContext(ctx).Exec(
+		"UPDATE affiliate_commissions SET status='APPROVED', updated_at=NOW() WHERE id IN ? AND status='PENDING'",
+		commissionIDs)
+	return result.RowsAffected, result.Error
+}
+
+// AdminGetPayouts returns commission_payouts for admin view.
+func (s *AffiliateService) AdminGetPayouts(ctx context.Context, page, perPage int, status string) ([]map[string]interface{}, int64, error) {
+	offset := (page - 1) * perPage
+	query := s.db.WithContext(ctx).Table("commission_payouts cp").
+		Select("cp.*, a.affiliate_code, u.msisdn as affiliate_msisdn, u.full_name as affiliate_name").
+		Joins("LEFT JOIN affiliates a ON a.id = cp.affiliate_id").
+		Joins("LEFT JOIN users u ON u.id = a.user_id")
+	if status != "" {
+		query = query.Where("cp.status = ?", status)
+	}
+	var total int64
+	query.Count(&total)
+	var rows []map[string]interface{}
+	query.Order("cp.created_at DESC").Limit(perPage).Offset(offset).Find(&rows)
+	return rows, total, nil
+}
+
+// AdminInitiatePayout triggers the Paystack transfer for an admin-approved payout.
+func (s *AffiliateService) AdminInitiatePayout(ctx context.Context, payoutID string, adminUserID string) error {
+	var payout struct {
+		ID            string  `gorm:"column:id"`
+		AffiliateID   string  `gorm:"column:affiliate_id"`
+		AmountKobo    int64   `gorm:"column:amount_kobo"`
+		Status        string  `gorm:"column:status"`
+		BankName      string  `gorm:"column:bank_name"`
+		AccountNumber string  `gorm:"column:account_number"`
+		AccountName   string  `gorm:"column:account_name"`
+		PayoutWeek    string  `gorm:"column:payout_week"`
+	}
+	if err := s.db.WithContext(ctx).Raw(
+		"SELECT id, affiliate_id, amount_kobo, status, bank_name, account_number, account_name, payout_week FROM commission_payouts WHERE id = ?",
+		payoutID).Scan(&payout).Error; err != nil || payout.ID == "" {
+		return fmt.Errorf("payout not found")
+	}
+	if payout.Status != "PENDING" {
+		return fmt.Errorf("payout is already %s", payout.Status)
+	}
+
+	payoutRef := fmt.Sprintf("PAY-%s-%s", payout.PayoutWeek, payoutID[:8])
+
+	if s.paymentService != nil {
+		transferResp, err := s.paymentService.ProcessTransfer(ctx, map[string]interface{}{
+			"amount":         payout.AmountKobo,
+			"account_name":   payout.AccountName,
+			"account_number": payout.AccountNumber,
+			"bank_name":      payout.BankName,
+			"narration":      fmt.Sprintf("RechargeMax affiliate payout %s", payout.PayoutWeek),
+			"reference":      payoutRef,
+		})
+		if err != nil {
+			s.db.WithContext(ctx).Exec(
+				"UPDATE commission_payouts SET status='FAILED', failed_reason=?, updated_at=NOW() WHERE id=?",
+				err.Error(), payoutID)
+			return fmt.Errorf("transfer failed: %w", err)
+		}
+		var transferCode, transferRef string
+		if data, ok := transferResp["data"].(map[string]interface{}); ok {
+			transferCode, _ = data["transfer_code"].(string)
+			transferRef, _ = data["reference"].(string)
+		}
+		now := time.Now()
+		s.db.WithContext(ctx).Exec(`
+			UPDATE commission_payouts
+			SET status='IN_TRANSIT', transfer_reference=?, transfer_code=?,
+			    initiated_by=?, initiated_at=?, updated_at=NOW()
+			WHERE id=?`,
+			transferRef, transferCode, adminUserID, now, payoutID)
+	}
+
+	logger.Info("[AUDIT] Admin initiated affiliate payout",
+		zap.String("payout_id", payoutID),
+		zap.String("admin_id", adminUserID),
+		zap.String("ref", payoutRef),
+	)
+	return nil
 }
 
 // PayoutResponse represents a payout request response
@@ -864,12 +1131,17 @@ func (s *AffiliateService) ProcessCommissionTx(ctx context.Context, tx *gorm.DB,
 		return nil
 	}
 
-	rechargeCount, err := s.transactionRepo.CountByUserID(ctx, user.ID)
-	if err != nil {
-		return fmt.Errorf("commission: failed to count recharges: %w", err)
+	// Count SUCCESSFUL recharges only — failed/pending transactions must not
+	// influence the first-recharge gate.
+	var successCount int64
+	if err := s.db.WithContext(ctx).
+		Model(&entities.Transactions{}).
+		Where("user_id = ? AND status = 'success'", user.ID).
+		Count(&successCount).Error; err != nil {
+		return fmt.Errorf("commission: failed to count successful recharges: %w", err)
 	}
-	if rechargeCount <= 1 {
-		// First recharge: bump referral counters only (no commission)
+	if successCount == 0 {
+		// Very first successful recharge — no commission, but record the referral
 		if err := tx.Model(referrer).UpdateColumn("total_referrals", gorm.Expr("total_referrals + 1")).Error; err != nil {
 			return err
 		}
@@ -880,7 +1152,9 @@ func (s *AffiliateService) ProcessCommissionTx(ctx context.Context, tx *gorm.DB,
 	}
 
 	// --- writes inside tx ---
-	commissionAmount := (rechargeAmount * int64(affiliate.CommissionRate)) / 100
+	// Commission rate is stored as a percentage (e.g. 1.0 = 1%).
+	// rechargeAmount is in kobo; commissionAmount will also be in kobo.
+	commissionAmount := int64(float64(rechargeAmount) * affiliate.CommissionRate / 100.0)
 	commission := &entities.AffiliateCommissions{
 		ID:                uuid.New(),
 		AffiliateID:       affiliate.ID,
@@ -902,14 +1176,33 @@ func (s *AffiliateService) ProcessCommissionTx(ctx context.Context, tx *gorm.DB,
 }
 
 // RecordClick records an affiliate link click for analytics.
-// It updates the affiliate's click_count if the referral_code is valid.
-func (s *AffiliateService) RecordClick(ctx context.Context, referralCode, msisdn, source string) error {
-	if referralCode == "" {
-		return nil // nothing to record
+// affiliateCode is the AFF... code embedded in the shared link (?ref=AFFxxxx).
+func (s *AffiliateService) RecordClick(ctx context.Context, affiliateCode, msisdn, source string) error {
+	if affiliateCode == "" {
+		return nil
 	}
 	return s.db.WithContext(ctx).
 		Model(&entities.Affiliates{}).
-		Where("referral_code = ?", referralCode).
+		Where("affiliate_code = ?", affiliateCode).
 		UpdateColumn("click_count", gorm.Expr("click_count + 1")).
 		Error
+}
+
+// AttributeReferral links a user to an affiliate via the ?ref=AFFxxxx param
+// captured during recharge. Called inside the recharge transaction.
+// Safe to call multiple times — only sets referred_by if not already assigned.
+func (s *AffiliateService) AttributeReferral(ctx context.Context, tx *gorm.DB, msisdn, affiliateCode string) error {
+	if affiliateCode == "" {
+		return nil
+	}
+	affiliate, err := s.affiliateRepo.FindByAffiliateCode(ctx, affiliateCode)
+	if err != nil || affiliate.Status != "APPROVED" || affiliate.UserID == nil {
+		return nil // silently ignore invalid / unapproved codes
+	}
+	user, err := s.userRepo.FindByMSISDN(ctx, msisdn)
+	if err != nil || user.ReferredBy != nil {
+		return nil // user not found or already attributed — first-write-wins
+	}
+	return tx.Model(&entities.Users{}).Where("id = ?", user.ID).
+		Update("referred_by", affiliate.UserID).Error
 }

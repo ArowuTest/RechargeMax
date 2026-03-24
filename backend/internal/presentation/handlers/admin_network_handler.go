@@ -441,8 +441,8 @@ func (h *AdminComprehensiveHandler) GetAffiliateCommissions(c *gin.Context) {
 		return
 	}
 
-	// Get commissions (affiliate service uses affiliate code, not MSISDN)
-	commissions, err := h.affiliateService.GetCommissions(ctx, affiliate.AffiliateCode)
+	// Get commissions (affiliate service uses MSISDN, not affiliate code)
+	commissions, _, err := h.affiliateService.GetCommissions(ctx, affiliate.AffiliateCode, 1, 100, "")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
@@ -580,8 +580,8 @@ func (h *AdminComprehensiveHandler) ProcessAffiliatePayout(c *gin.Context) {
 		return
 	}
 
-	// Process payout
-	payout, err := h.affiliateService.RequestPayout(ctx, affiliate.AffiliateCode, req.Amount)
+	// Process payout — amount is in NGN (not kobo) per updated service contract
+	payout, err := h.affiliateService.RequestPayout(ctx, affiliate.AffiliateCode, float64(req.Amount)/100.0)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,

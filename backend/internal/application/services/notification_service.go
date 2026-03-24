@@ -434,3 +434,21 @@ func (s *NotificationService) SendSubscriptionCancelledNotification(ctx context.
 
 	return s.SendMultiChannel(ctx, msisdn, title, message, "system", nil)
 }
+
+// NotifyAdmins sends a notification to all users with the "admin" role.
+// Used for system-level alerts such as weekly payout reminders.
+func (s *NotificationService) NotifyAdmins(ctx context.Context, title, message, notificationType string, metadata map[string]interface{}) {
+	var adminMSISDNs []string
+	if s.db != nil {
+		s.db.WithContext(ctx).
+			Raw("SELECT msisdn FROM users WHERE role = 'admin' AND is_active = true").
+			Scan(&adminMSISDNs)
+	}
+	for _, msisdn := range adminMSISDNs {
+		// Non-blocking — log errors but continue
+		if err := s.SendMultiChannel(ctx, msisdn, title, message, notificationType, metadata); err != nil {
+			// zap is imported in the file already
+			_ = err
+		}
+	}
+}

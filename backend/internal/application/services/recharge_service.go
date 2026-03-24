@@ -46,6 +46,10 @@ type CreateRechargeRequest struct {
 	RechargeType     string  `json:"recharge_type" binding:"required,oneof=airtime data"`
 	DataPackage      string  `json:"data_package"`
 	PaymentMethod    string  `json:"payment_method" binding:"required,oneof=paystack flutterwave"`
+	// AffiliateCode is the ?ref=AFFxxxx value stored in sessionStorage by the
+	// affiliate tracking hook.  Optional — if present and valid the user is
+	// attributed to that affiliate so future recharges earn commission.
+	AffiliateCode    string  `json:"affiliate_code"`
 }
 
 // RechargeResponse represents the response after creating a recharge
@@ -141,6 +145,25 @@ func (s *RechargeService) CreateRecharge(ctx context.Context, req CreateRecharge
 	user, err := s.getOrCreateUser(ctx, normalizedMSISDN)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get or create user: %w", err)
+	}
+
+	// ── Affiliate attribution (pre-payment) ─────────────────────────────────
+	// If the user arrived via an affiliate link (?ref=AFFxxxx) the frontend
+	// passes the code in the payload.  We eagerly set referred_by here so that
+	// even if the user never completes a second recharge the affiliate still
+	// gets the referral count bump on their first successful payment.
+	// Attribution uses a standalone transaction so a failure never blocks the
+	// recharge itself.
+	if req.AffiliateCode != "" && s.affiliateService != nil {
+		attrTx := s.db.Begin()
+		if attrTx.Error == nil {
+			if err := s.affiliateService.AttributeReferral(ctx, attrTx, normalizedMSISDN, req.AffiliateCode); err != nil {
+				attrTx.Rollback()
+				logger.Warn("affiliate attribution failed (non-fatal)", zap.String("code", req.AffiliateCode), zap.Error(err))
+			} else {
+				attrTx.Commit()
+			}
+		}
 	}
 
 	// Generate payment reference and transaction code

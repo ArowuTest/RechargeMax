@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/gin-gonic/gin"
 
@@ -262,9 +263,12 @@ func (h *AffiliateHandler) GetReferralLink(c *gin.Context) {
 		return
 	}
 
-	// Generate referral link (base URL should come from config)
-	baseURL := "https://rechargemax.com" // NOTE: Should be loaded from environment config
-	referralLink := baseURL + "/register?ref=" + affiliate.AffiliateCode
+	// Build referral link — lands on /recharge so attribution is captured immediately
+	baseURL := os.Getenv("FRONTEND_URL")
+	if baseURL == "" {
+		baseURL = "https://rechargemax-frontend.vercel.app"
+	}
+	referralLink := baseURL + "/recharge?ref=" + affiliate.AffiliateCode
 
 	middleware.RespondWithSuccess(c, map[string]interface{}{
 		"referral_link": referralLink,
@@ -304,7 +308,7 @@ func (h *AffiliateHandler) GetCommissions(c *gin.Context) {
 		return
 	}
 
-	commissions, err := h.affiliateService.GetCommissions(c.Request.Context(), msisdn)
+	commissions, err := h.affiliateService.GetCommissionsSimple(c.Request.Context(), msisdn)
 	if err != nil {
 		middleware.RespondWithError(c, err)
 		return
@@ -348,10 +352,8 @@ func (h *AffiliateHandler) RequestPayout(c *gin.Context) {
 		return
 	}
 
-	// Service will validate withdrawal eligibility
-	// Convert Naira to kobo (multiply by 100)
-	amountKobo := int64(req.Amount * 100)
-	payout, err := h.affiliateService.RequestPayout(c.Request.Context(), msisdn, amountKobo)
+	// RequestPayout now accepts NGN directly (not kobo) — matches frontend display.
+	payout, err := h.affiliateService.RequestPayout(c.Request.Context(), msisdn, req.Amount)
 	if err != nil {
 		middleware.RespondWithError(c, err)
 		return
@@ -458,4 +460,98 @@ func (h *AffiliateHandler) TrackConversion(c *gin.Context) {
 	}
 
 	middleware.RespondWithSuccess(c, map[string]interface{}{"tracked": true, "commission": true})
+}
+
+// ═══════════════════════════════ ADMIN ENDPOINTS ═══════════════════════════════
+
+// AdminListCommissions returns all commissions with optional status/affiliate filters.
+func (h *AffiliateHandler) AdminListCommissions(c *gin.Context) {
+	page := 1
+	perPage := 20
+	if v := c.Query("page"); v != "" {
+		fmt.Sscanf(v, "%d", &page)
+	}
+	if v := c.Query("per_page"); v != "" {
+		fmt.Sscanf(v, "%d", &perPage)
+	}
+	status := c.Query("status")
+	affiliateID := c.Query("affiliate_id")
+
+	rows, total, err := h.affiliateService.AdminGetAllCommissions(c.Request.Context(), page, perPage, status, affiliateID)
+	if err != nil {
+		middleware.RespondWithError(c, err)
+		return
+	}
+	middleware.RespondWithSuccess(c, map[string]interface{}{
+		"data":     rows,
+		"total":    total,
+		"page":     page,
+		"per_page": perPage,
+	})
+}
+
+// AdminApproveCommissions bulk-approves PENDING commissions for the next payout run.
+func (h *AffiliateHandler) AdminApproveCommissions(c *gin.Context) {
+	var req struct {
+		CommissionIDs []string `json:"commission_ids" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.RespondWithError(c, errors.BadRequest("commission_ids array required"))
+		return
+	}
+	count, err := h.affiliateService.AdminApproveCommissions(c.Request.Context(), req.CommissionIDs)
+	if err != nil {
+		middleware.RespondWithError(c, err)
+		return
+	}
+	middleware.RespondWithSuccess(c, map[string]interface{}{"approved_count": count})
+}
+
+// AdminListPayouts returns all commission_payouts with optional status filter.
+func (h *AffiliateHandler) AdminListPayouts(c *gin.Context) {
+	page := 1
+	perPage := 20
+	if v := c.Query("page"); v != "" {
+		fmt.Sscanf(v, "%d", &page)
+	}
+	if v := c.Query("per_page"); v != "" {
+		fmt.Sscanf(v, "%d", &perPage)
+	}
+	status := c.Query("status")
+
+	rows, total, err := h.affiliateService.AdminGetPayouts(c.Request.Context(), page, perPage, status)
+	if err != nil {
+		middleware.RespondWithError(c, err)
+		return
+	}
+	middleware.RespondWithSuccess(c, map[string]interface{}{
+		"data":     rows,
+		"total":    total,
+		"page":     page,
+		"per_page": perPage,
+	})
+}
+
+// AdminInitiatePayout triggers the Paystack transfer for a PENDING payout record.
+func (h *AffiliateHandler) AdminInitiatePayout(c *gin.Context) {
+	payoutID := c.Param("id")
+	if payoutID == "" {
+		middleware.RespondWithError(c, errors.BadRequest("payout id required"))
+		return
+	}
+	adminID := c.GetString("user_id")
+	if err := h.affiliateService.AdminInitiatePayout(c.Request.Context(), payoutID, adminID); err != nil {
+		middleware.RespondWithError(c, err)
+		return
+	}
+	middleware.RespondWithSuccess(c, map[string]interface{}{"initiated": true, "payout_id": payoutID})
+}
+
+// AdminWeeklyPayoutNotify triggers the weekly payout notification to admins.
+func (h *AffiliateHandler) AdminWeeklyPayoutNotify(c *gin.Context) {
+	if err := h.affiliateService.NotifyWeeklyPayout(c.Request.Context()); err != nil {
+		middleware.RespondWithError(c, err)
+		return
+	}
+	middleware.RespondWithSuccess(c, map[string]interface{}{"notified": true})
 }

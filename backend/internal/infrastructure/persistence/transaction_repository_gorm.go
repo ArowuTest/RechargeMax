@@ -182,12 +182,15 @@ func (r *transactionRepositoryGORM) FindEligibleForSpin(ctx context.Context, use
 	return &transaction, nil
 }
 
-// CountByUserID counts transactions for a specific user
+// CountByUserID counts SUCCESSFUL transactions for a specific user.
+// Only successful recharges count toward the first-recharge commission gate —
+// counting all statuses (pending/failed) would wrongly block commission on
+// retried payments.
 func (r *transactionRepositoryGORM) CountByUserID(ctx context.Context, userID uuid.UUID) (int64, error) {
 	var count int64
 	err := r.db.WithContext(ctx).
 		Model(&entities.Transactions{}).
-		Where("user_id = ?", userID).
+		Where("user_id = ? AND status = 'success'", userID).
 		Count(&count).Error
 	return count, err
 }

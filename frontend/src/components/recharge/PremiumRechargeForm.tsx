@@ -340,17 +340,21 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
       setProcessingProgress(40);
 
       let response;
+      // Capture any affiliate tracking code set when the user landed via a referral link
+      const affiliateCode = getAffiliateCode() || undefined;
       if (formData.rechargeType === 'AIRTIME') {
         response = await rechargeApi.initiateAirtimeRecharge({
           phone_number: formData.phoneNumber,
           network: formData.networkProvider,
-          amount: formData.amount // Send in naira (backend will convert to kobo for Paystack)
+          amount: formData.amount, // Send in naira (backend will convert to kobo for Paystack)
+          affiliate_code: affiliateCode,
         });
       } else {
         response = await rechargeApi.initiateDataRecharge({
           phone_number: formData.phoneNumber,
           network: formData.networkProvider,
-          bundle_id: formData.dataBundle!
+          bundle_id: formData.dataBundle!,
+          affiliate_code: affiliateCode,
         });
       }
 

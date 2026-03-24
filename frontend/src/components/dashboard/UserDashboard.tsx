@@ -47,7 +47,7 @@ import { SpinWheel } from '@/components/games/SpinWheel';
 import { SpinUpgradeNudge } from '@/components/games/SpinUpgradeNudge';
 import {
   CreditCard, Gift, TrendingUp, Calendar, Smartphone, Trophy,
-  User, Loader2, CheckCircle, Clock, AlertCircle, ArrowLeft,
+  User, Users, Loader2, CheckCircle, Clock, AlertCircle, ArrowLeft,
   DollarSign, Phone, Download, Search, Copy, RefreshCw, Award,
   Zap, Star, ChevronRight, Sparkles, Wallet, Layers, Plus, XCircle
 } from 'lucide-react';
@@ -714,25 +714,36 @@ export const UserDashboard: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Referral program */}
-                  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-3">
+                  {/* Rewards Summary (replaces referral code) */}
+                  <div className="bg-gradient-to-br from-purple-50 to-amber-50 rounded-2xl border border-purple-100 p-5 space-y-3">
                     <h3 className="font-bold text-gray-900 flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-amber-500" /> Referral Program
+                      <Sparkles className="w-4 h-4 text-amber-500" /> Your Rewards Summary
                     </h3>
-                    <p className="text-xs text-gray-500">Share your code and earn commission when friends recharge</p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <div className="flex-1 bg-purple-50 border border-purple-200 rounded-xl px-4 py-2.5 font-mono text-sm font-bold text-purple-700 tracking-widest">
-                        {dashboardData.user.referral_code || 'N/A'}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-white rounded-xl p-3 text-center shadow-sm">
+                        <p className="text-2xl font-extrabold text-purple-700">{(dashboardData.user.total_points || 0).toLocaleString()}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">Total Points</p>
                       </div>
-                      <motion.button
-                        onClick={copyReferralCode}
-                        className="w-10 h-10 rounded-xl gradient-brand flex items-center justify-center text-white flex-shrink-0"
-                        whileHover={{ scale: 1.08 }}
-                        whileTap={{ scale: 0.9 }}
-                      >
-                        <Copy className="w-4 h-4" />
-                      </motion.button>
+                      <div className="bg-white rounded-xl p-3 text-center shadow-sm">
+                        <p className="text-2xl font-extrabold text-amber-600">{dashboardData.total_entries ?? 0}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">Draw Entries</p>
+                      </div>
                     </div>
+                    {dashboardData.next_draw && (
+                      <div className="bg-white rounded-xl px-3 py-2 flex items-center gap-2 shadow-sm">
+                        <span className="text-lg">🎯</span>
+                        <div>
+                          <p className="text-xs font-semibold text-gray-700">Next Draw</p>
+                          <p className="text-xs text-gray-500">{new Date(dashboardData.next_draw).toLocaleDateString('en-NG', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
+                        </div>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => setActiveTab('affiliate')}
+                      className="w-full gradient-brand text-white text-sm font-semibold rounded-xl py-2.5 flex items-center justify-center gap-2"
+                    >
+                      <Users className="w-4 h-4" /> Become an Affiliate &amp; Earn
+                    </button>
                   </div>
                 </div>
 
@@ -1272,19 +1283,26 @@ export const UserDashboard: React.FC = () => {
                     <Button variant="outline" onClick={logout} className="rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50">Logout</Button>
                   </div>
                 </div>
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-3">
+                <div className="bg-gradient-to-br from-purple-50 to-amber-50 rounded-2xl border border-purple-100 p-5 space-y-3">
                   <h3 className="font-bold text-gray-900 flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-amber-500" /> Referral Code
+                    <Sparkles className="w-4 h-4 text-amber-500" /> Your Rewards Summary
                   </h3>
-                  <p className="text-xs text-gray-500">Share this code with friends to earn commission</p>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-purple-50 border border-purple-200 rounded-xl px-4 py-3 font-mono text-base font-bold text-purple-700 tracking-widest">
-                      {dashboardData.user.referral_code || 'N/A'}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-white rounded-xl p-3 text-center shadow-sm">
+                      <p className="text-2xl font-extrabold text-purple-700">{(dashboardData.user.total_points || 0).toLocaleString()}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Total Points</p>
                     </div>
-                    <motion.button onClick={copyReferralCode} className="w-11 h-11 rounded-xl gradient-brand flex items-center justify-center text-white" whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.9 }}>
-                      <Copy className="w-4 h-4" />
-                    </motion.button>
+                    <div className="bg-white rounded-xl p-3 text-center shadow-sm">
+                      <p className="text-2xl font-extrabold text-amber-600">{dashboardData.total_entries ?? 0}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Draw Entries</p>
+                    </div>
                   </div>
+                  <button
+                    onClick={() => setActiveTab('affiliate')}
+                    className="w-full gradient-brand text-white text-sm font-semibold rounded-xl py-2.5 flex items-center justify-center gap-2"
+                  >
+                    <Users className="w-4 h-4" /> Become an Affiliate &amp; Earn
+                  </button>
                 </div>
               </div>
             )}

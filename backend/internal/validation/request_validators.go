@@ -469,9 +469,12 @@ func (r *AdminLoginRequest) Validate() error {
 
 // Recharge Requests
 type AirtimeRechargeRequest struct {
-	PhoneNumber string  `json:"phone_number"`
-	Network     string  `json:"network"`
-	Amount      float64 `json:"amount"`
+	PhoneNumber   string  `json:"phone_number"`
+	Network       string  `json:"network"`
+	Amount        float64 `json:"amount"`
+	// AffiliateCode is the ?ref=AFFxxxx value captured by the frontend tracking hook.
+	// Optional — silently ignored if empty or invalid.
+	AffiliateCode string  `json:"affiliate_code"`
 }
 
 func (r *AirtimeRechargeRequest) Validate() error {
@@ -496,10 +499,11 @@ func (r *AirtimeRechargeRequest) Validate() error {
 }
 
 type DataRechargeRequest struct {
-	PhoneNumber string  `json:"phone_number"`
-	Network     string  `json:"network"`
-	BundleID    string  `json:"bundle_id"`
-	Amount      float64 `json:"amount"`
+	PhoneNumber   string  `json:"phone_number"`
+	Network       string  `json:"network"`
+	BundleID      string  `json:"bundle_id"`
+	Amount        float64 `json:"amount"`
+	AffiliateCode string  `json:"affiliate_code"`
 }
 
 func (r *DataRechargeRequest) Validate() error {

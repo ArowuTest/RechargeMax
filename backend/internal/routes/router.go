@@ -433,6 +433,12 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	admin.POST("/affiliates/:id/process-payout",   hdlrs.AdminComprehensive.ProcessAffiliatePayout)   // alias
 	admin.GET("/affiliates/:id/payout-history",    hdlrs.AdminComprehensive.GetAffiliatePayoutHistory)
 	admin.GET("/affiliates/analytics",             hdlrs.AdminComprehensive.GetAffiliateAnalytics)
+	// New commission + payout management routes
+	admin.GET("/affiliates/commissions",                           hdlrs.Affiliate.AdminListCommissions)
+	admin.POST("/affiliates/commissions/approve",                  hdlrs.Affiliate.AdminApproveCommissions)
+	admin.GET("/affiliates/payouts",                               hdlrs.Affiliate.AdminListPayouts)
+	admin.POST("/affiliates/payouts/:id/initiate",                 hdlrs.Affiliate.AdminInitiatePayout)
+	admin.POST("/affiliates/payouts/notify-weekly",                hdlrs.Affiliate.AdminWeeklyPayoutNotify)
 
 	// ── Admin user management ────────────────────────────────────────────────
 	admin.GET("/admins",            hdlrs.AdminUserManagement.GetAllAdmins)

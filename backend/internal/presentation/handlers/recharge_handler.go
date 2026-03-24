@@ -120,6 +120,7 @@ func (h *RechargeHandler) InitiateAirtimeRecharge(c *gin.Context) {
 		Amount:        amountKobo,
 		RechargeType:  "AIRTIME",
 		PaymentMethod: "CARD", // Paystack gateway, CARD payment method
+		AffiliateCode: req.AffiliateCode,
 	}
 
 	logger.Info("[DEBUG] Calling CreateRecharge service...")
@@ -179,6 +180,7 @@ func (h *RechargeHandler) InitiateDataRecharge(c *gin.Context) {
 		RechargeType:  "DATA",
 		DataPackage:   req.BundleID,
 		PaymentMethod: "CARD", // Paystack gateway, CARD payment method
+		AffiliateCode: req.AffiliateCode,
 	}
 
 	result, err := h.rechargeService.CreateRecharge(c.Request.Context(), rechargeReq)

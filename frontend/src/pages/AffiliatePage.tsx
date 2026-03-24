@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getAffiliateDashboard, registerAffiliate, refreshAffiliateLink } from '@/lib/api';
+import { apiClient } from '@/lib/api-client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -71,6 +72,7 @@ export const AffiliatePage: React.FC = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [registering, setRegistering] = useState(false);
+  const [requestingPayout, setRequestingPayout] = useState(false);
   const [affiliateData, setAffiliateData] = useState<AffiliateData | null>(null);
   const [affiliateStatus, setAffiliateStatus] = useState<string>('');
   const [dashboardLoading, setDashboardLoading] = useState(true);
@@ -182,6 +184,28 @@ export const AffiliatePage: React.FC = () => {
       });
     } finally {
       setDashboardLoading(false);
+    }
+  };
+
+  const handleRequestPayout = async () => {
+    const pendingNGN = statistics?.pending_commission || affiliateData?.pending_commission || 0;
+    if (pendingNGN < 1000) {
+      toast({ title: 'Insufficient Balance', description: 'Minimum payout is \u20a61,000.', variant: 'destructive' });
+      return;
+    }
+    try {
+      setRequestingPayout(true);
+      const response = await apiClient.post('/affiliate/payout', { amount: pendingNGN });
+      if (response.data?.success) {
+        toast({ title: 'Payout Initiated! \ud83d\udcb8', description: `\u20a6${pendingNGN.toLocaleString()} will arrive in 1-2 business days.` });
+        fetchAffiliateData();
+      } else {
+        throw new Error(response.data?.error || 'Payout failed');
+      }
+    } catch (err: any) {
+      toast({ title: 'Payout Failed', description: err?.response?.data?.error || err.message || 'Please try again.', variant: 'destructive' });
+    } finally {
+      setRequestingPayout(false);
     }
   };
 
@@ -631,6 +655,36 @@ export const AffiliatePage: React.FC = () => {
     );
   }
 
+  if (affiliateStatus === 'SUSPENDED') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md text-center border-red-200">
+          <CardContent className="p-8">
+            <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-red-700 mb-2">Account Suspended</h2>
+            <p className="text-gray-600 mb-4">
+              Your affiliate account has been suspended. New referrals will not earn commission
+              while your account is under review. Please contact{' '}
+              <a href="mailto:support@rechargemax.ng" className="text-purple-600 underline">support@rechargemax.ng</a>{' '}
+              to resolve this.
+            </p>
+            <div className="bg-orange-50 rounded-xl p-4 mb-4 text-sm text-orange-700 text-left">
+              <p className="font-semibold mb-1">💡 While suspended:</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>Existing approved commissions are on hold</li>
+                <li>No new commissions will be earned</li>
+                <li>Your referral link is temporarily inactive</li>
+              </ul>
+            </div>
+            <Button variant="outline" onClick={() => window.location.href = '/'}>
+              Back to Home
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (affiliateStatus === 'NOT_FOUND' && !showRegistrationForm) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center p-4">
@@ -893,17 +947,20 @@ export const AffiliatePage: React.FC = () => {
                 Download Marketing Materials
               </Button>
               <Button 
-                variant="outline" 
                 className="w-full"
-                disabled={!statistics?.pending_commission || statistics.pending_commission < 3000}
+                onClick={handleRequestPayout}
+                disabled={requestingPayout || (statistics?.pending_commission || 0) < 1000}
               >
-                <DollarSign className="w-4 h-4 mr-2" />
-                Request Payout ({formatCurrency(statistics?.pending_commission || 0)})
+                {requestingPayout ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Processing...</>
+                ) : (
+                  <><DollarSign className="w-4 h-4 mr-2" />Request Payout ({formatCurrency(statistics?.pending_commission || 0)})</>
+                )}
               </Button>
             </div>
-            {(statistics?.pending_commission || 0) < 3000 && (
+            {(statistics?.pending_commission || 0) < 1000 && (
               <p className="text-sm text-gray-500 text-center">
-                Minimum payout amount is ₦3,000. Current pending: {formatCurrency(statistics?.pending_commission || 0)}
+                Minimum payout is ₦1,000. Current pending: {formatCurrency(statistics?.pending_commission || 0)}
               </p>
             )}
           </CardContent>

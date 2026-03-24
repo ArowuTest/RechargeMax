@@ -329,6 +329,7 @@ export const rechargeApi = {
     phone_number: string;
     network: string;
     amount: number;
+    affiliate_code?: string;
   }) => {
     const response = await apiClient.post<ApiResponse>('/recharge/airtime', data, { timeout: 65000 });
     return response.data;
@@ -339,6 +340,7 @@ export const rechargeApi = {
     phone_number: string;
     network: string;
     bundle_id: string;
+    affiliate_code?: string;
   }) => {
     const response = await apiClient.post<ApiResponse>('/recharge/data', data, { timeout: 65000 });
     return response.data;

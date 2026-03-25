@@ -513,4 +513,39 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 			"purpose":    row.Purpose,
 		})
 	})
+
+	// POST /admin/debug/inject-otp/:msisdn — injects a known OTP (code=123456) for testing.
+	// Deletes any existing unused OTPs for that MSISDN and inserts a fresh one valid for 30 mins.
+	// STAGING/DEV ONLY — blocked in production.
+	admin.POST("/debug/inject-otp/:msisdn", func(c *gin.Context) {
+		env := os.Getenv("APP_ENV")
+		if env == "production" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "not available in production"})
+			return
+		}
+		msisdn := c.Param("msisdn")
+		// bcrypt hash of "123456" with cost=10 — pre-computed for speed
+		const knownHash = "$2a$10$4B6KTU.ZNxOs1kqQQLkJNOUsOCV4x1lUbr85lE.jVy3rkGxllX2aC"
+		// Invalidate any existing live OTPs for this MSISDN
+		if err := db.Exec(`UPDATE otps SET is_used = true WHERE msisdn = ? AND is_used = false`, msisdn).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to invalidate old OTPs: " + err.Error()})
+			return
+		}
+		// Insert new OTP row with known hash
+		if err := db.Exec(
+			`INSERT INTO otps (id, msisdn, code, purpose, expires_at, is_used, failed_attempts, created_at, updated_at)
+			 VALUES (gen_random_uuid(), ?, ?, 'login', NOW() + INTERVAL '30 minutes', false, 0, NOW(), NOW())`,
+			msisdn, knownHash,
+		).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to insert test OTP: " + err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"success":    true,
+			"msisdn":     msisdn,
+			"otp_code":   "123456",
+			"expires_in": "30 minutes",
+			"note":       "Use code 123456 to login as this user",
+		})
+	})
 }

@@ -173,11 +173,16 @@ func (h *AdminComprehensiveHandler) UpdatePrize(c *gin.Context) {
 	}
 
 	var updateData struct {
-		Name        *string  `json:"name"`
-		Type        *string  `json:"type"`
-		Value       *float64 `json:"value"`
-		Probability *float64 `json:"probability"`
-		IsActive    *bool    `json:"is_active"`
+		Name            *string  `json:"name"`
+		Type            *string  `json:"type"`
+		Value           *float64 `json:"value"`
+		Probability     *float64 `json:"probability"`
+		IsActive        *bool    `json:"is_active"`
+		MinimumRecharge *float64 `json:"minimum_recharge"`
+		ColorScheme     *string  `json:"color"`
+		SortOrder       *int     `json:"sort_order"`
+		IsNoWin         *bool    `json:"is_no_win"`
+		NoWinMessage    *string  `json:"no_win_message"`
 	}
 
 	if err := c.ShouldBindJSON(&updateData); err != nil {
@@ -204,12 +209,28 @@ func (h *AdminComprehensiveHandler) UpdatePrize(c *gin.Context) {
 	if updateData.IsActive != nil {
 		updateMap["is_active"] = *updateData.IsActive
 	}
+	if updateData.MinimumRecharge != nil {
+		updateMap["minimum_recharge"] = *updateData.MinimumRecharge
+	}
+	if updateData.ColorScheme != nil {
+		updateMap["color_scheme"] = *updateData.ColorScheme
+		updateMap["color"] = *updateData.ColorScheme
+	}
+	if updateData.SortOrder != nil {
+		updateMap["sort_order"] = float64(*updateData.SortOrder)
+	}
+	if updateData.IsNoWin != nil {
+		updateMap["is_no_win"] = *updateData.IsNoWin
+	}
+	if updateData.NoWinMessage != nil {
+		updateMap["no_win_message"] = *updateData.NoWinMessage
+	}
 
 	updatedPrize, err := h.spinService.UpdatePrize(ctx, prizeID.String(), updateMap)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
-			"error":   "Failed to update prize",
+			"error":   err.Error(), // surface actual error to admin (probability overage, not found, etc.)
 		})
 		return
 	}

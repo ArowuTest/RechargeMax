@@ -29,6 +29,10 @@ func Register(
 		gin.SetMode(gin.DebugMode)
 	}
 	router := gin.New()
+	// SECURITY: Only trust proxy headers from private/internal IPs (Render load-balancer).
+	// Without this Gin trusts ALL X-Forwarded-For values, enabling IP spoofing attacks
+	// that completely bypass rate limiting.
+	_ = router.SetTrustedProxies([]string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"})
 
 	// ── Global middleware ────────────────────────────────────────────────────
 	router.Use(gin.Recovery())
@@ -45,9 +49,11 @@ func Register(
 	// ── Infrastructure endpoints (no auth, no versioning) ───────────────────
 	registerInfra(router)
 
-	// ── Debug endpoint (temp) ────────────────────────────────────────────────
-	debugHandler := handlers.NewHealthHandler(db)
-	router.GET("/debug/db", debugHandler.DebugDB)
+	// ── Debug endpoint (dev only — never in production) ─────────────────────
+	if gin.Mode() != gin.ReleaseMode {
+		debugHandler := handlers.NewHealthHandler(db)
+		router.GET("/debug/db", debugHandler.DebugDB)
+	}
 
 	// ── API v1 ───────────────────────────────────────────────────────────────
 	v1 := router.Group("/api/v1")
@@ -96,10 +102,10 @@ func registerPublic(v1 *gin.RouterGroup, hdlrs *handlers.Registry, db *gorm.DB) 
 	// Admin auth (public — login doesn't require a token)
 	adminAuth := v1.Group("/admin/auth")
 	{
-		adminAuth.POST("/login",  hdlrs.AdminAuth.Login)
+		adminAuth.POST("/login",  middleware.RateLimitMiddleware(5), hdlrs.AdminAuth.Login)
 		adminAuth.POST("/logout", hdlrs.AdminAuth.Logout)
 	}
-	v1.POST("/admin/login", hdlrs.AdminAuth.Login) // legacy alias
+	v1.POST("/admin/login", middleware.RateLimitMiddleware(5), hdlrs.AdminAuth.Login) // legacy alias
 
 	// Networks
 	networks := v1.Group("/networks")
@@ -116,15 +122,15 @@ func registerPublic(v1 *gin.RouterGroup, hdlrs *handlers.Registry, db *gorm.DB) 
 	{
 		recharge.POST("/airtime",             hdlrs.Recharge.InitiateAirtimeRecharge)
 		recharge.POST("/data",                hdlrs.Recharge.InitiateDataRecharge)
-		recharge.GET("/:id",                  hdlrs.Recharge.GetRecharge)
-		recharge.GET("/reference/:reference", hdlrs.Recharge.GetRechargeByReference)
+		recharge.GET("/:id",                  middleware.OptionalAuthMiddleware(), hdlrs.Recharge.GetRecharge)
+		recharge.GET("/reference/:reference", middleware.OptionalAuthMiddleware(), hdlrs.Recharge.GetRechargeByReference)
 		recharge.POST("/process/:reference",   hdlrs.Recharge.ProcessStuckRecharge)
 	}
 
 	// Payment (Paystack callbacks are public)
 	payment := v1.Group("/payment")
 	{
-		payment.POST("/initialize",       hdlrs.Payment.InitializePayment)
+		payment.POST("/initialize",       middleware.RateLimitMiddleware(20), hdlrs.Payment.InitializePayment)
 		payment.GET("/verify/:reference", hdlrs.Payment.VerifyPayment)
 		payment.POST("/webhook",          hdlrs.Payment.HandleWebhook)
 		payment.GET("/callback",          hdlrs.Payment.HandleCallback)
@@ -151,7 +157,7 @@ func registerPublic(v1 *gin.RouterGroup, hdlrs *handlers.Registry, db *gorm.DB) 
 
 	subPublic := v1.Group("/subscription", middleware.OptionalAuthMiddleware())
 	{
-		subPublic.POST("/create",       hdlrs.Subscription.CreateSubscription)
+		subPublic.POST("/create",       middleware.RateLimitMiddleware(15), hdlrs.Subscription.CreateSubscription)
 		subPublic.GET("/status",        hdlrs.Subscription.GetSubscription)
 		subPublic.GET("/active-lines",  hdlrs.Subscription.GetActiveLines)
 		subPublic.POST("/cancel",       hdlrs.Subscription.CancelSubscription)
@@ -162,7 +168,7 @@ func registerPublic(v1 *gin.RouterGroup, hdlrs *handlers.Registry, db *gorm.DB) 
 	// /subscriptions/daily/* aliases — frontend api.ts also calls these paths
 	subDailyPublic := v1.Group("/subscriptions/daily", middleware.OptionalAuthMiddleware())
 	{
-		subDailyPublic.POST("",                        hdlrs.Subscription.CreateSubscription)
+		subDailyPublic.POST("",                        middleware.RateLimitMiddleware(15), hdlrs.Subscription.CreateSubscription)
 		subDailyPublic.GET("/status",                  hdlrs.Subscription.GetSubscription)
 		subDailyPublic.GET("/active-lines",            hdlrs.Subscription.GetActiveLines)
 		subDailyPublic.POST("/:subscriptionId/cancel", hdlrs.Subscription.CancelLine)
@@ -188,7 +194,7 @@ func registerPublic(v1 *gin.RouterGroup, hdlrs *handlers.Registry, db *gorm.DB) 
 		spin.GET("/prizes", hdlrs.Spin.GetPrizes)
 		// Guest-accessible play: OptionalAuth — MSISDN comes from JWT if present,
 		// otherwise from request body (with strict 4-hour transaction window check).
-		spin.POST("/play", middleware.OptionalAuthMiddleware(), hdlrs.Spin.PlaySpin)
+		spin.POST("/play", middleware.RateLimitMiddleware(10), middleware.OptionalAuthMiddleware(), hdlrs.Spin.PlaySpin)
 	}
 
 	spins := v1.Group("/spins", middleware.OptionalAuthMiddleware())

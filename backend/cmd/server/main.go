@@ -818,6 +818,94 @@ ON CONFLICT (id) DO NOTHING`
 		}
 	}
 
+
+	// 6. Seed platform_settings — all configurable platform parameters
+	{
+		var settingsCount int64
+		_ = db.Table("platform_settings").Count(&settingsCount)
+		if settingsCount == 0 {
+			log.Println("  🌱 Seeding platform_settings...")
+			settingRows := []struct {
+				Key   string
+				Value string
+				Desc  string
+			}{
+				// Platform
+				{"platform.name",                       "RechargeMax Rewards",      "Platform display name"},
+				{"platform.tagline",                    "Recharge & Win!",           "Platform tagline"},
+				{"platform.support_email",              "support@rechargemax.ng",   "Support email address"},
+				{"platform.support_phone",              "+234-XXX-XXX-XXXX",        "Support phone number"},
+				{"platform.environment",                "production",               "Runtime environment"},
+				{"registration_enabled",                "true",                     "Allow new user registrations"},
+				{"maintenance_mode",                    "false",                    "Put platform in maintenance mode"},
+				{"prize_claim_expiry_days",             "30",                       "Days before unclaimed prizes expire"},
+				{"guest_recharge_enabled",              "true",                     "Allow guest recharges without login"},
+				// Loyalty tiers
+				{"loyalty.bronze_min_points",           "0",                        "Min points for Bronze tier"},
+				{"loyalty.silver_min_points",           "500",                      "Min points for Silver tier"},
+				{"loyalty.silver_multiplier",           "1.5",                      "Draw-entry multiplier for Silver"},
+				{"loyalty.gold_min_points",             "2000",                     "Min points for Gold tier"},
+				{"loyalty.gold_multiplier",             "2.0",                      "Draw-entry multiplier for Gold"},
+				{"loyalty.platinum_min_points",         "5000",                     "Min points for Platinum tier"},
+				{"loyalty.platinum_multiplier",         "3.0",                      "Draw-entry multiplier for Platinum"},
+				// Points
+				{"points.naira_per_point",              "200",                      "Naira spent per loyalty point earned"},
+				{"points.draw_entries_per_point",       "0.005",                    "Draw entries per loyalty point"},
+				{"points.min_recharge_kobo",            "20000",                    "Minimum recharge (kobo) to earn points"},
+				{"naira_per_point",                     "200",                      "Alias: naira per point"},
+				{"draw_entries_per_200_points",         "1",                        "Draw entries awarded per 200 points"},
+				// Spin wheel
+				{"spin_wheel_enabled",                  "true",                     "Enable spin wheel feature"},
+				{"spin_wheel_minimum",                  "500",                      "Minimum recharge (naira) to unlock spin"},
+				{"spin.daily_spin_limit",               "3",                        "Max spins per user per day"},
+				{"spin.min_recharge_kobo",              "50000",                    "Min recharge (kobo) to unlock spin"},
+				// Draw system
+				{"draw_system_enabled",                 "true",                     "Enable daily draw feature"},
+				{"draw.claim_window_days",              "30",                       "Days winners have to claim prizes"},
+				{"draw.max_entries_per_msisdn",         "100",                      "Max draw entries per user per draw"},
+				{"points.draw_entries_per_point",       "0.005",                    "Draw entries per point earned"},
+				// Daily subscription
+				{"daily_subscription_enabled",          "true",                     "Enable daily subscription feature"},
+				{"daily_subscription_amount",           "30",                       "Daily subscription price in naira"},
+				{"daily_subscription_naira_per_point",  "200",                      "Naira per point for subscription"},
+				{"subscription.price_kobo",             "3000",                     "Subscription price in kobo (₦30)"},
+				{"subscription.points_per_sub",         "1",                        "Points earned per subscription"},
+				{"subscription.draw_entries",           "1",                        "Draw entries per subscription"},
+				// Affiliate
+				{"affiliate.commission_rate",           "10",                       "Affiliate commission rate (%)"},
+				{"affiliate.auto_release_days",         "30",                       "Days to auto-release held commissions"},
+				{"affiliate.min_payout_amount",         "1000",                     "Minimum payout amount in naira"},
+				{"affiliate_program_enabled",           "true",                     "Enable affiliate programme"},
+				{"commission_payout_threshold",         "5000",                     "Commission payout threshold naira"},
+				// Recharge limits
+				{"minimum_recharge_amount",             "50",                       "Minimum recharge amount in naira"},
+				{"maximum_recharge_amount",             "50000",                    "Maximum recharge amount in naira"},
+				{"max_daily_amount_per_user",           "200000",                   "Max daily recharge amount per user"},
+				{"max_daily_transactions_per_user",     "10",                       "Max daily recharge transactions per user"},
+				// USSD
+				{"ussd.points_per_200_naira",           "1",                        "Points earned per ₦200 via USSD"},
+				{"ussd.draw_entries_per_200_naira",     "1",                        "Draw entries per ₦200 via USSD"},
+				// Network / HLR
+				{"network.hlr_enabled",                 "false",                    "Enable HLR (Home Location Register) lookup"},
+				{"network.hlr_timeout_seconds",         "5",                        "HLR lookup timeout in seconds"},
+			}
+			insertedCount := 0
+			for _, s := range settingRows {
+				sql := `INSERT INTO platform_settings (id, setting_key, setting_value, description, created_at, updated_at)
+VALUES (uuid_generate_v4(), ?, ?, ?, NOW(), NOW())
+ON CONFLICT (setting_key) DO NOTHING`
+				if err := db.Exec(sql, s.Key, s.Value, s.Desc).Error; err != nil {
+					log.Printf("  ⚠️  platform_setting seed warn [%s]: %v", s.Key, err)
+				} else {
+					insertedCount++
+				}
+			}
+			log.Printf("  ✅ platform_settings seeded (%d rows)", insertedCount)
+		} else {
+			log.Printf("  ✓ platform_settings already seeded (%d rows)", settingsCount)
+		}
+	}
+
 	// ── One-time backfill: populate user_id on transactions that have NULL ──────
 	// All transactions created before the ProcessSuccessfulPayment fix had
 	// user_id = NULL (existing-user path never wrote it). This runs on every

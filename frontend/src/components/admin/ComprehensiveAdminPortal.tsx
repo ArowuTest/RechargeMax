@@ -291,7 +291,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
       }
       
       case 'get_transactions': {
-        const txResp = await adminApi.get('/admin/recharge/history', { params: data });
+        const txResp = await adminApi.get('/admin/recharge/transactions', { params: data });
         return { success: true, transactions: txResp.success ? (txResp.data || []) : [] };
       }
       

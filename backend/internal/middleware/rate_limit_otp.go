@@ -49,9 +49,9 @@ func (rl *OTPRateLimiter) Allow(key string) bool {
 	if err := rl.db.Exec(
 		`INSERT INTO otp_rate_limits (key, requested_at) VALUES (?, NOW())`, key,
 	).Error; err != nil {
-		// On DB error, fail-open: allow the request but log.
-		log.Printf("[OTPRateLimiter] DB insert error for key %s: %v — allowing request", key, err)
-		return true
+		// SECURITY: fail-closed — on DB error, deny the request to prevent rate-limit bypass.
+		log.Printf("[OTPRateLimiter] DB insert error for key %s: %v — denying request (fail-closed)", key, err)
+		return false
 	}
 
 	// Count how many attempts (including the one just inserted) fall inside window.
@@ -59,8 +59,8 @@ func (rl *OTPRateLimiter) Allow(key string) bool {
 	if err := rl.db.Table("otp_rate_limits").
 		Where("key = ? AND requested_at > ?", key, windowStart).
 		Count(&count).Error; err != nil {
-		log.Printf("[OTPRateLimiter] DB count error for key %s: %v — allowing request", key, err)
-		return true
+		log.Printf("[OTPRateLimiter] DB count error for key %s: %v — denying request (fail-closed)", key, err)
+		return false
 	}
 
 	return count <= int64(rl.maxReqs)

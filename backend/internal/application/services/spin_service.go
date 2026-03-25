@@ -1153,6 +1153,15 @@ func (s *SpinService) UpdatePrize(ctx context.Context, prizeID string, data map[
 		sov := int(so)
 		prize.SortOrder = &sov
 	}
+	if isNoWin, ok := data["is_no_win"].(bool); ok {
+		prize.IsNoWin = &isNoWin
+	}
+	if noWinMsg, ok := data["no_win_message"].(string); ok {
+		prize.NoWinMessage = noWinMsg
+	}
+	if desc, ok := data["description"].(string); ok {
+		prize.Description = desc
+	}
 	
 	err = s.prizeRepo.Update(ctx, prize)
 	if err != nil {

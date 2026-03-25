@@ -278,6 +278,15 @@ func (h *RechargeHandler) GetRecharge(c *gin.Context) {
 		return
 	}
 
+	// SECURITY: If the caller is authenticated, ensure they only see their own transaction.
+	// (Route uses OptionalAuth so unauthenticated callers — e.g. the Paystack callback flow — are allowed.)
+	if callerMsisdn := c.GetString("msisdn"); callerMsisdn != "" {
+		if recharge.MSISDN != "" && recharge.MSISDN != callerMsisdn {
+			middleware.RespondWithError(c, errors.NotFound("Recharge not found"))
+			return
+		}
+	}
+
 	middleware.RespondWithSuccess(c, recharge)
 }
 
@@ -428,6 +437,15 @@ func (h *RechargeHandler) GetRechargeByReference(c *gin.Context) {
 		return
 	}
 	logger.Info("[DEBUG] Recharge found:v", zap.Any("recharge", recharge))
+
+	// SECURITY: If authenticated, verify the caller owns this transaction.
+	// Unauthenticated callers (Paystack redirect callback) are still allowed through.
+	if callerMsisdn := c.GetString("msisdn"); callerMsisdn != "" {
+		if recharge.MSISDN != "" && recharge.MSISDN != callerMsisdn {
+			middleware.RespondWithError(c, errors.NotFound("Recharge not found"))
+			return
+		}
+	}
 
 	middleware.RespondWithSuccess(c, recharge)
 }

@@ -163,17 +163,25 @@ export const PlatformSettingsPage: React.FC = () => {
       // data.data may be a flat array or nested map — normalise to key->Setting
       const map: Record<string, Setting> = {};
       if (Array.isArray(data.data)) {
+        // Flat array of setting objects
         for (const s of data.data) {
           const k = s.setting_key || s.key;
-          map[k] = { key: k, value: String(s.setting_value ?? s.value ?? ''), description: s.description };
+          map[k] = { key: k, value: String(s.setting_value ?? s.value ?? ''), description: s.description || '' };
         }
       } else if (data.data && typeof data.data === 'object') {
-        // Nested by category
+        // Nested map: { category: { field: value } } — from BuildSettingsMap
         for (const [cat, items] of Object.entries(data.data as Record<string, any>)) {
           if (Array.isArray(items)) {
+            // Category is an array of setting objects
             for (const s of items) {
               const k = s.setting_key || s.key;
-              map[k] = { key: k, value: String(s.setting_value ?? s.value ?? ''), description: s.description };
+              map[k] = { key: k, value: String(s.setting_value ?? s.value ?? ''), description: s.description || '' };
+            }
+          } else if (items && typeof items === 'object') {
+            // Category is a plain object { field: value } — the actual backend format
+            for (const [field, val] of Object.entries(items as Record<string, any>)) {
+              const k = `${cat}.${field}`;
+              map[k] = { key: k, value: String(val ?? ''), description: `${cat} — ${field}` };
             }
           }
         }

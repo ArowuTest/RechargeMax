@@ -11,7 +11,7 @@ type WheelPrize struct {
 	ID                 uuid.UUID `json:"id" gorm:"column:id;primaryKey;type:uuid;default:uuid_generate_v4()"`
 	PrizeCode          string    `json:"prize_code" gorm:"column:prize_code;uniqueIndex;size:50"`
 	PrizeName          string    `json:"prize_name" gorm:"column:prize_name;not null" validate:"required"`
-	PrizeType          string    `json:"prize_type" gorm:"column:prize_type;not null" validate:"required,oneof=CASH AIRTIME DATA POINTS"`
+	PrizeType          string    `json:"prize_type" gorm:"column:prize_type;not null" validate:"required,oneof=CASH AIRTIME DATA POINTS TICKETS NO_WIN"`
 	PrizeValue         int64     `json:"prize_value" gorm:"column:prize_value;type:bigint;not null" validate:"required"` // Value in kobo
 	Probability        float64   `json:"probability" gorm:"column:probability;not null" validate:"required"`
 	MinimumRecharge    *float64  `json:"minimum_recharge" gorm:"column:minimum_recharge"`

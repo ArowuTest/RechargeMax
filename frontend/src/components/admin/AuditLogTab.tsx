@@ -74,7 +74,19 @@ export const AuditLogTab: React.FC = () => {
       const res = await apiClient.get<{ success: boolean; data?: { logs: typeof logs; total: number }; message?: string }>(`/admin/audit-logs?${params}`);
       const data = res.data;
       if (data.success) {
-        setLogs(data.data?.logs ?? []);
+        // Normalize PascalCase keys from Go backend to snake_case for the interface
+        const raw: any[] = data.data?.logs ?? [];
+        const normalized = raw.map((l: any) => ({
+          id: l.id ?? l.ID,
+          admin_user_id: l.admin_user_id ?? l.AdminUserID,
+          action: l.action ?? l.Action,
+          entity_type: l.entity_type ?? l.EntityType,
+          entity_id: l.entity_id ?? l.EntityID,
+          new_value: l.new_value ?? l.NewValue,
+          ip_address: l.ip_address ?? l.IPAddress,
+          created_at: l.created_at ?? l.CreatedAt,
+        }));
+        setLogs(normalized);
         setTotal(data.data?.total ?? 0);
       } else {
         toast({ title: 'Error', description: data.message ?? 'Failed to load audit logs', variant: 'destructive' });

@@ -265,7 +265,7 @@ export default function SubscriptionTierManagement() {
           {currentPricing && (
             <div className="mb-4 p-4 bg-blue-50 rounded-lg">
               <p className="text-sm font-medium">
-                Current Price: ₦{(currentPricing.price_per_entry / 100).toFixed(2)} per entry
+                Current Price: ₦{currentPricing.price_per_entry.toFixed(2)} per entry
               </p>
             </div>
           )}

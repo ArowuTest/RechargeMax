@@ -340,6 +340,7 @@ export const rechargeApi = {
     phone_number: string;
     network: string;
     bundle_id: string;
+    amount: number;        // bundle price in naira — backend validates & converts to kobo
     affiliate_code?: string;
   }) => {
     const response = await apiClient.post<ApiResponse>('/recharge/data', data, { timeout: 65000 });

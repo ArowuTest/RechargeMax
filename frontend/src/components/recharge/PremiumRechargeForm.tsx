@@ -354,6 +354,7 @@ export const PremiumRechargeForm: React.FC<PremiumRechargeFormProps> = ({
           phone_number: formData.phoneNumber,
           network: formData.networkProvider,
           bundle_id: formData.dataBundle!,
+          amount: formData.amount,   // bundle price in naira (backend converts to kobo)
           affiliate_code: affiliateCode,
         });
       }

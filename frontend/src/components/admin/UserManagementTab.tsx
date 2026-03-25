@@ -207,7 +207,7 @@ export const UserManagementTab: React.FC = () => {
                 className="pl-9"
               />
             </div>
-            <Button variant="outline" size="sm" onClick={fetchUsers} disabled={loading}>
+            <Button variant="outline" size="sm" onClick={() => fetchUsers()} disabled={loading}>
               <RefreshCw className={`w-4 h-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </Button>

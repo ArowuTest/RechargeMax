@@ -264,6 +264,7 @@ const FailedProvisionsDashboard: React.FC = () => {
                 : 'No provisions match the selected filter.'}
             </div>
           ) : (
+            <>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
@@ -345,6 +346,7 @@ const FailedProvisionsDashboard: React.FC = () => {
                   onClick={() => setCurrentPage(p => p + 1)}>Next →</button>
               </div>
             </div>
+            </>
           )}
         </CardContent>
       </Card>

@@ -637,6 +637,7 @@ export default function WinnerClaimProcessing() {
               No winners found matching the current filters
             </p>
           ) : (
+            <>
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -745,6 +746,7 @@ export default function WinnerClaimProcessing() {
                   onClick={() => setCurrentPage(p => p + 1)}>Next →</button>
               </div>
             </div>
+            </>
           )}
         </CardContent>
       </Card>

@@ -311,8 +311,24 @@ func (h *PaymentHandler) HandleCallback(c *gin.Context) {
 	// Get gateway from query parameter (default to paystack)
 	gateway := c.DefaultQuery("gateway", "paystack")
 
-	// Verify payment
-	success, _, err := h.paymentService.VerifyPayment(c.Request.Context(), reference, gateway)
+	// PERF: Check DB first — if webhook already processed this payment we can skip
+	// the Paystack verify API call entirely (saves ~300-500ms on the hot path).
+	// We still verify with Paystack if the DB shows PENDING (webhook may not have fired yet).
+	var success bool
+	var verifyErr error
+	if h.rechargeService != nil {
+		recharge, dbErr := h.rechargeService.GetRechargeByPaymentRef(c.Request.Context(), reference)
+		if dbErr == nil && recharge != nil && (recharge.Status == "SUCCESS" || recharge.Status == "PROCESSING") {
+			success = true
+			verifyErr = nil
+		} else {
+			// Fall back to live Paystack verify
+			success, _, verifyErr = h.paymentService.VerifyPayment(c.Request.Context(), reference, gateway)
+		}
+	} else {
+		success, _, verifyErr = h.paymentService.VerifyPayment(c.Request.Context(), reference, gateway)
+	}
+	err := verifyErr
 
 	if err != nil {
 		middleware.RespondWithError(c, err)

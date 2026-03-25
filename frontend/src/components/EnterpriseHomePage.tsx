@@ -275,7 +275,8 @@ export const EnterpriseHomePage: React.FC = () => {
       //   Attempts 91-120 (510-1110s): every 20s — final safety buffer up to ~18 min
       // Total window: ~18-20 minutes, matching the backend's 15-minute requery loop.
       const pollTransaction = (attempt = 0, maxAttempts = 120) => {
-        const delay = attempt < 30 ? 2000 : attempt < 60 ? 5000 : attempt < 90 ? 10000 : 20000;
+        // First attempt fires immediately (0ms), subsequent attempts use adaptive intervals
+        const delay = attempt === 0 ? 0 : attempt < 30 ? 2000 : attempt < 60 ? 5000 : attempt < 90 ? 10000 : 20000;
         setTimeout(() => {
           apiClient.get(`/recharge/reference/${reference}`)
             .then(res => res.data)

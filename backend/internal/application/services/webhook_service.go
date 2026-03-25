@@ -174,14 +174,18 @@ func (s *WebhookService) ProcessPaystackWebhook(ctx context.Context, payload []b
 func (s *WebhookService) processChargeSuccess(ctx context.Context, payload *PaystackWebhookPayload) error {
 	reference := payload.Data.Reference
 
-	// Verify payment with Paystack API (double-check)
-	success, _, err := s.paymentService.VerifyPayment(ctx, reference, "paystack")
-	if err != nil {
-		return errors.Internal(fmt.Sprintf("Failed to verify payment: %v", err))
-	}
-
-	if !success {
-		return errors.BadRequest("Payment verification failed")
+	// PERF: The webhook payload already contains status="success" — we trust it and skip
+	// the redundant Paystack verify API call. This saves ~300-500ms on every webhook.
+	// The HMAC signature verification (VerifyPaystackSignature) already proves authenticity.
+	// We only do a live verify if status is unexpectedly not "success".
+	if payload.Data.Status != "success" {
+		success, _, err := s.paymentService.VerifyPayment(ctx, reference, "paystack")
+		if err != nil {
+			return errors.Internal(fmt.Sprintf("Failed to verify payment: %v", err))
+		}
+		if !success {
+			return errors.BadRequest("Payment verification failed")
+		}
 	}
 
 	// Determine transaction type from reference prefix

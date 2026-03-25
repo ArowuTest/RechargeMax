@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -343,17 +344,39 @@ func (h *PaymentHandler) HandleCallback(c *gin.Context) {
 			prefix := reference[:4]
 			switch prefix {
 			case "RCH_":
-				// Fire-and-forget: VTPass can take 5-30s (especially in sandbox).
-				// Redirect the browser immediately so the user is not left on a blank page.
-				// The frontend polls /recharge/reference/:ref every 3s until status=SUCCESS.
-				// Idempotency is enforced inside ProcessSuccessfulPayment (no-op if not PENDING).
+				// PERF: Try VTPass synchronously with a 6-second deadline.
+				// In production VTPass typically responds in 2-5s — if it does, we can
+				// pass the confirmed result directly in the redirect URL so the frontend
+				// shows the success panel instantly without any polling round-trips.
+				// If VTPass takes longer than 6s we fall back to the async/poll path.
+				syncCtx, syncCancel := context.WithTimeout(context.Background(), 6*time.Second)
+				vtpassDone := make(chan error, 1)
 				go func() {
-					if err := h.rechargeService.ProcessSuccessfulPayment(context.Background(), reference); err != nil {
-						errors.Error("Async VTPass processing failed in callback", err, map[string]interface{}{
-							"reference": reference,
-						})
-					}
+					vtpassDone <- h.rechargeService.ProcessSuccessfulPayment(context.Background(), reference)
 				}()
+				select {
+				case vtpassErr := <-vtpassDone:
+					syncCancel()
+					if vtpassErr != nil {
+						errors.Error("Sync VTPass processing failed", vtpassErr, map[string]interface{}{"reference": reference})
+					}
+					// VTPass finished within 6s — fetch the updated transaction to embed in URL
+					if vtpassErr == nil {
+						if rechargeResult, fetchErr := h.rechargeService.GetRechargeByPaymentRef(context.Background(), reference); fetchErr == nil && rechargeResult != nil && rechargeResult.Status == "SUCCESS" {
+							amountNaira := rechargeResult.Amount / 100
+							redirectURL := fmt.Sprintf("%s/?payment=success&reference=%s&txn_status=SUCCESS&amount=%d&points=%d&draw_entries=%d&spin_eligible=%t&network=%s&msisdn=%s",
+								h.frontendURL, reference, amountNaira,
+								rechargeResult.PointsEarned, rechargeResult.DrawEntry,
+								rechargeResult.SpinEligible, rechargeResult.NetworkProvider, rechargeResult.MSISDN)
+							c.Redirect(http.StatusFound, redirectURL)
+							return
+						}
+					}
+					// Fall through to standard redirect (frontend will poll)
+				case <-syncCtx.Done():
+					syncCancel()
+					// VTPass is slow — goroutine is still running in background, frontend polls
+				}
 			case "SUB_":
 				go func() {
 					if err := h.subscriptionService.ProcessSuccessfulPayment(context.Background(), reference); err != nil {

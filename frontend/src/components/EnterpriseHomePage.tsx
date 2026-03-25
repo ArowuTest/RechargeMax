@@ -257,12 +257,53 @@ export const EnterpriseHomePage: React.FC = () => {
 
     if (paymentSuccess && reference) {
       window.history.replaceState({}, document.title, window.location.pathname);
-      // Show immediate "processing" feedback so the user knows something is happening
-      toast('✅ Payment Confirmed!', { description: 'Your recharge is being processed, please wait…', duration: 5000 });
 
       // Convert 234XXXXXXXXXX → 0XXXXXXXXXX for display
       const toLocalPhone = (msisdn: string) =>
         msisdn?.startsWith('234') ? '0' + msisdn.slice(3) : msisdn;
+
+      // PERF: Backend may have pre-filled the result directly in the redirect URL
+      // (when VTPass responded within 6s). If so, show confirmation immediately
+      // — zero polling needed.
+      const txnStatus    = allParams.get('txn_status');
+      const preAmount    = allParams.get('amount');
+      const prePoints    = allParams.get('points');
+      const preEntries   = allParams.get('draw_entries');
+      const preSpin      = allParams.get('spin_eligible');
+      const preNetwork   = allParams.get('network');
+      const preMsisdn    = allParams.get('msisdn');
+
+      if (txnStatus === 'SUCCESS' && preAmount) {
+        const amount      = Number(preAmount);
+        const points      = Number(prePoints  || '0');
+        const drawEntries = Number(preEntries || '0');
+        const spinEligible = preSpin === 'true';
+        const displayPhone = toLocalPhone(preMsisdn || '');
+        const network      = preNetwork || 'MTN';
+
+        if (preMsisdn) setUserPhone(preMsisdn);
+
+        setRechargeSuccess({ amount, points, drawEntries, spinEligible,
+          phone: displayPhone, network, transactionReference: reference, pending: false });
+
+        const rewardParts: string[] = [];
+        if (points > 0)      rewardParts.push(`${points} point${points !== 1 ? 's' : ''}`);
+        if (drawEntries > 0) rewardParts.push(`${drawEntries} draw entr${drawEntries !== 1 ? 'ies' : 'y'}`);
+        if (spinEligible)    rewardParts.push('spin wheel unlocked! 🎰');
+        const rewardLine = rewardParts.length ? ` You earned ${rewardParts.join(' and ')}.` : '';
+
+        toast.success('🎉 Recharge Successful!', {
+          description: `₦${amount.toLocaleString()} recharged to ${displayPhone}.${rewardLine}`,
+          duration: 8000,
+        });
+
+        if (spinEligible) setTimeout(() => openSpinWheelIfEligible(false), 800);
+        return; // No polling needed — result already confirmed
+      }
+
+      // VTPass was still processing when backend redirected — show "processing" banner
+      // and start polling until SUCCESS or FAILED.
+      toast('✅ Payment Confirmed!', { description: 'Your recharge is being processed, please wait…', duration: 5000 });
 
       // Show a persistent "processing" banner so user doesn't think it failed
       // while VTPass is working in the background (can take up to ~2 minutes).

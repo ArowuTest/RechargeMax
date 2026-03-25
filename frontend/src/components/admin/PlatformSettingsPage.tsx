@@ -180,8 +180,9 @@ export const PlatformSettingsPage: React.FC = () => {
           } else if (items && typeof items === 'object') {
             // Category is a plain object { field: value } — the actual backend format
             for (const [field, val] of Object.entries(items as Record<string, any>)) {
-              const k = `${cat}.${field}`;
-              map[k] = { key: k, value: String(val ?? ''), description: `${cat} — ${field}` };
+              // '_flat' is a synthetic category for flat (no-prefix) keys
+              const k = cat === '_flat' ? field : `${cat}.${field}`;
+              map[k] = { key: k, value: String(val ?? ''), description: cat === '_flat' ? field : `${cat} — ${field}` };
             }
           }
         }

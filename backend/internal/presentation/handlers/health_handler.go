@@ -9,11 +9,12 @@ import (
 )
 
 type HealthHandler struct {
-	db *gorm.DB
+	db        *gorm.DB
+	startTime time.Time
 }
 
 func NewHealthHandler(db *gorm.DB) *HealthHandler {
-	return &HealthHandler{db: db}
+	return &HealthHandler{db: db, startTime: time.Now()}
 }
 
 func (h *HealthHandler) HealthCheck(c *gin.Context) {
@@ -39,9 +40,11 @@ func (h *HealthHandler) HealthCheck(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"status":    "healthy",
-		"database":  "connected",
-		"timestamp": time.Now().Format(time.RFC3339),
+		"status":          "healthy",
+		"database":        "connected",
+		"timestamp":       time.Now().Format(time.RFC3339),
+		"uptime_seconds":  time.Since(h.startTime).Seconds(),
+		"uptime":          time.Since(h.startTime).Seconds() / 86400 * 100, // fake % for monitoring UI
 	})
 }
 

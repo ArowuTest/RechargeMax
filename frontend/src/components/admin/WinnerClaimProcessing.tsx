@@ -136,6 +136,9 @@ export default function WinnerClaimProcessing() {
 
   const [runnerUpSelection, setRunnerUpSelection] = useState<string>('');
   const [forfeitReason, setForfeitReason] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalWinners, setTotalWinners] = useState(0);
+  const PAGE_SIZE = 20;
 
   useEffect(() => {
     fetchData();
@@ -145,13 +148,19 @@ export default function WinnerClaimProcessing() {
     setLoading(true);
     try {
       // Fetch winners with filters
-      const winnersResponse = await winnerClaimApi.getWinners({
-        claim_status: claimStatusFilter !== 'all' ? claimStatusFilter : undefined,
-        prize_type: prizeTypeFilter !== 'all' ? prizeTypeFilter : undefined,
-      });
+      const winnersResponse = await winnerClaimApi.getWinners(
+        currentPage,
+        PAGE_SIZE,
+        claimStatusFilter !== 'all' ? claimStatusFilter : undefined,
+        prizeTypeFilter !== 'all' ? prizeTypeFilter : undefined,
+      );
 
       if (winnersResponse.success && winnersResponse.data) {
-        setWinners(winnersResponse.data);
+        const list = Array.isArray(winnersResponse.data)
+          ? winnersResponse.data
+          : winnersResponse.data?.items ?? winnersResponse.data?.data ?? [];
+        setWinners(list);
+        setTotalWinners(winnersResponse.data?.total ?? winnersResponse.total ?? list.length);
       }
 
       // Fetch statistics
@@ -721,6 +730,20 @@ export default function WinnerClaimProcessing() {
                   })}
                 </TableBody>
               </Table>
+            </div>
+            {/* Pagination */}
+            <div className="flex items-center justify-between mt-4 px-1">
+              <p className="text-xs text-muted-foreground">
+                Page {currentPage} · Showing {winners.length} of {totalWinners} claims
+              </p>
+              <div className="flex gap-2">
+                <button className="px-3 py-1 text-xs border rounded disabled:opacity-40"
+                  disabled={currentPage <= 1}
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>← Prev</button>
+                <button className="px-3 py-1 text-xs border rounded disabled:opacity-40"
+                  disabled={winners.length < PAGE_SIZE}
+                  onClick={() => setCurrentPage(p => p + 1)}>Next →</button>
+              </div>
             </div>
           )}
         </CardContent>

@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -19,11 +21,52 @@ func NewPlatformSettingsHandler(settingsSvc *services.PlatformSettingsService) *
 }
 
 // GetAllSettings returns all settings merged with in-code defaults, grouped by category.
+// Also injects any flat (no-dot) DB keys directly into the nested map under a "_flat" key
+// so the frontend can discover keys like "registration_enabled" without a category prefix.
 func (h *PlatformSettingsHandler) GetAllSettings(c *gin.Context) {
 	dbValues, _ := h.settingsSvc.LoadAll(c.Request.Context())
+	nested := services.BuildSettingsMap(dbValues)
+
+	// Inject flat keys (keys without a ".") into the nested map under their own name so
+	// the frontend flat-key layout schema (e.g. "registration_enabled") can find them.
+	// We create a pseudo-category for each flat key using an empty prefix trick:
+	// actually we just copy them into the nested map directly as top-level entries.
+	flatGroup := make(map[string]interface{})
+	for k, v := range dbValues {
+		if !strings.Contains(k, ".") {
+			switch v {
+			case "true":
+				flatGroup[k] = true
+			case "false":
+				flatGroup[k] = false
+			default:
+				var f float64
+				if _, err := fmt.Sscanf(v, "%f", &f); err == nil {
+					flatGroup[k] = f
+				} else {
+					flatGroup[k] = v
+				}
+			}
+		}
+	}
+	// Also inject flat keys from DefaultSettings that aren't already present
+	for k, v := range services.DefaultSettings {
+		if !strings.Contains(k, ".") {
+			if _, exists := flatGroup[k]; !exists {
+				flatGroup[k] = v
+			}
+		}
+	}
+	// Merge into nested: each flat key becomes its own top-level entry
+	// Frontend's nested parser: for [cat, items] — if items is a string/bool/number, skip
+	// So we use a synthetic category for flat keys
+	if len(flatGroup) > 0 {
+		nested["_flat"] = flatGroup
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"data":    services.BuildSettingsMap(dbValues),
+		"data":    nested,
 	})
 }
 

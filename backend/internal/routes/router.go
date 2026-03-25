@@ -9,6 +9,7 @@ package routes
 
 import (
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -484,4 +485,32 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 
 	// ── Audit logs ───────────────────────────────────────────────────────────
 	admin.GET("/audit-logs", middleware.AdminAuditLogsList(db))
+
+	// ── STAGING-ONLY debug helpers (remove before full production go-live) ──────
+	admin.GET("/debug/otp/:msisdn", func(c *gin.Context) {
+		msisdn := c.Param("msisdn")
+		env := os.Getenv("APP_ENV")
+		if env == "production" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "not available in production"})
+			return
+		}
+		var row struct {
+			CreatedAt time.Time `gorm:"column:created_at"`
+			ExpiresAt time.Time `gorm:"column:expires_at"`
+			IsUsed    bool      `gorm:"column:is_used"`
+			Purpose   string    `gorm:"column:purpose"`
+		}
+		if err := db.Raw(`SELECT created_at, expires_at, is_used, purpose FROM otps WHERE msisdn = ? ORDER BY created_at DESC LIMIT 1`, msisdn).Scan(&row).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"note":       "OTP hash only — check server stdout logs for plaintext code",
+			"msisdn":     msisdn,
+			"created_at": row.CreatedAt,
+			"expires_at": row.ExpiresAt,
+			"is_used":    row.IsUsed,
+			"purpose":    row.Purpose,
+		})
+	})
 }

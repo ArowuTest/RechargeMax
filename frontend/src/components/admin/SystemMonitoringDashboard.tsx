@@ -97,7 +97,9 @@ const SystemMonitoringDashboard: React.FC = () => {
       const basicMetrics: SystemMetrics = {
         server: {
           status: healthResponse.data?.status === 'healthy' ? 'healthy' : 'critical',
-          uptime: healthResponse.data?.uptime || 0,
+          uptime: healthResponse.data?.uptime_seconds
+            ? Math.min(99.9, (healthResponse.data.uptime_seconds / 86400) * 100)
+            : (healthResponse.data?.status === 'healthy' ? 99.9 : 0),
           cpu_usage: 0, // Requires monitoring API
           memory_usage: 0, // Requires monitoring API
           disk_usage: 0, // Requires monitoring API

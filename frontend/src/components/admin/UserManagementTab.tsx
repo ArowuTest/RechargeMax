@@ -84,6 +84,9 @@ export const UserManagementTab: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const PAGE_SIZE = 20;
 
   // Edit dialog state
   const [editUser, setEditUser] = useState<User | null>(null);
@@ -91,10 +94,12 @@ export const UserManagementTab: React.FC = () => {
   const [editTier, setEditTier] = useState('');
   const [editSaving, setEditSaving] = useState(false);
 
-  const fetchUsers = useCallback(async () => {
+  const fetchUsers = useCallback(async (page = 1, q = '') => {
     setLoading(true);
     try {
-      const res = await apiClient.get('/admin/users/all');
+      const params: Record<string, any> = { page, per_page: PAGE_SIZE };
+      if (q.trim()) params.search = q.trim();
+      const res = await apiClient.get('/admin/users/all', { params });
       const data = res.data;
       const list: User[] = Array.isArray(data.data)
         ? data.data
@@ -102,6 +107,8 @@ export const UserManagementTab: React.FC = () => {
           ? data.data.users
           : [];
       setUsers(list);
+      setFiltered(list);
+      setTotalUsers(data.pagination?.total ?? list.length);
     } catch {
       toast({ title: 'Error', description: 'Failed to load users', variant: 'destructive' });
     } finally {
@@ -109,20 +116,27 @@ export const UserManagementTab: React.FC = () => {
     }
   }, [toast]);
 
-  useEffect(() => { fetchUsers(); }, [fetchUsers]);
+  useEffect(() => { fetchUsers(1, ''); }, [fetchUsers]);
+
+  // debounce search → server-side
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setCurrentPage(1);
+      fetchUsers(1, search);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [search]);
 
   useEffect(() => {
-    if (!search.trim()) {
-      setFiltered(users);
-      return;
-    }
-    const q = search.toLowerCase();
-    setFiltered(users.filter(u =>
-      u.msisdn?.includes(q) ||
-      userDisplayName(u).toLowerCase().includes(q) ||
-      u.email?.toLowerCase().includes(q)
-    ));
-  }, [search, users]);
+    fetchUsers(currentPage, search);
+  }, [currentPage]);
+
+  // keep filtered in sync (used by older render code below)
+  useEffect(() => {
+    setFiltered(users);
+  }, [users]);
+
+  // client-side filter is now disabled — search is server-side
 
   const openEdit = (u: User) => {
     setEditUser(u);
@@ -286,9 +300,19 @@ export const UserManagementTab: React.FC = () => {
             </TableBody>
           </Table>
 
-          <p className="text-xs text-gray-400 mt-3">
-            Showing {filtered.length} of {users.length} users
-          </p>
+          <div className="flex items-center justify-between mt-4">
+            <p className="text-xs text-gray-400">
+              Showing {filtered.length} of {totalUsers} users (page {currentPage} of {Math.ceil(totalUsers / PAGE_SIZE) || 1})
+            </p>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>
+                ← Prev
+              </Button>
+              <Button variant="outline" size="sm" disabled={currentPage >= (Math.ceil(totalUsers / PAGE_SIZE) || 1)} onClick={() => setCurrentPage(p => p + 1)}>
+                Next →
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 

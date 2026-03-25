@@ -18,7 +18,7 @@ const PAGE_SIZE = 50;
 interface AuditLog {
   id: string;
   admin_user_id?: string;
-  action: string;
+  action?: string;
   entity_type?: string;
   entity_id?: string;
   new_value?: any;
@@ -26,8 +26,11 @@ interface AuditLog {
   created_at: string;
 }
 
-function formatDate(s: string): string {
-  return new Date(s).toLocaleString('en-NG', {
+function formatDate(s: string | undefined | null): string {
+  if (!s) return '—';
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleString('en-NG', {
     day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit', second: '2-digit',
   });
@@ -40,7 +43,8 @@ const ACTION_COLORS: Record<string, string> = {
   PATCH:  'bg-yellow-100 text-yellow-800',
 };
 
-function actionBadge(action: string) {
+function actionBadge(action: string | undefined | null) {
+  if (!action) return <span className="inline-block px-2 py-0.5 rounded text-xs font-mono bg-gray-100 text-gray-500">—</span>;
   const verb = action.split(':')[0] ?? action;
   const colorClass = ACTION_COLORS[verb] ?? 'bg-gray-100 text-gray-700';
   return (

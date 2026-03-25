@@ -578,8 +578,10 @@ export const adminApi: any = {
 
   // Users management
   users: {
-    getAll: async (page = 1, perPage = 50) => {
-      const response = await apiClient.get<ApiResponse<any>>(`/admin/users/all`);
+    getAll: async (page = 1, perPage = 50, search?: string) => {
+      const params: Record<string, any> = { page, per_page: perPage };
+      if (search) params.search = search;
+      const response = await apiClient.get<ApiResponse<any>>(`/admin/users/all`, { params });
       return response.data;
     },
     getById: async (userId: string) => {

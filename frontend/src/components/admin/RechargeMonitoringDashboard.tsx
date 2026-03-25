@@ -84,13 +84,16 @@ const RechargeMonitoringDashboard: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [networkFilter, setNetworkFilter] = useState('ALL');
   const [refreshing, setRefreshing] = useState(false);
+  const [txPage, setTxPage] = useState(1);
+  const [txTotal, setTxTotal] = useState(0);
+  const TX_PAGE_SIZE = 20;
 
   useEffect(() => {
     loadData();
     // Auto-refresh every 30 seconds
     const interval = setInterval(loadData, 30000);
     return () => clearInterval(interval);
-  }, [statusFilter, networkFilter]);
+  }, [statusFilter, networkFilter, txPage]);
 
   const loadData = async () => {
     try {
@@ -112,14 +115,16 @@ const RechargeMonitoringDashboard: React.FC = () => {
       });
 
       const transactionsResponse = await rechargeMonitoringApi.getTransactions({
-        page: 1,
-        per_page: 100,
+        page: txPage,
+        per_page: TX_PAGE_SIZE,
         status: statusFilter !== 'ALL' ? statusFilter : undefined,
-        network: networkFilter !== 'ALL' ? networkFilter : undefined
+        network: networkFilter !== 'ALL' ? networkFilter : undefined,
+        search: searchQuery || undefined,
       });
 
       if (transactionsResponse.success) {
         setTransactions(transactionsResponse.data);
+        setTxTotal(transactionsResponse.pagination?.total ?? transactionsResponse.total ?? transactionsResponse.data?.length ?? 0);
       }
     } catch (error) {
       console.error('Error loading recharge data:', error);
@@ -381,7 +386,7 @@ const RechargeMonitoringDashboard: React.FC = () => {
                 />
               </div>
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <Select value={statusFilter} onValueChange={(v) => { setTxPage(1); setStatusFilter(v); }}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
@@ -394,7 +399,7 @@ const RechargeMonitoringDashboard: React.FC = () => {
                 <SelectItem value="REVERSED">Reversed</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={networkFilter} onValueChange={setNetworkFilter}>
+            <Select value={networkFilter} onValueChange={(v) => { setTxPage(1); setNetworkFilter(v); }}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Network" />
               </SelectTrigger>
@@ -464,6 +469,28 @@ const RechargeMonitoringDashboard: React.FC = () => {
                 )}
               </TableBody>
             </Table>
+          </div>
+          {/* Pagination controls */}
+          <div className="flex items-center justify-between mt-4 px-1">
+            <p className="text-xs text-muted-foreground">
+              Page {txPage} · Showing {transactions.length} of {txTotal} transactions
+            </p>
+            <div className="flex gap-2">
+              <button
+                className="px-3 py-1 text-xs border rounded disabled:opacity-40"
+                disabled={txPage <= 1}
+                onClick={() => setTxPage(p => Math.max(1, p - 1))}
+              >
+                ← Prev
+              </button>
+              <button
+                className="px-3 py-1 text-xs border rounded disabled:opacity-40"
+                disabled={transactions.length < TX_PAGE_SIZE}
+                onClick={() => setTxPage(p => p + 1)}
+              >
+                Next →
+              </button>
+            </div>
           </div>
         </CardContent>
       </Card>

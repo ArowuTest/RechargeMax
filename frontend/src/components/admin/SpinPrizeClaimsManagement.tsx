@@ -265,8 +265,10 @@ const SpinPrizeClaimsManagement: React.FC = () => {
     }).format(amount);
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString('en-NG');
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return '—';
+    const d = new Date(dateString);
+    return isNaN(d.getTime()) ? '—' : d.toLocaleString('en-NG');
   };
 
   return (
@@ -415,7 +417,7 @@ const SpinPrizeClaimsManagement: React.FC = () => {
                       </TableCell>
                       <TableCell className="font-semibold">{formatCurrency(claim.prize_value)}</TableCell>
                       <TableCell>{getStatusBadge(claim.claim_status)}</TableCell>
-                      <TableCell className="text-sm">{formatDate(claim.claim_date)}</TableCell>
+                      <TableCell className="text-sm">{formatDate(claim.claim_date ?? claim.created_at)}</TableCell>
                       <TableCell>
                         <Button
                           variant="outline"

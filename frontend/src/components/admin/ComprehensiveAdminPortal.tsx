@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { adminApi } from '@/lib/api-client';
 import type { NetworkConfig, DataPlan, WheelPrize, DailySubscription, PlatformSetting } from '@/types/admin-api.types';
 import { getErrorMessage } from '@/utils/error-utils';
@@ -128,7 +129,16 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
     return 'monitoring'; // fallback
   };
   
-  const [activeTab, setActiveTab] = useState<string>(getFirstAvailableTab());
+  const location = useLocation();
+  const TAB_FROM_PATH: Record<string, string> = {
+    '/admin/wheel-prizes': 'prizes',
+    '/admin/spin-tiers': 'spin-tiers',
+    '/admin/draws': 'draw-engine',
+    '/admin/winners': 'prize-claims',
+    '/admin/affiliates': 'strategic-affiliates',
+    '/admin/monitoring': 'monitoring',
+  };
+  const [activeTab, setActiveTab] = useState<string>(TAB_FROM_PATH[location.pathname] || getFirstAvailableTab());
   
   // Admin management states
   const [admins, setAdmins] = useState<any[]>([]);

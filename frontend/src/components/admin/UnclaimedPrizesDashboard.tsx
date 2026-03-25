@@ -37,6 +37,9 @@ const UnclaimedPrizesDashboard: React.FC = () => {
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPrizes, setTotalPrizes] = useState(0);
+  const PAGE_SIZE = 20;
 
   useEffect(() => {
     fetchUnclaimedPrizes();
@@ -48,9 +51,14 @@ const UnclaimedPrizesDashboard: React.FC = () => {
   const fetchUnclaimedPrizes = async () => {
     setLoading(true);
     try {
-      const response = await apiClient.get('/admin/winners/pending-claims');
+      const response = await apiClient.get(`/admin/winners/pending-claims?page=${currentPage}&per_page=${PAGE_SIZE}`);
       const data = response.data;
-      setPrizes(data.prizes || []);
+      const list = data.prizes
+        || (Array.isArray(data.data) ? data.data : null)
+        || data.data?.winners
+        || [];
+      setPrizes(list);
+      setTotalPrizes(data.total || data.data?.total || list.length);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load unclaimed prizes');
     } finally {
@@ -298,6 +306,16 @@ const UnclaimedPrizesDashboard: React.FC = () => {
               </table>
             </div>
           )}
+        {/* Pagination */}
+        <div className="flex items-center justify-between mt-4 px-1">
+          <p className="text-xs text-gray-500">Page {currentPage} · {prizes.length} of {totalPrizes} unclaimed prizes</p>
+          <div className="flex gap-2">
+            <button className="px-3 py-1 text-xs border rounded disabled:opacity-40"
+              disabled={currentPage <= 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>← Prev</button>
+            <button className="px-3 py-1 text-xs border rounded disabled:opacity-40"
+              disabled={prizes.length < PAGE_SIZE} onClick={() => setCurrentPage(p => p + 1)}>Next →</button>
+          </div>
+        </div>
         </CardContent>
       </Card>
     </div>

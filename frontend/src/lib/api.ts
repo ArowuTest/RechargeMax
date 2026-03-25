@@ -29,7 +29,7 @@ export const getUserDashboard = async (_msisdn: string) => userApi.getDashboard(
 // ─── Recharge ──────────────────────────────────────────────────────────────
 export const createRecharge = async (d: any) => {
   if (d.bundle_id) {
-    return rechargeApi.initiateDataRecharge({ phone_number: d.phone_number, network: d.network, bundle_id: d.bundle_id });
+    return rechargeApi.initiateDataRecharge({ phone_number: d.phone_number, network: d.network, bundle_id: d.bundle_id, amount: d.amount ?? 0 });
   }
   return rechargeApi.initiateAirtimeRecharge({ phone_number: d.phone_number, network: d.network, amount: d.amount });
 };

@@ -77,7 +77,7 @@ func registerInfra(r *gin.Engine) {
 			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"service":   "rechargemax-api",
 			"version":   "1.1.0",
-			"build":     "20260323-uat-fixes-v7",
+			"build":     "20260325-debug-inject-otp-v8",
 		})
 	})
 

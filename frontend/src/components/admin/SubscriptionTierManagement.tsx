@@ -52,10 +52,10 @@ export default function SubscriptionTierManagement() {
   const [editingTier, setEditingTier] = useState<SubscriptionTier | null>(null);
   const [formData, setFormData] = useState({
     name: '',
-    entries_count: 1,
+    entries: 1,
     description: '',
     is_active: true,
-    display_order: 0,
+    sort_order: 0,
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
@@ -72,8 +72,8 @@ export default function SubscriptionTierManagement() {
       ]);
 
       if (tiersResponse.success && tiersResponse.data) {
-        // Sort by display_order
-        const sortedTiers = tiersResponse.data.sort((a, b) => a.display_order - b.display_order);
+        // Sort by sort_order
+        const sortedTiers = tiersResponse.data.sort((a, b) => (a.sort_order ?? a.display_order ?? 0) - (b.sort_order ?? b.display_order ?? 0));
         setTiers(sortedTiers);
       }
 
@@ -97,19 +97,19 @@ export default function SubscriptionTierManagement() {
       setEditingTier(tier);
       setFormData({
         name: tier.name,
-        entries_count: tier.entries_count,
+        entries: tier.entries ?? tier.entries_count ?? 1,
         description: tier.description || '',
         is_active: tier.is_active,
-        display_order: tier.display_order,
+        sort_order: tier.sort_order ?? tier.display_order ?? 0,
       });
     } else {
       setEditingTier(null);
       setFormData({
         name: '',
-        entries_count: 1,
+        entries: 1,
         description: '',
         is_active: true,
-        display_order: tiers.length,
+        sort_order: tiers.length,
       });
     }
     setFormErrors({});
@@ -123,12 +123,12 @@ export default function SubscriptionTierManagement() {
       errors.name = 'Tier name is required';
     }
 
-    if (formData.entries_count < 1) {
-      errors.entries_count = 'Entries count must be at least 1';
+    if (formData.entries < 1) {
+      errors.entries = 'Entries count must be at least 1';
     }
 
-    if (formData.display_order < 0) {
-      errors.display_order = 'Display order must be 0 or greater';
+    if (formData.sort_order < 0) {
+      errors.sort_order = 'Display order must be 0 or greater';
     }
 
     setFormErrors(errors);
@@ -211,13 +211,13 @@ export default function SubscriptionTierManagement() {
       return;
     }
 
-    const newOrder = direction === 'up' ? tier.display_order - 1 : tier.display_order + 1;
+    const newOrder = direction === 'up' ? (tier.sort_order ?? 0) - 1 : (tier.sort_order ?? 0) + 1;
     setActionLoading(`move-${tier.id}`);
     
     try {
       const response = await subscriptionTierApi.update(tier.id, {
         ...tier,
-        display_order: newOrder,
+        sort_order: newOrder,
       });
       
       if (response.success) {
@@ -306,10 +306,10 @@ export default function SubscriptionTierManagement() {
                     </div>
                   </TableCell>
                   <TableCell className="font-medium">{tier.name}</TableCell>
-                  <TableCell>{tier.entries_count}</TableCell>
+                  <TableCell>{tier.entries ?? tier.entries_count}</TableCell>
                   <TableCell>
                     {currentPricing
-                      ? `₦${((tier.entries_count * currentPricing.price_per_entry) / 100).toFixed(2)}`
+                      ? `₦${((tier.entries ?? tier.entries_count ?? 0) * currentPricing.price_per_entry).toFixed(2)}`
                       : 'N/A'}
                   </TableCell>
                   <TableCell className="max-w-xs truncate">{tier.description}</TableCell>
@@ -373,18 +373,18 @@ export default function SubscriptionTierManagement() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="entries_count">Number of Entries</Label>
+              <Label htmlFor="entries">Number of Entries</Label>
               <Input
-                id="entries_count"
+                id="entries"
                 type="number"
                 min="1"
-                value={formData.entries_count}
+                value={formData.entries}
                 onChange={(e) =>
-                  setFormData({ ...formData, entries_count: parseInt(e.target.value) || 1 })
+                  setFormData({ ...formData, entries: parseInt(e.target.value) || 1 })
                 }
               />
-              {formErrors.entries_count && (
-                <p className="text-sm text-red-500">{formErrors.entries_count}</p>
+              {formErrors.entries && (
+                <p className="text-sm text-red-500">{formErrors.entries}</p>
               )}
             </div>
 
@@ -399,18 +399,18 @@ export default function SubscriptionTierManagement() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="display_order">Display Order</Label>
+              <Label htmlFor="sort_order">Display Order</Label>
               <Input
-                id="display_order"
+                id="sort_order"
                 type="number"
                 min="0"
-                value={formData.display_order}
+                value={formData.sort_order}
                 onChange={(e) =>
-                  setFormData({ ...formData, display_order: parseInt(e.target.value) || 0 })
+                  setFormData({ ...formData, sort_order: parseInt(e.target.value) || 0 })
                 }
               />
-              {formErrors.display_order && (
-                <p className="text-sm text-red-500">{formErrors.display_order}</p>
+              {formErrors.sort_order && (
+                <p className="text-sm text-red-500">{formErrors.sort_order}</p>
               )}
             </div>
 

@@ -888,10 +888,12 @@ export async function callEdgeFunction(
 export interface SubscriptionTier {
   id: string;
   name: string;
-  entries_count: number;
+  entries: number;         // API field name
+  entries_count?: number;  // alias kept for form compat
   description?: string;
   is_active: boolean;
-  display_order: number;
+  sort_order: number;      // API field name
+  display_order?: number;  // alias kept for form compat
   created_at: string;
   updated_at: string;
 }

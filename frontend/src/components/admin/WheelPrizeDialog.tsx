@@ -15,7 +15,7 @@ interface WheelPrizeDialogProps {
   onOpenChange: (open: boolean) => void;
   prize?: WheelPrize | null;
   existingPrizes: WheelPrize[];
-  onSave: (prizeData: Omit<WheelPrize, 'id' | 'created_at' | 'updated_at'>) => Promise<void>;
+  onSave: (prizeData: Omit<WheelPrize, 'id' | 'created_at' | 'updated_at' | 'prize_type'> & { prize_type: string; is_no_win?: boolean; no_win_message?: string }) => Promise<void>;
   loading?: boolean;
 }
 
@@ -47,7 +47,7 @@ export const WheelPrizeDialog: React.FC<WheelPrizeDialogProps> = ({
   onSave,
   loading = false
 }) => {
-  const [formData, setFormData] = useState<Omit<WheelPrize, 'id' | 'created_at' | 'updated_at'> & { is_no_win?: boolean; no_win_message?: string }>({
+  const [formData, setFormData] = useState<Omit<WheelPrize, 'id' | 'created_at' | 'updated_at' | 'prize_type'> & { prize_type: string; is_no_win?: boolean; no_win_message?: string }>({
     prize_name: '',
     prize_type: 'CASH',
     prize_value: 0,

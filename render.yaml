@@ -65,11 +65,11 @@ services:
       - key: VTPASS_SECRET_KEY
         value: SK_8221e655104cd4459259c3d4d840103565d4376b027
       - key: VTPASS_BASE_URL
-        value: https://vtpass.com/api
+        value: https://sandbox.vtpass.com/api
       - key: VTPASS_SANDBOX_MODE
-        value: "false"
+        value: "true"
       - key: VTPASS_MODE
-        value: production
+        value: sandbox
       - key: RECHARGE_PROVIDER
         value: vtpass
       - key: JWT_EXPIRY

@@ -462,7 +462,7 @@ func (s *DrawService) GetDrawWinners(ctx context.Context, drawID uuid.UUID) ([]D
 	var rows []winnerRow
 	s.db.WithContext(ctx).Raw(`
 		SELECT id, draw_id, msisdn, prize_type, prize_description, prize_amount, claim_status, created_at
-		FROM winners
+		FROM draw_winners
 		WHERE draw_id = ?
 		ORDER BY position ASC
 	`, drawID).Scan(&rows)

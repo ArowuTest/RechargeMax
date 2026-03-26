@@ -163,17 +163,29 @@ func (h *UserHandler) GetTransactions(c *gin.Context) {
 	// Calculate offset from page
 	offset := (pagination.Page - 1) * pagination.Limit
 
-	// Get transactions
+	// Get transactions and total count in parallel
 	transactions, err := h.userService.GetTransactions(c.Request.Context(), msisdn, pagination.Limit, offset)
 	if err != nil {
 		middleware.RespondWithError(c, err)
 		return
 	}
 
+	total, err := h.userService.CountTransactions(c.Request.Context(), msisdn)
+	if err != nil {
+		total = 0 // non-fatal: return data without total
+	}
+
+	totalPages := int64(0)
+	if pagination.Limit > 0 {
+		totalPages = (total + int64(pagination.Limit) - 1) / int64(pagination.Limit)
+	}
+
 	middleware.RespondWithSuccess(c, map[string]interface{}{
 		"transactions": transactions,
 		"page":         pagination.Page,
 		"limit":        pagination.Limit,
+		"total":        total,
+		"total_pages":  totalPages,
 	})
 }
 

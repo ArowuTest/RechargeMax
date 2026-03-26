@@ -261,6 +261,13 @@ func registerProtected(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *serv
 		winner.POST("/:id/claim", hdlrs.Winner.ClaimPrize)
 	}
 
+	// Draw entries for authenticated users — /draws/my-entries in the public group
+	// lacks auth middleware so msisdn is never set. Register a protected alias here.
+	drawsProtected := protected.Group("/draws")
+	{
+		drawsProtected.GET("/my-entries", hdlrs.Draw.GetMyEntries)
+	}
+
 	// Spin wheel (authenticated actions) — eligibility and history require JWT.
 	// /spin/play lives in registerPublic with OptionalAuth to allow guest spins.
 	spinProtected := protected.Group("/spin")

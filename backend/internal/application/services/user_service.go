@@ -401,6 +401,15 @@ func (s *UserService) GetTransactions(ctx context.Context, msisdn string, limit,
 	return transactions, nil
 }
 
+// CountTransactions returns the total number of transactions for a user
+func (s *UserService) CountTransactions(ctx context.Context, msisdn string) (int64, error) {
+	user, err := s.userRepo.FindByMSISDN(ctx, msisdn)
+	if err != nil {
+		return 0, fmt.Errorf("user not found: %w", err)
+	}
+	return s.transactionRepo.CountByUserID(ctx, user.ID)
+}
+
 // GetBankAccounts gets user bank accounts
 func (s *UserService) GetBankAccounts(ctx context.Context, msisdn string) ([]*entities.BankAccounts, error) {
 	user, err := s.userRepo.FindByMSISDN(ctx, msisdn)

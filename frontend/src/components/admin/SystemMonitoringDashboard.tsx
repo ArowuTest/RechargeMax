@@ -386,7 +386,7 @@ const SystemMonitoringDashboard: React.FC = () => {
                   <div>
                     <div className="flex justify-between text-sm mb-2">
                       <span>Current Usage</span>
-                      <span>{metrics?.server.cpu_usage}%</span>
+                      <span>{(metrics?.server.cpu_usage ?? 0).toFixed(1)}%</span>
                     </div>
                     <Progress value={metrics?.server.cpu_usage} className="h-2" />
                   </div>
@@ -406,7 +406,7 @@ const SystemMonitoringDashboard: React.FC = () => {
                   <div>
                     <div className="flex justify-between text-sm mb-2">
                       <span>Current Usage</span>
-                      <span>{metrics?.server.memory_usage}%</span>
+                      <span>{(metrics?.server.memory_usage ?? 0).toFixed(1)}%</span>
                     </div>
                     <Progress value={metrics?.server.memory_usage} className="h-2" />
                   </div>
@@ -426,7 +426,7 @@ const SystemMonitoringDashboard: React.FC = () => {
                   <div>
                     <div className="flex justify-between text-sm mb-2">
                       <span>Current Usage</span>
-                      <span>{metrics?.server.disk_usage}%</span>
+                      <span>{(metrics?.server.disk_usage ?? 0).toFixed(1)}%</span>
                     </div>
                     <Progress value={metrics?.server.disk_usage} className="h-2" />
                   </div>
@@ -442,7 +442,7 @@ const SystemMonitoringDashboard: React.FC = () => {
                 <div className="space-y-4">
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-600">Response Time</span>
-                    <span className="font-medium">{metrics?.server.response_time}ms</span>
+                    <span className="font-medium">{Math.round(metrics?.server.response_time ?? 0)}ms</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-600">Uptime</span>
@@ -485,7 +485,7 @@ const SystemMonitoringDashboard: React.FC = () => {
                 <div className="space-y-4">
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-600">Avg Query Time</span>
-                    <span className="font-medium">{metrics?.database.query_time}ms</span>
+                    <span className="font-medium">{Math.round(metrics?.database.query_time ?? 0)}ms</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-600">Slow Queries</span>

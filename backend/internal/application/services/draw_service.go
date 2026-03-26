@@ -806,16 +806,17 @@ func (s *DrawService) ProcessCSVEntries(ctx context.Context, drawID uuid.UUID, c
 		for i := 0; i < points; i++ {
 			now := time.Now()
 			entry := &entities.DrawEntries{
-				ID:        uuid.New(),
-				DrawID:    drawID,
-				MSISDN:    msisdn,
-				CreatedAt: &now,
+				ID:         uuid.New(),
+				DrawID:     drawID,
+				MSISDN:     msisdn,
+				SourceType: "MANUAL",
+				CreatedAt:  &now,
 			}
-			
+
 			if err := s.drawRepo.CreateEntry(ctx, entry); err != nil {
 				return entriesCreated, fmt.Errorf("failed to create entry for %s: %w", msisdn, err)
 			}
-			
+
 			entriesCreated++
 		}
 	}

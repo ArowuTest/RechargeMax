@@ -178,5 +178,5 @@ func (r *DrawRepositoryGORM) CountEntriesByUser(ctx context.Context, drawID uuid
 
 // CreateEntry creates a new draw entry
 func (r *DrawRepositoryGORM) CreateEntry(ctx context.Context, entry *entities.DrawEntries) error {
-	return r.db.WithContext(ctx).Create(entry).Error
+	return r.db.WithContext(ctx).Omit("updated_at").Create(entry).Error
 }

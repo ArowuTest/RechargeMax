@@ -832,7 +832,17 @@ func isValidNigerianMSISDN(msisdn string) bool {
 	// Must be 11 digits starting with 0, or 13 digits starting with 234
 	if len(msisdn) == 11 && msisdn[0] == '0' {
 		// Check if starts with valid prefix
-		validPrefixes := []string{"0803", "0806", "0810", "0813", "0814", "0816", "0903", "0906", "0913", "0916", "0805", "0807", "0811", "0815", "0905", "0915", "0802", "0808", "0812", "0902", "0904", "0907", "0912", "0701", "0708", "0809", "0817", "0818", "0909", "0908"}
+		validPrefixes := []string{
+			// MTN
+			"0803", "0806", "0810", "0813", "0814", "0816", "0903", "0906", "0913", "0916",
+			"0801", "0804", "0818", "0819", "0909",
+			// Airtel
+			"0802", "0808", "0812", "0701", "0708", "0902", "0907",
+			// Glo
+			"0805", "0807", "0811", "0815", "0905", "0915",
+			// 9mobile
+			"0809", "0817", "0818", "0909", "0908", "0904", "0912",
+		}
 		for _, vp := range validPrefixes {
 			if strings.HasPrefix(msisdn, vp) {
 				return true

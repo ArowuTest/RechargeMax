@@ -725,7 +725,16 @@ export const adminApi: any = {
       let url = `/admin/winners?page=${page}&per_page=${perPage}`;
       if (drawId) url += `&draw_id=${drawId}`;
       const response = await apiClient.get<ApiResponse<any[]>>(url);
-      return response.data;
+      const raw = response.data as any;
+      // Normalise fields
+      if (raw?.data && Array.isArray(raw.data)) {
+        raw.data = raw.data.map((w: any) => ({
+          ...w,
+          prize_value: w.prize_value ?? w.cash_amount ?? 0,
+          prize_name:  w.prize_name  ?? w.prize_description ?? w.prize_type ?? '',
+        }));
+      }
+      return raw;
     },
   },
 
@@ -1355,13 +1364,23 @@ export interface Winner {
 }
 
 export const winnerClaimApi: any = {
-  // Get all winners
+  // Get all winners — normalise API fields to frontend interface
   getAll: async (page = 1, perPage = 50, claimStatus?: string, prizeType?: string) => {
     let url = `/admin/winners?page=${page}&per_page=${perPage}`;
     if (claimStatus) url += `&claim_status=${claimStatus}`;
     if (prizeType) url += `&prize_type=${prizeType}`;
     const response = await apiClient.get<ApiResponse<PaginatedResponse<Winner>>>(url);
-    return response.data;
+    // Normalise: API returns cash_amount, frontend expects prize_value
+    const raw = response.data as any;
+    if (raw?.data && Array.isArray(raw.data)) {
+      raw.data = raw.data.map((w: any) => ({
+        ...w,
+        prize_value: w.prize_value ?? w.cash_amount ?? 0,
+        prize_name:  w.prize_name  ?? w.prize_description ?? w.prize_type ?? '',
+        draw_date:   w.draw_date   ?? w.created_at,
+      }));
+    }
+    return raw;
   },
 
   // Get winner by ID

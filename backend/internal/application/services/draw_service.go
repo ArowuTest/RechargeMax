@@ -103,7 +103,7 @@ func (s *DrawService) CreateDrawWithTemplate(
 	var totalPrizePool float64
 	var categories []entities.PrizeCategory
 	
-	err := s.db.Where("prize_template_id = ?", prizeTemplateID).Find(&categories).Error
+	err := s.db.Where("template_id = ?", prizeTemplateID).Find(&categories).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to get prize categories: %w", err)
 	}
@@ -650,7 +650,7 @@ func (s *DrawService) ExecuteDraw(ctx context.Context, drawID string) error {
 	}
 	
 	var prizeCategories []entities.PrizeCategory
-	if err := s.db.Where("prize_template_id = ?", *draw.PrizeTemplateID).
+	if err := s.db.Where("template_id = ?", *draw.PrizeTemplateID).
 		Order("display_order ASC").
 		Find(&prizeCategories).Error; err != nil {
 		return fmt.Errorf("failed to load prize categories: %w", err)

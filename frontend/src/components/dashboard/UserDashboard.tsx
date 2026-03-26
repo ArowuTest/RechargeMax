@@ -728,7 +728,7 @@ export const UserDashboard: React.FC = () => {
                         <p className="text-xs text-gray-500 mt-0.5">Total Points</p>
                       </div>
                       <div className="bg-white rounded-xl p-3 text-center shadow-sm">
-                        <p className="text-2xl font-extrabold text-amber-600">{dashboardData.total_entries ?? 0}</p>
+                        <p className="text-2xl font-extrabold text-amber-600">{dashboardData.summary?.total_subscription_entries ?? 0}</p>
                         <p className="text-xs text-gray-500 mt-0.5">Draw Entries</p>
                       </div>
                     </div>
@@ -1296,7 +1296,7 @@ export const UserDashboard: React.FC = () => {
                       <p className="text-xs text-gray-500 mt-0.5">Total Points</p>
                     </div>
                     <div className="bg-white rounded-xl p-3 text-center shadow-sm">
-                      <p className="text-2xl font-extrabold text-amber-600">{dashboardData.total_entries ?? 0}</p>
+                      <p className="text-2xl font-extrabold text-amber-600">{dashboardData.summary?.total_subscription_entries ?? 0}</p>
                       <p className="text-xs text-gray-500 mt-0.5">Draw Entries</p>
                     </div>
                   </div>

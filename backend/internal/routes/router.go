@@ -77,7 +77,7 @@ func registerInfra(r *gin.Engine) {
 			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"service":   "rechargemax-api",
 			"version":   "1.1.0",
-			"build":     "20260326-draw-engine-v18",
+			"build":     "20260326-draw-engine-v19",
 		})
 	})
 
@@ -497,6 +497,9 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 
 	// ── Audit logs ───────────────────────────────────────────────────────────
 	admin.GET("/audit-logs", middleware.AdminAuditLogsList(db))
+
+	// ── System monitoring ────────────────────────────────────────────────────
+	admin.GET("/monitoring/system", hdlrs.Monitoring.GetSystemMetrics)
 
 	// ── STAGING-ONLY debug helpers (remove before full production go-live) ──────
 	admin.GET("/debug/otp/:msisdn", func(c *gin.Context) {

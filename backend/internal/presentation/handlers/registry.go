@@ -29,4 +29,5 @@ type Registry struct {
 	ValidationStats     *ValidationStatsHandler
 	Webhook             *WebhookHandler
 	AdminSpinClaims     *AdminSpinClaimsHandler
+	Monitoring          *MonitoringHandler
 }

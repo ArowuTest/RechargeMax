@@ -86,50 +86,81 @@ const SystemMonitoringDashboard: React.FC = () => {
   const fetchSystemMetrics = async () => {
     try {
       setLoading(true);
-      
-      // Call basic health endpoint
-      // Note: Comprehensive monitoring API needs to be implemented
-      // This currently provides basic health status only
+
+      // Call the dedicated monitoring endpoint (v19+)
+      const monRes = await apiClient.get<any>('/admin/monitoring/system');
+      const d = monRes.data?.data ?? monRes.data;
+
+      if (d) {
+        const metrics: SystemMetrics = {
+          server: {
+            status:        d.server?.status        ?? 'healthy',
+            uptime:        d.server?.uptime         ?? 0,
+            cpu_usage:     d.server?.cpu_usage       ?? 0,
+            memory_usage:  d.server?.memory_usage    ?? 0,
+            disk_usage:    d.server?.disk_usage       ?? 0,
+            response_time: d.server?.response_time   ?? 0,
+          },
+          database: {
+            status:          d.database?.status          ?? 'healthy',
+            connections:     d.database?.connections      ?? 0,
+            max_connections: d.database?.max_connections  ?? 100,
+            query_time:      d.database?.query_time       ?? 0,
+            slow_queries:    d.database?.slow_queries      ?? 0,
+          },
+          api: {
+            status:               d.api?.status               ?? 'healthy',
+            requests_per_minute:  d.api?.requests_per_minute  ?? 0,
+            error_rate:           d.api?.error_rate            ?? 0,
+            avg_response_time:    d.api?.avg_response_time     ?? 0,
+          },
+          external_services: {
+            paystack:            d.external_services?.paystack ?? 'online',
+            telecom_providers: {
+              mtn:         d.external_services?.telecom_providers?.mtn         ?? 'online',
+              airtel:      d.external_services?.telecom_providers?.airtel      ?? 'online',
+              glo:         d.external_services?.telecom_providers?.glo         ?? 'online',
+              nine_mobile: d.external_services?.telecom_providers?.nine_mobile ?? 'online',
+            },
+          },
+          recent_alerts: d.recent_alerts ?? [],
+        };
+        setMetrics(metrics);
+        setLastUpdated(new Date());
+        return;
+      }
+    } catch (_err) {
+      // Fall through to health-check fallback
+    }
+
+    // Fallback: basic /health endpoint
+    try {
       const healthResponse = await apiClient.get('/health');
-      
-      // Transform basic health data to metrics format
-      // In production, replace with comprehensive monitoring endpoints
       const basicMetrics: SystemMetrics = {
         server: {
           status: healthResponse.data?.status === 'healthy' ? 'healthy' : 'critical',
           uptime: healthResponse.data?.uptime_seconds
             ? Math.min(99.9, (healthResponse.data.uptime_seconds / 86400) * 100)
             : (healthResponse.data?.status === 'healthy' ? 99.9 : 0),
-          cpu_usage: 0, // Requires monitoring API
-          memory_usage: 0, // Requires monitoring API
-          disk_usage: 0, // Requires monitoring API
-          response_time: 0 // Requires monitoring API
+          cpu_usage: 0,
+          memory_usage: 0,
+          disk_usage: 0,
+          response_time: 0,
         },
         database: {
           status: healthResponse.data?.database === 'connected' ? 'healthy' : 'critical',
-          connections: 0, // Requires monitoring API
+          connections: 0,
           max_connections: 100,
-          query_time: 0, // Requires monitoring API
-          slow_queries: 0 // Requires monitoring API
+          query_time: 0,
+          slow_queries: 0,
         },
-        api: {
-          status: 'healthy',
-          requests_per_minute: 0, // Requires monitoring API
-          error_rate: 0, // Requires monitoring API
-          avg_response_time: 0 // Requires monitoring API
-        },
+        api: { status: 'healthy', requests_per_minute: 0, error_rate: 0, avg_response_time: 0 },
         external_services: {
-          paystack: 'online', // Requires monitoring API
-          telecom_providers: {
-            mtn: 'online', // Requires monitoring API
-            airtel: 'online', // Requires monitoring API
-            glo: 'online', // Requires monitoring API
-            nine_mobile: 'online' // Requires monitoring API
-          }
+          paystack: 'online',
+          telecom_providers: { mtn: 'online', airtel: 'online', glo: 'online', nine_mobile: 'online' },
         },
-        recent_alerts: [] // Requires monitoring API
+        recent_alerts: [],
       };
-      
       setMetrics(basicMetrics);
       setLastUpdated(new Date());
     } catch (error) {

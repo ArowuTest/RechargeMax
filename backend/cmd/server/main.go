@@ -699,6 +699,7 @@ func initHandlers(svcs *services.Registry, repos *Repositories, appConfig *Confi
 		ValidationStats: handlers.NewValidationStatsHandler(svcs.ValidationStats),
 		Webhook: handlers.NewWebhookHandler(svcs.Webhook),
 		AdminSpinClaims: handlers.NewAdminSpinClaimsHandler(svcs.AdminSpinClaims),
+		Monitoring:      handlers.NewMonitoringHandler(db),
 	}
 }
 

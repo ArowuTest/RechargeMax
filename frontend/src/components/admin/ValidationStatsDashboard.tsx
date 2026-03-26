@@ -312,7 +312,7 @@ const ValidationStatsDashboard: React.FC = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {stats.by_network.map((item) => (
+                  {(stats.by_network ?? []).map((item) => (
                     <TableRow key={item.network}>
                       <TableCell className="font-medium">
                         <Badge variant="outline">{item.network}</Badge>
@@ -368,7 +368,7 @@ const ValidationStatsDashboard: React.FC = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {stats.mismatch_patterns.map((pattern, index) => (
+                  {(stats.mismatch_patterns ?? []).map((pattern, index) => (
                     <TableRow key={index}>
                       <TableCell>
                         <Badge variant="destructive">{pattern.selected_network}</Badge>
@@ -402,7 +402,7 @@ const ValidationStatsDashboard: React.FC = () => {
                   {stats.validation_sources.prefix_percentage > 70 ? 'Consider activating Termii HLR API for higher accuracy' : 'Good mix of validation sources'}
                 </li>
                 <li>
-                  Most common mismatches: {stats.mismatch_patterns[0]?.selected_network} → {stats.mismatch_patterns[0]?.actual_network} ({stats.mismatch_patterns[0]?.count} cases)
+                  Most common mismatches: {stats.mismatch_patterns?.[0]?.selected_network} → {stats.mismatch_patterns?.[0]?.actual_network} ({stats.mismatch_patterns?.[0]?.count} cases)
                 </li>
                 <li>
                   {stats.summary.mismatch_rate < 5 ? 'Mismatch rate is within acceptable range' : 'Consider improving user education on network selection'}

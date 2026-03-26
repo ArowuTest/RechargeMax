@@ -68,25 +68,27 @@ func NewAuthService(
 	return svc
 }
 
-// SendOTP sends an OTP to the user's phone number
-func (s *AuthService) SendOTP(ctx context.Context, msisdn string, purpose string) error {
+// SendOTP sends an OTP to the user's phone number.
+// Returns (plaintext_otp, error) — plaintext is non-empty only in non-production
+// environments so callers can surface it for debugging without reading server logs.
+func (s *AuthService) SendOTP(ctx context.Context, msisdn string, purpose string) (string, error) {
 	// Normalise MSISDN to canonical international format (2348XXXXXXXXX)
 	// This ensures OTPs are always stored and looked up using the same format
 	// regardless of whether the user supplied 08012345678, 2348012345678, or +2348012345678
 	normalizedMSISDN, err := validation.NormalizeMSISDN(msisdn)
 	if err != nil {
-		return errors.BadRequest("Invalid phone number format: " + err.Error())
+			return "", errors.BadRequest("Invalid phone number format: " + err.Error())
 	}
 
 	// Check rate limiting (max 3 OTPs per 10 minutes) — using normalised MSISDN
 	tenMinutesAgo := time.Now().Add(-10 * time.Minute)
 	recentCount, err := s.otpRepo.CountRecentOTPs(ctx, normalizedMSISDN, tenMinutesAgo)
 	if err != nil {
-		return fmt.Errorf("failed to check rate limit: %w", err)
+		return "", fmt.Errorf("failed to check rate limit: %w", err)
 	}
 
 	if recentCount >= 3 {
-		return errors.RateLimitExceeded().WithDetails(map[string]interface{}{
+		return "", errors.RateLimitExceeded().WithDetails(map[string]interface{}{
 			"message": "Too many OTP requests. Please wait 10 minutes before trying again.",
 		})
 	}
@@ -94,13 +96,13 @@ func (s *AuthService) SendOTP(ctx context.Context, msisdn string, purpose string
 	// Generate 6-digit OTP
 	otpCode, err := s.generateOTP()
 	if err != nil {
-		return fmt.Errorf("failed to generate OTP: %w", err)
+		return "", fmt.Errorf("failed to generate OTP: %w", err)
 	}
 
 	// Hash the OTP with bcrypt before storage (plaintext sent only via SMS)
 	otpHash, err := bcrypt.GenerateFromPassword([]byte(otpCode), bcrypt.DefaultCost)
 	if err != nil {
-		return fmt.Errorf("failed to hash OTP: %w", err)
+		return "", fmt.Errorf("failed to hash OTP: %w", err)
 	}
 
 	// Create OTP record — always stored with normalised international MSISDN
@@ -114,7 +116,7 @@ func (s *AuthService) SendOTP(ctx context.Context, msisdn string, purpose string
 	}
 
 	if err := s.otpRepo.Create(ctx, otp); err != nil {
-		return fmt.Errorf("failed to create OTP record: %w", err)
+		return "", fmt.Errorf("failed to create OTP record: %w", err)
 	}
 
 	// STAGING DEBUG: log OTP code so testers can login without real SMS delivery.
@@ -133,7 +135,12 @@ func (s *AuthService) SendOTP(ctx context.Context, msisdn string, purpose string
 		logger.Error("Failed to send SMS to", zap.Error(err), zap.String("msisdn", normalizedMSISDN))
 	}
 
-	return nil
+	// Return plaintext OTP in non-production so the handler can surface it in the API response
+	devCode := ""
+	if s.environment != "production" {
+		devCode = otpCode
+	}
+	return devCode, nil
 }
 
 // VerifyOTP verifies an OTP and returns authentication tokens and user info

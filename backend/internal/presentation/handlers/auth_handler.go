@@ -51,7 +51,8 @@ func (h *AuthHandler) SendOTP(c *gin.Context) {
 	if purpose == "" {
 		purpose = "login" // Default to login if not specified
 	}
-	if err := h.authService.SendOTP(c.Request.Context(), req.MSISDN, purpose); err != nil {
+	devCode, err := h.authService.SendOTP(c.Request.Context(), req.MSISDN, purpose)
+	if err != nil {
 		middleware.RespondWithError(c, err)
 		return
 	}
@@ -61,9 +62,14 @@ func (h *AuthHandler) SendOTP(c *gin.Context) {
 		"msisdn": req.MSISDN,
 	})
 
-	middleware.RespondWithSuccess(c, map[string]interface{}{
+	resp := map[string]interface{}{
 		"message": "OTP sent successfully",
-	})
+	}
+	// In non-production, include plaintext OTP so tests don't need to parse server logs.
+	if devCode != "" {
+		resp["dev_otp"] = devCode
+	}
+	middleware.RespondWithSuccess(c, resp)
 }
 
 // VerifyOTP godoc

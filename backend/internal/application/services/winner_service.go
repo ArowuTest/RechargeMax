@@ -733,8 +733,8 @@ func (s *WinnerService) GetWinnerByID(ctx context.Context, winnerID string, msis
 		return nil, fmt.Errorf("winner not found: %w", err)
 	}
 	
-	// Verify ownership (user can only see their own wins)
-	if winner.MSISDN != msisdn {
+	// Verify ownership only for user-facing calls (msisdn is empty for admin calls)
+	if msisdn != "" && winner.MSISDN != msisdn {
 		return nil, fmt.Errorf("unauthorized: winner does not belong to user")
 	}
 	

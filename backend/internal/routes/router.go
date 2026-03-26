@@ -176,7 +176,8 @@ func registerPublic(v1 *gin.RouterGroup, hdlrs *handlers.Registry, db *gorm.DB) 
 		subDailyPublic.GET("/history",                 hdlrs.Subscription.GetHistory)
 	}
 
-	// Draws (public browsing)
+	// Draws (public browsing — no auth required)
+	// NOTE: /my-entries requires auth and is registered in registerProtected only.
 	draws := v1.Group("/draws")
 	{
 		draws.GET("",             hdlrs.Draw.GetDraws)
@@ -184,7 +185,7 @@ func registerPublic(v1 *gin.RouterGroup, hdlrs *handlers.Registry, db *gorm.DB) 
 		draws.GET("/:id",         hdlrs.Draw.GetDrawByID)
 		draws.GET("/:id/winners", hdlrs.Draw.GetDrawWinners)
 		draws.GET("/:id/results", hdlrs.Draw.GetDrawWinners) // alias — frontend calls /results
-		draws.GET("/my-entries",  hdlrs.Draw.GetMyEntries)
+		// /my-entries intentionally omitted here — registered under protected group
 	}
 
 	// Spin wheel — public endpoints only (prizes list, tiers).

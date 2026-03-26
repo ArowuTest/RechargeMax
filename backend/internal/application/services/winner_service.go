@@ -1070,8 +1070,10 @@ func (s *WinnerService) RejectClaim(ctx context.Context, winnerID string, reason
 		return fmt.Errorf("winner not found: %w", err)
 	}
 	
-	// Update winner status to expired (rejected)
-	winner.ClaimStatus = "expired"
+	// Update winner status to REJECTED
+	winner.ClaimStatus = "REJECTED"
+	now := time.Now()
+	winner.ClaimedAt = &now   // record when rejection happened
 	if reason != "" {
 		winner.Notes = &reason
 	}

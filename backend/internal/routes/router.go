@@ -77,7 +77,7 @@ func registerInfra(r *gin.Engine) {
 			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"service":   "rechargemax-api",
 			"version":   "1.1.0",
-			"build":     "20260326-draw-engine-v15",
+			"build":     "20260326-draw-engine-v16",
 		})
 	})
 
@@ -441,6 +441,7 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	admin.GET("/users/:id/points-history",   hdlrs.AdminComprehensive.GetUserPointsHistory)
 
 	// ── Affiliate management ─────────────────────────────────────────────────
+	admin.GET("/affiliates",                       hdlrs.AdminComprehensive.GetAllAffiliates) // alias
 	admin.GET("/affiliates/all",                   hdlrs.AdminComprehensive.GetAllAffiliates)
 	admin.POST("/affiliates",                      hdlrs.AdminComprehensive.CreateAffiliate)
 	admin.PUT("/affiliates/:id",                   hdlrs.AdminComprehensive.UpdateAffiliate)

@@ -404,7 +404,10 @@ func (h *DrawHandler) GetDraws(c *gin.Context) {
 // @Failure 500 {object} errors.ErrorResponse
 // @Router /admin/draws/{draw_id}/upload-entries [post]
 func (h *DrawHandler) UploadDrawEntries(c *gin.Context) {
-	drawIDStr := c.Param("draw_id")
+	drawIDStr := c.Param("id")
+	if drawIDStr == "" {
+		drawIDStr = c.Param("draw_id")
+	}
 	drawID, err := uuid.Parse(drawIDStr)
 	if err != nil {
 		middleware.RespondWithError(c, errors.BadRequest("Invalid draw ID"))

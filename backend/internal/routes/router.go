@@ -77,7 +77,7 @@ func registerInfra(r *gin.Engine) {
 			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"service":   "rechargemax-api",
 			"version":   "1.1.0",
-			"build":     "20260326-draw-entries-fix-v9",
+			"build":     "20260326-draw-engine-v10",
 		})
 	})
 
@@ -309,9 +309,12 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 
 	// ── Draws ────────────────────────────────────────────────────────────────
 	admin.GET("/draws",                          hdlrs.Admin.GetDraws)
+	admin.GET("/draws/:id",                      hdlrs.Draw.GetDrawByID)
 	admin.POST("/draws",                         middleware.RequireRole("super_admin","admin"), hdlrs.Draw.CreateDraw)
 	admin.PUT("/draws/:id",                      middleware.RequireRole("super_admin","admin"), hdlrs.Draw.UpdateDraw)
 	admin.POST("/draws/:id/execute",             middleware.RequireRole("super_admin"), hdlrs.Draw.ExecuteDraw)
+	admin.POST("/draws/:id/upload-entries",      middleware.RequireRole("super_admin","admin"), hdlrs.Draw.UploadDrawEntries)
+	admin.GET("/draws/:id/winners",              hdlrs.Draw.GetDrawWinners)
 	admin.GET("/draws/:id/export",               hdlrs.Draw.ExportEntries)
 	admin.POST("/draws/:id/import-winners",      middleware.RequireRole("super_admin"), hdlrs.Draw.ImportWinners)
 	admin.GET("/draws/:id/csv/export",           hdlrs.AdminComprehensive.ExportDrawToCSV)

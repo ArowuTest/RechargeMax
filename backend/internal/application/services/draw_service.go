@@ -559,7 +559,14 @@ func (s *DrawService) UpdateDraw(ctx context.Context, drawID string, updates map
 	if runnerUpsCount, ok := updates["runner_ups_count"].(float64); ok {
 		draw.RunnerUpsCount = int(runnerUpsCount)
 	}
-	
+
+	if prizeTemplateIDStr, ok := updates["prize_template_id"].(string); ok && prizeTemplateIDStr != "" {
+		ptid, err := uuid.Parse(prizeTemplateIDStr)
+		if err == nil {
+			draw.PrizeTemplateID = &ptid
+		}
+	}
+
 	// Save updated draw - use UpdateStatus for status-only updates to avoid draw_code unique constraint issues
 	if len(updates) == 1 {
 		if status, ok := updates["status"].(string); ok {
@@ -579,6 +586,7 @@ func (s *DrawService) UpdateDraw(ctx context.Context, drawID string, updates map
 	if _, ok := updates["prize_pool"]; ok { updateMap["prize_pool"] = draw.PrizePool }
 	if _, ok := updates["winners_count"]; ok { updateMap["winners_count"] = draw.WinnersCount }
 	if _, ok := updates["runner_ups_count"]; ok { updateMap["runner_ups_count"] = draw.RunnerUpsCount }
+	if _, ok := updates["prize_template_id"]; ok { updateMap["prize_template_id"] = draw.PrizeTemplateID }
 	if len(updateMap) > 0 {
 		if err := s.db.Model(draw).Updates(updateMap).Error; err != nil {
 			return nil, fmt.Errorf("failed to update draw: %w", err)
@@ -611,8 +619,12 @@ func (s *DrawService) ExecuteDraw(ctx context.Context, drawID string) error {
 		return fmt.Errorf("draw has been cancelled")
 	}
 	
-	// Check if draw has entries
-	if draw.TotalEntries == 0 {
+	// Check if draw has entries — query live count from draw_entries table
+	var entryCount int64
+	if err := s.db.Table("draw_entries").Where("draw_id = ?", did).Count(&entryCount).Error; err != nil {
+		return fmt.Errorf("failed to count draw entries: %w", err)
+	}
+	if entryCount == 0 {
 		return fmt.Errorf("no entries found for this draw")
 	}
 	

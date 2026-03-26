@@ -1386,7 +1386,16 @@ export const winnerClaimApi: any = {
   // Get winner by ID
   getById: async (winnerId: string) => {
     const response = await apiClient.get<ApiResponse<Winner>>(`/admin/winners/${winnerId}`);
-    return response.data;
+    const data = response.data;
+    // Normalize fields to match Winner interface
+    if (data && (data as any).data) {
+      const w = (data as any).data;
+      if (w.cash_amount !== undefined && w.prize_value === undefined) w.prize_value = w.cash_amount;
+      if (w.prize_description !== undefined && w.prize_name === undefined) w.prize_name = w.prize_description;
+      if (w.created_at !== undefined && w.draw_date === undefined) w.draw_date = w.created_at;
+      if (w.claim !== undefined && w.claim_status === undefined) w.claim_status = w.claim;
+    }
+    return data;
   },
 
   // Approve claim

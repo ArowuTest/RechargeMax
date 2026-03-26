@@ -59,11 +59,16 @@ interface DrawEntry {
 interface DrawWinner {
   id: string;
   draw_id: string;
-  user_phone: string;
-  prize_amount: number;
+  msisdn: string;
+  user_phone?: string;  // alias
+  cash_amount: number;
+  prize_amount?: number; // alias
+  prize_type: string;
   position: number;
-  claimed: boolean;
+  claim_status: string;
+  claimed?: boolean;    // alias
   claimed_at?: string;
+  won_at?: string;
 }
 
 const DrawIntegrationDashboard: React.FC = () => {
@@ -115,11 +120,14 @@ const DrawIntegrationDashboard: React.FC = () => {
       const drawsResponse = await adminApi.draws.getAll();
       setDraws(drawsResponse.data || []);
       
-      // Fetch entries and winners for active draws
-      // Note: These endpoints may need to be added to the backend
-      // For now, initialize as empty arrays
+      // Fetch winners from all completed draws
+      try {
+        const winnersResponse = await adminApi.winners.getAll(1, 100);
+        setWinners(winnersResponse.data || []);
+      } catch {
+        setWinners([]);
+      }
       setEntries([]);
-      setWinners([]);
     } catch (error: any) {
       console.error('Failed to fetch draw data:', error);
       toast({
@@ -801,7 +809,7 @@ const DrawIntegrationDashboard: React.FC = () => {
                         <TableRow key={winner.id}>
                           <TableCell>
                             <code className="text-sm bg-gray-100 px-2 py-1 rounded">
-                              {winner.user_phone}
+                              {winner.msisdn || winner.user_phone}
                             </code>
                           </TableCell>
                           <TableCell>{draw?.name || 'Unknown Draw'}</TableCell>
@@ -811,11 +819,11 @@ const DrawIntegrationDashboard: React.FC = () => {
                             </Badge>
                           </TableCell>
                           <TableCell className="font-medium">
-                            {formatCurrency(winner.prize_amount)}
+                            {formatCurrency(winner.cash_amount || winner.prize_amount || 0)}
                           </TableCell>
                           <TableCell>
-                            <Badge variant={winner.claimed ? 'default' : 'destructive'}>
-                              {winner.claimed ? 'Claimed' : 'Pending'}
+                            <Badge variant={winner.claim_status === 'CLAIMED' || winner.claimed ? 'default' : 'destructive'}>
+                              {winner.claim_status || (winner.claimed ? 'Claimed' : 'Pending')}
                             </Badge>
                           </TableCell>
                           <TableCell>

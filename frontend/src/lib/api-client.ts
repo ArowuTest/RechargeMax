@@ -719,6 +719,16 @@ export const adminApi: any = {
     },
   },
 
+  // Winners management
+  winners: {
+    getAll: async (page = 1, perPage = 100, drawId?: string) => {
+      let url = `/admin/winners?page=${page}&per_page=${perPage}`;
+      if (drawId) url += `&draw_id=${drawId}`;
+      const response = await apiClient.get<ApiResponse<any[]>>(url);
+      return response.data;
+    },
+  },
+
   // Analytics
   analytics: {
     getOverview: async () => {

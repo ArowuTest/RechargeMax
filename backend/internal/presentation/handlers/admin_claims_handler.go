@@ -44,14 +44,8 @@ func (h *AdminComprehensiveHandler) ApproveWinnerClaim(c *gin.Context) {
 	var req struct {
 		Notes string `json:"notes"`
 	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"error":   err.Error(),
-		})
-		return
-	}
+	// Notes is optional — ignore EOF/empty body
+	_ = c.ShouldBindJSON(&req)
 
 	ctx := c.Request.Context()
 

@@ -27,7 +27,6 @@ func (r *WinnerRepositoryGORM) Create(ctx context.Context, entity *entities.Winn
 func (r *WinnerRepositoryGORM) FindByID(ctx context.Context, id uuid.UUID) (*entities.Winner, error) {
 	var entity entities.Winner
 	err := r.db.WithContext(ctx).
-		Preload("Draw").
 		First(&entity, "id = ?", id).Error
 	if err != nil {
 		return nil, err

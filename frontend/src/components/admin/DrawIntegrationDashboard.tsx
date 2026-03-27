@@ -123,8 +123,16 @@ const DrawIntegrationDashboard: React.FC = () => {
       // Fetch winners from all completed draws
       try {
         const winnersResponse = await adminApi.winners.getAll(1, 100);
-        setWinners(winnersResponse.data || []);
-      } catch {
+        // API returns { data: [...], pagination: {...}, success: true }
+        // winnersResponse IS the full body (not an axios response wrapper)
+        const winList = Array.isArray(winnersResponse?.data)
+          ? winnersResponse.data
+          : Array.isArray(winnersResponse)
+            ? winnersResponse
+            : [];
+        setWinners(winList);
+      } catch (winnersErr) {
+        console.error('Draw winners fetch failed:', winnersErr);
         setWinners([]);
       }
       setEntries([]);

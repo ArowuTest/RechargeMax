@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"runtime"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -165,7 +166,7 @@ func (h *MonitoringHandler) GetSystemMetrics(c *gin.Context) {
 				"cpu_usage":     float64(runtime.NumGoroutine()) / 100 * 10, // goroutine pressure proxy
 				"memory_usage":  memPct,
 				"memory_used_mb": memUsedMB,
-				"disk_usage":    0, // not available without OS call
+				"disk_usage":    getDiskUsagePct("/"),
 				"response_time": apiResponseMs,
 				"goroutines":    runtime.NumGoroutine(),
 				"go_version":    runtime.Version(),
@@ -202,4 +203,20 @@ func (h *MonitoringHandler) GetSystemMetrics(c *gin.Context) {
 			"timestamp":     time.Now().Format(time.RFC3339),
 		},
 	})
+}
+
+// getDiskUsagePct returns the percentage of disk space used on the given path.
+// Uses syscall.Statfs which is available on Linux (Render's runtime).
+func getDiskUsagePct(path string) float64 {
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs(path, &stat); err != nil {
+		return 0
+	}
+	total := stat.Blocks * uint64(stat.Bsize)
+	free  := stat.Bfree  * uint64(stat.Bsize)
+	if total == 0 {
+		return 0
+	}
+	used := total - free
+	return float64(used) / float64(total) * 100
 }

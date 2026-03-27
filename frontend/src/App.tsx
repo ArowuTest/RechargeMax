@@ -42,6 +42,8 @@ const ValidationStatsDashboard      = lazy(() => import("./components/admin/Vali
 const SpinTiersManagement           = lazy(() => import("./components/admin/SpinTiersManagement"));
 const PrizeFulfillmentConfig        = lazy(() => import("./components/admin/PrizeFulfillmentConfig"));
 const NetworkManagementPage          = lazy(() => import("./components/admin/NetworkManagementPage"));
+const WinnersPage                    = lazy(() => import("./pages/WinnersPage"));
+const WinnerDetailPage               = lazy(() => import("./pages/WinnerDetailPage"));
 
 const queryClient = new QueryClient();
 
@@ -65,6 +67,8 @@ function App() {
                   <Route path="/affiliate" element={<AffiliatePage />} />
                   <Route path="/affiliate/dashboard" element={<AffiliateDashboard />} />
                   <Route path="/subscription" element={<DailySubscriptionPage />} />
+                  <Route path="/winners" element={<WinnersPage />} />
+                  <Route path="/winners/:id" element={<WinnerDetailPage />} />
                   <Route path="/profile" element={<UserProfile />} />
 
                   {/* Admin Routes */}

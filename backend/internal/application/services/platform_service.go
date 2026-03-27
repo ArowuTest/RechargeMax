@@ -99,3 +99,108 @@ func (s *PlatformService) GetRecentWinners(ctx context.Context, limit int) ([]Re
 		Scan(&winners).Error
 	return winners, err
 }
+
+// PublicWinner is the public-facing winner record (no sensitive MSISDN).
+type PublicWinner struct {
+	ID               string    `json:"id"`
+	DrawID           string    `json:"draw_id"`
+	DrawName         string    `json:"draw_name"`
+	DrawType         string    `json:"draw_type"`
+	MaskedMSISDN     string    `json:"masked_msisdn"`
+	Position         int       `json:"position"`
+	PrizeType        string    `json:"prize_type"`
+	PrizeDescription string    `json:"prize_description"`
+	PrizeAmount      int64     `json:"prize_amount"` // kobo
+	ClaimStatus      string    `json:"claim_status"`
+	WonAt            time.Time `json:"won_at"`
+}
+
+// GetPublicWinners returns a paginated list of winners for the public wall.
+func (s *PlatformService) GetPublicWinners(ctx context.Context, page, limit int) ([]PublicWinner, int64, error) {
+	if page < 1 { page = 1 }
+	if limit < 1 || limit > 100 { limit = 20 }
+	offset := (page - 1) * limit
+
+	var total int64
+	s.db.WithContext(ctx).Table("draw_winners").Count(&total)
+
+	rows, err := s.db.WithContext(ctx).Raw(`
+		SELECT
+			dw.id,
+			dw.draw_id,
+			COALESCE(d.name, 'Prize Draw')   AS draw_name,
+			COALESCE(d.type, 'DAILY')         AS draw_type,
+			dw.msisdn,
+			dw.position,
+			dw.prize_type,
+			dw.prize_description,
+			COALESCE(dw.prize_amount, 0)      AS prize_amount,
+			dw.claim_status,
+			dw.created_at                     AS won_at
+		FROM draw_winners dw
+		LEFT JOIN draws d ON d.id = dw.draw_id
+		ORDER BY dw.created_at DESC
+		LIMIT ? OFFSET ?
+	`, limit, offset).Rows()
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var winners []PublicWinner
+	for rows.Next() {
+		var w PublicWinner
+		var msisdn string
+		if err := rows.Scan(&w.ID, &w.DrawID, &w.DrawName, &w.DrawType,
+			&msisdn, &w.Position, &w.PrizeType, &w.PrizeDescription,
+			&w.PrizeAmount, &w.ClaimStatus, &w.WonAt); err != nil {
+			continue
+		}
+		// mask: show first 4 + last 2 digits
+		if len(msisdn) >= 6 {
+			w.MaskedMSISDN = msisdn[:4] + "****" + msisdn[len(msisdn)-2:]
+		} else {
+			w.MaskedMSISDN = "****"
+		}
+		winners = append(winners, w)
+	}
+	if winners == nil {
+		winners = []PublicWinner{}
+	}
+	return winners, total, nil
+}
+
+// GetPublicWinnerByID returns a single winner record (public, masked).
+func (s *PlatformService) GetPublicWinnerByID(ctx context.Context, id string) (*PublicWinner, error) {
+	row := s.db.WithContext(ctx).Raw(`
+		SELECT
+			dw.id,
+			dw.draw_id,
+			COALESCE(d.name, 'Prize Draw')   AS draw_name,
+			COALESCE(d.type, 'DAILY')         AS draw_type,
+			dw.msisdn,
+			dw.position,
+			dw.prize_type,
+			dw.prize_description,
+			COALESCE(dw.prize_amount, 0)      AS prize_amount,
+			dw.claim_status,
+			dw.created_at                     AS won_at
+		FROM draw_winners dw
+		LEFT JOIN draws d ON d.id = dw.draw_id
+		WHERE dw.id = ?
+	`, id).Row()
+
+	var w PublicWinner
+	var msisdn string
+	if err := row.Scan(&w.ID, &w.DrawID, &w.DrawName, &w.DrawType,
+		&msisdn, &w.Position, &w.PrizeType, &w.PrizeDescription,
+		&w.PrizeAmount, &w.ClaimStatus, &w.WonAt); err != nil {
+		return nil, err
+	}
+	if len(msisdn) >= 6 {
+		w.MaskedMSISDN = msisdn[:4] + "****" + msisdn[len(msisdn)-2:]
+	} else {
+		w.MaskedMSISDN = "****"
+	}
+	return &w, nil
+}

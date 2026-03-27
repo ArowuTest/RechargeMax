@@ -6,7 +6,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Menu, X, User, LogOut, Smartphone, Trophy,
-  Users, Gift, Home, LayoutDashboard, Zap, ChevronRight,
+  Users, Gift, Home, LayoutDashboard, Zap, ChevronRight, Award,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -14,7 +14,8 @@ const NAV_ITEMS = [
   { path: '/recharge',     label: 'Recharge',    icon: Smartphone },
   { path: '/subscription', label: 'Daily ₦20',   icon: Gift },
   { path: '/draws',        label: 'Prize Draws',  icon: Trophy },
-  { path: '/affiliate',    label: 'Affiliate',   icon: Users },
+  { path: '/winners',      label: 'Winners',      icon: Award },
+  { path: '/affiliate',    label: 'Affiliate',    icon: Users },
 ];
 
 const TIER_STYLES: Record<string, string> = {

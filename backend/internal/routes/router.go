@@ -145,6 +145,8 @@ func registerPublic(v1 *gin.RouterGroup, hdlrs *handlers.Registry, db *gorm.DB) 
 	// Platform statistics (public homepage data)
 	v1.GET("/platform/statistics", hdlrs.Platform.GetStatistics)
 	v1.GET("/winners/recent",       hdlrs.Platform.GetRecentWinners)
+	v1.GET("/winners",              hdlrs.Platform.GetPublicWinners)
+	v1.GET("/winners/:id",          hdlrs.Platform.GetPublicWinnerByID)
 
 	// Affiliate click tracking — public (fires when anyone visits a referral link,
 	// including unauthenticated guests). No CSRF risk: no session mutation.

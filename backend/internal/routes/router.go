@@ -441,6 +441,7 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	admin.POST("/users/:id/suspend",         middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.SuspendUser)
 	admin.POST("/users/:id/activate",        hdlrs.AdminComprehensive.ActivateUser)
 	admin.GET("/users/:id/points-history",   hdlrs.AdminComprehensive.GetUserPointsHistory)
+	admin.POST("/users/:id/adjust-points",   middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.AdjustUserPointsByID)
 
 	// ── Affiliate management ─────────────────────────────────────────────────
 	admin.GET("/affiliates",                       hdlrs.AdminComprehensive.GetAllAffiliates) // alias

@@ -21,7 +21,7 @@ interface PrizeCategory {
 interface PrizeTemplate {
   id?: number;
   name: string;
-  draw_type_id: number;
+  draw_type_id: string;
   description: string;
   is_default: boolean;
   is_active: boolean;
@@ -43,7 +43,7 @@ const PrizeTemplateManagement: React.FC = () => {
   // Form state
   const [formData, setFormData] = useState<PrizeTemplate>({
     name: '',
-    draw_type_id: 0,
+    draw_type_id: '',
     description: '',
     is_default: false,
     is_active: true,
@@ -105,7 +105,7 @@ const PrizeTemplateManagement: React.FC = () => {
   };
 
   const handleCreateTemplate = async () => {
-    if (!formData.name || !formData.draw_type_id || formData.categories!.length === 0) {
+    if (!formData.name || !formData.draw_type_id || formData.draw_type_id.length < 10 || formData.categories!.length === 0) {
       setError('Please fill in all required fields and add at least one category');
       return;
     }
@@ -251,7 +251,7 @@ const PrizeTemplateManagement: React.FC = () => {
   const resetForm = () => {
     setFormData({
       name: '',
-      draw_type_id: 0,
+      draw_type_id: '',
       description: '',
       is_default: false,
       is_active: true,
@@ -291,8 +291,8 @@ const PrizeTemplateManagement: React.FC = () => {
     return categories.reduce((sum, cat) => sum + (cat.prize_amount * cat.winner_count), 0);
   };
 
-  const getDrawTypeName = (drawTypeId: number) => {
-    const drawType = drawTypes.find(dt => dt.id === drawTypeId);
+  const getDrawTypeName = (drawTypeId: string) => {
+    const drawType = drawTypes.find(dt => String(dt.id) === String(drawTypeId));
     return drawType?.name || 'Unknown';
   };
 
@@ -346,10 +346,10 @@ const PrizeTemplateManagement: React.FC = () => {
               <label className="block text-sm font-medium mb-2">Draw Type *</label>
               <select
                 value={formData.draw_type_id}
-                onChange={(e) => setFormData({ ...formData, draw_type_id: parseInt(e.target.value) })}
+                onChange={(e) => setFormData({ ...formData, draw_type_id: e.target.value })}
                 className="w-full border rounded px-3 py-2"
               >
-                <option value={0}>Select Draw Type</option>
+                <option value="">Select Draw Type</option>
                 {drawTypes.map(dt => (
                   <option key={dt.id} value={dt.id}>{dt.name}</option>
                 ))}

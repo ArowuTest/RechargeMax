@@ -61,6 +61,7 @@ export const AuditLogTab: React.FC = () => {
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(false);
   const [actionFilter, setActionFilter] = useState('');
+  const [entityFilter, setEntityFilter] = useState('');
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
@@ -70,6 +71,7 @@ export const AuditLogTab: React.FC = () => {
         offset: String(page * PAGE_SIZE),
       });
       if (actionFilter.trim()) params.set('action', actionFilter.trim());
+      if (entityFilter.trim()) params.set('entity_type', entityFilter.trim());
 
       const res = await apiClient.get<{ success: boolean; data?: { logs: typeof logs; total: number }; message?: string }>(`/admin/audit-logs?${params}`);
       const data = res.data;
@@ -96,7 +98,7 @@ export const AuditLogTab: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, actionFilter, toast]);
+  }, [page, actionFilter, entityFilter, toast]);
 
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
@@ -115,11 +117,17 @@ export const AuditLogTab: React.FC = () => {
       </CardHeader>
       <CardContent>
         {/* Toolbar */}
-        <div className="flex gap-2 mb-4">
+        <div className="flex flex-wrap gap-2 mb-4">
           <Input
-            placeholder="Filter by action (e.g. UPDATE:settings)…"
+            placeholder="Action filter (e.g. draws, UPDATE, CREATE:settings)…"
             value={actionFilter}
             onChange={e => { setActionFilter(e.target.value); setPage(0); }}
+            className="max-w-xs"
+          />
+          <Input
+            placeholder="Entity type (e.g. winners, users, settings)…"
+            value={entityFilter}
+            onChange={e => { setEntityFilter(e.target.value); setPage(0); }}
             className="max-w-xs"
           />
           <Button variant="outline" size="sm" onClick={fetchLogs} disabled={loading}>

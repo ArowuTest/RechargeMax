@@ -375,3 +375,50 @@ func (h *AdminComprehensiveHandler) GetDrawExportHistory(c *gin.Context) {
 		"data":    rows,
 	})
 }
+
+// AdjustUserPointsByID adjusts points for the user identified by the :id URL param.
+// This is a convenience wrapper around AdjustUserPoints for per-user API calls.
+func (h *AdminComprehensiveHandler) AdjustUserPointsByID(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	userIDStr := c.Param("id")
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid user ID"})
+		return
+	}
+
+	var req struct {
+		Points      int    `json:"points" binding:"required"`
+		Reason      string `json:"reason" binding:"required"`
+		Description string `json:"description"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+
+	adminIDRaw, exists := c.Get("admin_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": "Admin authentication required"})
+		return
+	}
+	adminID, parseErr := uuid.Parse(fmt.Sprintf("%v", adminIDRaw))
+	if parseErr != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Invalid admin ID format"})
+		return
+	}
+
+	if err := h.pointsService.AdjustUserPoints(ctx, userID, req.Points, req.Reason, req.Description, adminID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to adjust user points: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "User points adjusted successfully",
+	})
+}

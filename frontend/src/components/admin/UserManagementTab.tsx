@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/useToast';
-import { Users, Search, RefreshCw, ShieldBan, ShieldCheck, Edit3, Eye } from 'lucide-react';
+import { Users, Search, RefreshCw, ShieldBan, ShieldCheck, Edit3, Coins } from 'lucide-react';
 
 
 
@@ -94,6 +94,13 @@ export const UserManagementTab: React.FC = () => {
   const [editTier, setEditTier] = useState('');
   const [editSaving, setEditSaving] = useState(false);
 
+  // Adjust Points dialog state
+  const [adjustUser, setAdjustUser] = useState<User | null>(null);
+  const [adjustPoints, setAdjustPoints] = useState('');
+  const [adjustReason, setAdjustReason] = useState('');
+  const [adjustDesc, setAdjustDesc] = useState('');
+  const [adjustSaving, setAdjustSaving] = useState(false);
+
   const fetchUsers = useCallback(async (page = 1, q = '') => {
     setLoading(true);
     try {
@@ -165,6 +172,39 @@ export const UserManagementTab: React.FC = () => {
       toast({ title: 'Error', description: e.message ?? 'Update failed', variant: 'destructive' });
     } finally {
       setEditSaving(false);
+    }
+  };
+
+  const handleAdjustPoints = async () => {
+    if (!adjustUser) return;
+    const pts = parseInt(adjustPoints, 10);
+    if (isNaN(pts) || pts === 0) {
+      toast({ title: 'Validation', description: 'Enter a non-zero integer (positive to add, negative to deduct)', variant: 'destructive' });
+      return;
+    }
+    if (!adjustReason.trim()) {
+      toast({ title: 'Validation', description: 'Reason is required', variant: 'destructive' });
+      return;
+    }
+    setAdjustSaving(true);
+    try {
+      const res = await apiClient.post(`/admin/users/${adjustUser.id}/adjust-points`, {
+        points: pts,
+        reason: adjustReason.trim(),
+        description: adjustDesc.trim(),
+      });
+      const data = res.data;
+      if (!data.success) throw new Error(data.message ?? data.error ?? 'Failed');
+      toast({ title: 'Points adjusted', description: `${pts > 0 ? '+' : ''}${pts} points for ${adjustUser.msisdn}` });
+      setAdjustUser(null);
+      setAdjustPoints('');
+      setAdjustReason('');
+      setAdjustDesc('');
+      fetchUsers(currentPage, search);
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message ?? 'Failed to adjust points', variant: 'destructive' });
+    } finally {
+      setAdjustSaving(false);
     }
   };
 
@@ -274,6 +314,12 @@ export const UserManagementTab: React.FC = () => {
                           >
                             <Edit3 className="w-3 h-3" />
                           </Button>
+                          <Button
+                            size="sm" variant="outline" title="Adjust points"
+                            onClick={() => { setAdjustUser(u); setAdjustPoints(''); setAdjustReason(''); setAdjustDesc(''); }}
+                          >
+                            <Coins className="w-3 h-3" />
+                          </Button>
                           {st === 'active' ? (
                             <Button
                               size="sm" variant="destructive" title="Suspend user"
@@ -363,6 +409,57 @@ export const UserManagementTab: React.FC = () => {
             <Button variant="outline" onClick={() => setEditUser(null)}>Cancel</Button>
             <Button onClick={saveEdit} disabled={editSaving}>
               {editSaving ? 'Saving…' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Adjust Points dialog */}
+      <Dialog open={!!adjustUser} onOpenChange={open => !open && setAdjustUser(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Coins className="w-4 h-4" />
+              Adjust Points
+            </DialogTitle>
+            <DialogDescription>
+              {adjustUser ? `${userDisplayName(adjustUser)} · ${adjustUser.msisdn}` : ''}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div>
+              <label className="text-sm font-medium mb-1 block">Points *</label>
+              <Input
+                type="number"
+                placeholder="+50 to add, -20 to deduct"
+                value={adjustPoints}
+                onChange={e => setAdjustPoints(e.target.value)}
+              />
+              <p className="text-xs text-gray-400 mt-1">Use positive numbers to add, negative to deduct.</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Reason *</label>
+              <Input
+                placeholder="e.g. Loyalty bonus, Manual correction"
+                value={adjustReason}
+                onChange={e => setAdjustReason(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Description (optional)</label>
+              <Input
+                placeholder="Additional notes…"
+                value={adjustDesc}
+                onChange={e => setAdjustDesc(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAdjustUser(null)}>Cancel</Button>
+            <Button onClick={handleAdjustPoints} disabled={adjustSaving}>
+              {adjustSaving ? 'Saving…' : 'Apply Adjustment'}
             </Button>
           </DialogFooter>
         </DialogContent>

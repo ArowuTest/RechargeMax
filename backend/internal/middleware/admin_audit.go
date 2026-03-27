@@ -89,13 +89,27 @@ func AdminAuditLogsList(db *gorm.DB) gin.HandlerFunc {
 		}
 		query := db.Order("created_at DESC").Limit(limit).Offset(offset)
 		if action := c.Query("action"); action != "" {
-			query = query.Where("action = ?", action)
+			// Support partial / case-insensitive matching so "draws" hits "CREATE:draws"
+			query = query.Where("action ILIKE ?", "%"+action+"%")
+		}
+		if entityType := c.Query("entity_type"); entityType != "" {
+			query = query.Where("entity_type ILIKE ?", "%"+entityType+"%")
 		}
 		if adminID := c.Query("admin_id"); adminID != "" {
 			query = query.Where("admin_user_id::text = ?", adminID)
 		}
+		countQuery := db.Model(&auditLogEntry{})
+		if action := c.Query("action"); action != "" {
+			countQuery = countQuery.Where("action ILIKE ?", "%"+action+"%")
+		}
+		if entityType := c.Query("entity_type"); entityType != "" {
+			countQuery = countQuery.Where("entity_type ILIKE ?", "%"+entityType+"%")
+		}
+		if adminID := c.Query("admin_id"); adminID != "" {
+			countQuery = countQuery.Where("admin_user_id::text = ?", adminID)
+		}
 		var total int64
-		db.Model(&auditLogEntry{}).Count(&total)
+		countQuery.Count(&total)
 		query.Find(&logs)
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,

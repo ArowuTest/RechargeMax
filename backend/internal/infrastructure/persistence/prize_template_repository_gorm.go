@@ -1,6 +1,8 @@
 package persistence
 
 import (
+	"strings"
+
 	"rechargemax/internal/domain/entities"
 
 	"github.com/google/uuid"
@@ -16,7 +18,20 @@ func NewPrizeTemplateRepositoryGORM(db *gorm.DB) *PrizeTemplateRepositoryGORM {
 }
 
 func (r *PrizeTemplateRepositoryGORM) Create(template *entities.PrizeTemplate) error {
-	return r.db.Create(template).Error
+	err := r.db.Create(template).Error
+	if err != nil && strings.Contains(err.Error(), "is_default") {
+		// Column may not exist yet (pending migration); retry without it
+		return r.db.Omit("is_default").Create(template).Error
+	}
+	return err
+}
+
+func (r *PrizeTemplateRepositoryGORM) Update(template *entities.PrizeTemplate) error {
+	err := r.db.Save(template).Error
+	if err != nil && strings.Contains(err.Error(), "is_default") {
+		return r.db.Omit("is_default").Save(template).Error
+	}
+	return err
 }
 
 func (r *PrizeTemplateRepositoryGORM) FindByID(id uuid.UUID) (*entities.PrizeTemplate, error) {
@@ -38,10 +53,6 @@ func (r *PrizeTemplateRepositoryGORM) FindByDrawTypeID(drawTypeID uuid.UUID) ([]
 	var templates []entities.PrizeTemplate
 	err := r.db.Where("draw_type_id = ?", drawTypeID).Preload("PrizeCategories").Find(&templates).Error
 	return templates, err
-}
-
-func (r *PrizeTemplateRepositoryGORM) Update(template *entities.PrizeTemplate) error {
-	return r.db.Save(template).Error
 }
 
 func (r *PrizeTemplateRepositoryGORM) Delete(id uuid.UUID) error {

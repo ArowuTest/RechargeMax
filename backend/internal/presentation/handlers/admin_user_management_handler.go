@@ -202,7 +202,7 @@ func (h *AdminUserManagementHandler) CreateAdmin(c *gin.Context) {
 	if err := h.adminRepo.Create(ctx, admin); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
-			"error":   "Failed to create admin user",
+			"error":   "Failed to create admin user: " + err.Error(),
 		})
 		return
 	}

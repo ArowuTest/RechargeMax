@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"math/rand"
 	"net/http"
 	"strconv"
@@ -8,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/datatypes"
 	"rechargemax/internal/domain/entities"
 	"rechargemax/internal/domain/repositories"
 )
@@ -173,6 +175,19 @@ func (h *AdminUserManagementHandler) CreateAdmin(c *gin.Context) {
 		isActive = *req.IsActive
 	}
 
+	// Build permissions — use provided list or fall back to role-based defaults
+	permsByRole := map[string][]string{
+		"SUPER_ADMIN": {"view_analytics", "manage_users", "manage_transactions", "manage_networks", "manage_prizes", "manage_affiliates", "manage_settings", "manage_admins", "view_monitoring", "manage_draws"},
+		"ADMIN":       {"view_analytics", "manage_users", "manage_transactions", "manage_networks", "manage_prizes", "manage_affiliates", "view_monitoring", "manage_draws"},
+		"MODERATOR":   {"view_analytics", "manage_users", "manage_transactions", "view_monitoring"},
+		"VIEWER":      {"view_analytics", "view_monitoring"},
+	}
+	permsToUse := req.Permissions
+	if len(permsToUse) == 0 {
+		permsToUse = permsByRole[req.Role]
+	}
+	permsJSON, _ := json.Marshal(permsToUse)
+
 	// Create admin user
 	admin := &entities.AdminUsers{
 		ID:           uuid.New().String(),
@@ -181,6 +196,7 @@ func (h *AdminUserManagementHandler) CreateAdmin(c *gin.Context) {
 		FullName:     req.FullName,
 		Role:         req.Role,
 		IsActive:     &isActive,
+		Permissions:  datatypes.JSON(permsJSON),
 	}
 
 	if err := h.adminRepo.Create(ctx, admin); err != nil {

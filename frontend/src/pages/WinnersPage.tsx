@@ -67,11 +67,12 @@ export const WinnersPage: React.FC = () => {
       setLoading(true);
       try {
         const res = await apiClient.get(`/winners?page=${page}&limit=${LIMIT}`) as any;
-        if (res.success && res.data) {
-          const d = res.data as any;
-          setWinners(d.winners || []);
-          setTotal(d.total || 0);
-          setTotalPages(d.total_pages || 1);
+        const body = res?.data ?? res; // axios wraps in .data; apiClient may unwrap
+        const payload = body?.data ?? body; // backend: { success, data: { winners, total, ... } }
+        if (payload?.winners) {
+          setWinners(payload.winners || []);
+          setTotal(payload.total || 0);
+          setTotalPages(payload.total_pages || 1);
         }
       } catch (e) {
         console.error('Failed to fetch winners:', e);

@@ -81,8 +81,10 @@ export const WinnerDetailPage: React.FC = () => {
       setLoading(true);
       try {
         const res = await apiClient.get(`/winners/${id}`) as any;
-        if (res.success && res.data) {
-          setWinner(res.data as PublicWinner);
+        const body = res?.data ?? res;
+        const winnerData = body?.data ?? null;
+        if (winnerData?.id) {
+          setWinner(winnerData as PublicWinner);
         } else {
           setNotFound(true);
         }

@@ -86,8 +86,8 @@ export const WinnersPage: React.FC = () => {
   const displayed = winners.filter(w => {
     const matchSearch =
       search === '' ||
-      w.draw_name.toLowerCase().includes(search.toLowerCase()) ||
-      w.prize_description.toLowerCase().includes(search.toLowerCase()) ||
+      (w.draw_name || '').toLowerCase().includes(search.toLowerCase()) ||
+      (w.prize_description || '').toLowerCase().includes(search.toLowerCase()) ||
       w.masked_msisdn.includes(search);
     const matchFilter = filter === 'all' || w.prize_type === filter;
     return matchSearch && matchFilter;

@@ -126,12 +126,13 @@ func (h *AdminUserManagementHandler) CreateAdmin(c *gin.Context) {
 		"SUPER_ADMIN": true,
 		"ADMIN":       true,
 		"MODERATOR":   true,
+		"SUPPORT":     true,
 		"VIEWER":      true,
 	}
 	if !validRoles[req.Role] {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
-			"error":   "Invalid role. Must be one of: SUPER_ADMIN, ADMIN, MODERATOR, VIEWER",
+			"error":   "Invalid role. Must be one of: SUPER_ADMIN, ADMIN, MODERATOR, SUPPORT, VIEWER",
 		})
 		return
 	}
@@ -180,6 +181,7 @@ func (h *AdminUserManagementHandler) CreateAdmin(c *gin.Context) {
 		"SUPER_ADMIN": {"view_analytics", "manage_users", "manage_transactions", "manage_networks", "manage_prizes", "manage_affiliates", "manage_settings", "manage_admins", "view_monitoring", "manage_draws"},
 		"ADMIN":       {"view_analytics", "manage_users", "manage_transactions", "manage_networks", "manage_prizes", "manage_affiliates", "view_monitoring", "manage_draws"},
 		"MODERATOR":   {"view_analytics", "manage_users", "manage_transactions", "view_monitoring"},
+		"SUPPORT":     {"view_analytics", "manage_users", "manage_transactions", "view_monitoring"},
 		"VIEWER":      {"view_analytics", "view_monitoring"},
 	}
 	permsToUse := req.Permissions

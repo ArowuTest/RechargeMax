@@ -26,7 +26,10 @@ interface AdminFormData {
 
 const ADMIN_ROLES = [
   { value: 'ADMIN', label: 'Admin', description: 'Standard admin with limited permissions' },
-  { value: 'SUPER_ADMIN', label: 'Super Admin', description: 'Full system access and control' }
+  { value: 'SUPER_ADMIN', label: 'Super Admin', description: 'Full system access and control' },
+  { value: 'MODERATOR', label: 'Moderator', description: 'User and transaction management only' },
+  { value: 'SUPPORT', label: 'Support', description: 'Customer support — view and manage users' },
+  { value: 'VIEWER', label: 'Viewer', description: 'Read-only access to analytics and monitoring' },
 ];
 
 const AVAILABLE_PERMISSIONS = [

@@ -1997,6 +1997,9 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
                   <select name="role" defaultValue={editingAdmin.role} className="w-full border rounded-md px-3 py-2 text-sm">
                     <option value="ADMIN">Admin - Standard admin with limited permissions</option>
                     <option value="SUPER_ADMIN">Super Admin - Full system access</option>
+                    <option value="MODERATOR">Moderator - User and transaction management</option>
+                    <option value="SUPPORT">Support - Customer support access</option>
+                    <option value="VIEWER">Viewer - Read-only access</option>
                   </select>
                 </div>
                 <div className="flex items-center justify-between p-3 border rounded-lg">

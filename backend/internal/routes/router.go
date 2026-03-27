@@ -58,6 +58,16 @@ func Register(
 
 	// ── API v1 ───────────────────────────────────────────────────────────────
 	v1 := router.Group("/api/v1")
+	// /api/v1/health alias (primary health probe lives at root /health)
+	v1.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":    "healthy",
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
+			"service":   "rechargemax-api",
+			"version":   "1.1.0",
+			"build":     "20260326-draw-engine-v19",
+		})
+	})
 	registerPublic(v1, hdlrs, db)
 	registerProtected(v1, hdlrs, svcs)
 	registerAdmin(v1, hdlrs, svcs, db)

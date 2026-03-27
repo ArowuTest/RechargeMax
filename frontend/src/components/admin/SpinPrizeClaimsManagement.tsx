@@ -405,8 +405,7 @@ const SpinPrizeClaimsManagement: React.FC = () => {
                       <TableCell className="font-mono text-sm">{claim.spin_code}</TableCell>
                       <TableCell>
                         <div>
-                          <div className="font-medium">{claim.user_name || 'N/A'}</div>
-                          <div className="text-sm text-muted-foreground">{claim.msisdn}</div>
+                          <div className="font-medium">{claim.user_name || claim.msisdn || 'N/A'}</div>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -477,8 +476,7 @@ const SpinPrizeClaimsManagement: React.FC = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-muted-foreground">User</Label>
-                  <p className="font-medium">{selectedClaim.user_name || 'N/A'}</p>
-                  <p className="text-sm text-muted-foreground">{selectedClaim.msisdn}</p>
+                  <p className="font-medium">{selectedClaim.user_name || selectedClaim.msisdn || 'N/A'}</p>
                 </div>
                 <div>
                   <Label className="text-muted-foreground">Prize</Label>
@@ -495,7 +493,7 @@ const SpinPrizeClaimsManagement: React.FC = () => {
                 </div>
                 <div>
                   <Label className="text-muted-foreground">Claim Date</Label>
-                  <p className="text-sm">{formatDate(selectedClaim.claim_date)}</p>
+                  <p className="text-sm">{formatDate(selectedClaim.claim_date ?? selectedClaim.created_at)}</p>
                 </div>
               </div>
 

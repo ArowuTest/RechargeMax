@@ -48,6 +48,8 @@ interface SystemMetrics {
   };
   external_services: {
     paystack: 'online' | 'offline' | 'degraded';
+    networks_online?: number;
+    networks_total?: number;
     telecom_providers: {
       mtn: 'online' | 'offline' | 'degraded';
       airtel: 'online' | 'offline' | 'degraded';
@@ -116,6 +118,8 @@ const SystemMonitoringDashboard: React.FC = () => {
           },
           external_services: {
             paystack:            d.external_services?.paystack ?? 'online',
+            networks_online:     d.external_services?.networks_online,
+            networks_total:      d.external_services?.networks_total,
             telecom_providers: {
               mtn:         d.external_services?.telecom_providers?.mtn         ?? 'online',
               airtel:      d.external_services?.telecom_providers?.airtel      ?? 'online',
@@ -301,7 +305,7 @@ const SystemMonitoringDashboard: React.FC = () => {
                   <Server className="w-8 h-8 text-blue-600" />
                 </div>
                 <div className="mt-4 text-sm text-gray-600">
-                  Uptime: {formatUptime(metrics?.server.uptime || 0)}
+                  Uptime: {metrics ? formatUptime(metrics.server.uptime) : '—'}
                 </div>
               </CardContent>
             </Card>
@@ -322,7 +326,7 @@ const SystemMonitoringDashboard: React.FC = () => {
                   <Database className="w-8 h-8 text-green-600" />
                 </div>
                 <div className="mt-4 text-sm text-gray-600">
-                  Connections: {metrics?.database.connections}/{metrics?.database.max_connections}
+                  Connections: {metrics ? `${metrics.database.connections}/${metrics.database.max_connections}` : '—'}
                 </div>
               </CardContent>
             </Card>
@@ -343,7 +347,7 @@ const SystemMonitoringDashboard: React.FC = () => {
                   <Zap className="w-8 h-8 text-purple-600" />
                 </div>
                 <div className="mt-4 text-sm text-gray-600">
-                  {metrics?.api.requests_per_minute} req/min
+                  {metrics ? `${metrics.api.requests_per_minute} req/min` : '—'}
                 </div>
               </CardContent>
             </Card>
@@ -364,7 +368,7 @@ const SystemMonitoringDashboard: React.FC = () => {
                   <Wifi className="w-8 h-8 text-orange-600" />
                 </div>
                 <div className="mt-4 text-sm text-gray-600">
-                  Networks: 3/4 online
+                  Networks: {metrics ? `${metrics.external_services.networks_online ?? Object.values(metrics.external_services.telecom_providers).filter(s => s === 'online').length}/${metrics.external_services.networks_total ?? Object.keys(metrics.external_services.telecom_providers).length} online` : '—'}
                 </div>
               </CardContent>
             </Card>
@@ -446,7 +450,7 @@ const SystemMonitoringDashboard: React.FC = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-600">Uptime</span>
-                    <span className="font-medium">{formatUptime(metrics?.server.uptime || 0)}</span>
+                    <span className="font-medium">{metrics ? formatUptime(metrics.server.uptime) : '—'}</span>
                   </div>
                 </div>
               </CardContent>
@@ -466,7 +470,7 @@ const SystemMonitoringDashboard: React.FC = () => {
                   <div>
                     <div className="flex justify-between text-sm mb-2">
                       <span>Active Connections</span>
-                      <span>{metrics?.database.connections}/{metrics?.database.max_connections}</span>
+                      <span>{metrics ? `${metrics.database.connections}/${metrics.database.max_connections}` : '—'}</span>
                     </div>
                     <Progress 
                       value={(metrics?.database.connections || 0) / (metrics?.database.max_connections || 1) * 100} 

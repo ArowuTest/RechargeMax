@@ -296,7 +296,7 @@ func (s *AdminSpinClaimService) ListClaims(ctx context.Context, filters ClaimFil
 // GetPendingClaims returns claims pending admin review
 func (s *AdminSpinClaimService) GetPendingClaims(ctx context.Context) (*ClaimListResponse, error) {
 	filters := ClaimFilters{
-		Status: "PENDING_ADMIN_REVIEW",
+		Status: "PENDING",
 	}
 	pagination := Pagination{
 		Page:   1,
@@ -396,7 +396,7 @@ func (s *AdminSpinClaimService) ApproveClaim(ctx context.Context, claimID string
 	}
 
 	// Validate claim status
-	if claim.ClaimStatus != "PENDING_ADMIN_REVIEW" {
+	if claim.ClaimStatus != "PENDING" {
 		return fmt.Errorf("claim is not pending review, current status: %s", claim.ClaimStatus)
 	}
 
@@ -442,7 +442,7 @@ func (s *AdminSpinClaimService) RejectClaim(ctx context.Context, claimID string,
 	}
 
 	// Validate claim status
-	if claim.ClaimStatus != "PENDING_ADMIN_REVIEW" {
+	if claim.ClaimStatus != "PENDING" {
 		return fmt.Errorf("claim is not pending review, current status: %s", claim.ClaimStatus)
 	}
 
@@ -485,7 +485,7 @@ func (s *AdminSpinClaimService) GetStatistics(ctx context.Context) (*ClaimStatis
 
 	for _, sc := range statusCounts {
 		switch sc.ClaimStatus {
-		case "PENDING_ADMIN_REVIEW":
+		case "PENDING":
 			stats.Overview.PendingReview = sc.Count
 		case "APPROVED":
 			stats.Overview.Approved = sc.Count
@@ -526,7 +526,7 @@ func (s *AdminSpinClaimService) GetStatistics(ctx context.Context) (*ClaimStatis
 
 	for _, vc := range valueCounts {
 		switch vc.ClaimStatus {
-		case "PENDING_ADMIN_REVIEW":
+		case "PENDING":
 			stats.TotalValuePending = vc.TotalValue
 		case "APPROVED":
 			stats.TotalValueApproved = vc.TotalValue

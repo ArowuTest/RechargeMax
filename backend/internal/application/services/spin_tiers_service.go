@@ -184,3 +184,13 @@ func (s *SpinTiersService) Delete(_ context.Context, id string) (*utils.SpinTier
 	}
 	return tier, nil
 }
+
+// ValidateConfiguration runs the tier range validation and returns a slice of human-readable error strings.
+// An empty slice means the configuration is valid.
+func (s *SpinTiersService) ValidateConfiguration(ctx context.Context) ([]string, error) {
+	err := s.calculator.ValidateTierConfiguration()
+	if err != nil {
+		return []string{err.Error()}, nil
+	}
+	return []string{}, nil
+}

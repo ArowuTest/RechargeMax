@@ -138,3 +138,13 @@ func (h *AdminSpinTiersHandler) DeleteTier(c *gin.Context) {
 
 // ValidateTierConfiguration is not routed but kept for potential future use.
 // It can be called via a dedicated admin endpoint if needed.
+
+// ValidateTiers runs the tier-range validation and returns a list of errors (empty = healthy).
+func (h *AdminSpinTiersHandler) ValidateTiers(c *gin.Context) {
+	errors, err := h.spinTiersSvc.ValidateConfiguration(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Validation check failed", "details": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "errors": errors, "valid": len(errors) == 0})
+}

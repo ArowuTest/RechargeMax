@@ -404,7 +404,8 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	admin.POST("/spin/prizes",       middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.CreatePrize)
 	admin.PUT("/spin/prizes/:id",    middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.UpdatePrize)
 	admin.DELETE("/spin/prizes/:id", middleware.RequireRole("super_admin"), hdlrs.AdminComprehensive.DeletePrize)
-	admin.GET("/spin-tiers",         hdlrs.AdminSpinTiers.GetAllTiers)
+	admin.GET("/spin-tiers",          hdlrs.AdminSpinTiers.GetAllTiers)
+	admin.GET("/spin-tiers/validate", hdlrs.AdminSpinTiers.ValidateTiers) // must be before /:id
 	admin.POST("/maintenance/backfill-user-ids", hdlrs.Health.BackfillTransactionUserIDs) // one-shot backfill
 	admin.GET("/spin-tiers/:id",     hdlrs.AdminSpinTiers.GetTierByID)
 	admin.POST("/spin-tiers",        hdlrs.AdminSpinTiers.CreateTier)

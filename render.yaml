@@ -77,18 +77,6 @@ services:
       - key: ADMIN_JWT_EXPIRY
         value: 8h
 
-  - type: web
-    name: rechargemax-frontend
-    env: static
-    buildCommand: cd frontend && npm ci --legacy-peer-deps && npm run build
-    staticPublishPath: frontend/dist
-    branch: main
-    autoDeploy: true
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
-
 databases: []
   # rechargemax-db-v2 already exists — managed outside render.yaml
   # Do NOT redefine it here; doing so caused fromDatabase/generateValue

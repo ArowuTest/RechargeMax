@@ -42,7 +42,9 @@ func Register(
 	router.Use(middleware.SecurityHeadersMiddleware())
 	router.Use(middleware.RequestIDMiddleware())
 	router.Use(middleware.RequestSizeLimitMiddleware(10 * 1024 * 1024)) // 10 MB
-	router.Use(middleware.RateLimitMiddleware(100))                      // 100 req/min per IP
+	router.Use(middleware.RateLimitMiddleware(100))                      // 100 req/min per IP (global baseline)
+	router.Use(middleware.SanitizationMiddleware())                      // strip null bytes + HTML-escape query params
+	router.Use(middleware.TimeoutMiddleware(30 * time.Second))           // 30s hard request timeout
 
 	// Initialise PostgreSQL-backed CSRF token store (INFRA-001)
 	middleware.InitCSRF(db)
@@ -123,19 +125,20 @@ func registerPublic(v1 *gin.RouterGroup, hdlrs *handlers.Registry, db *gorm.DB) 
 	{
 		networks.GET("",                     hdlrs.Network.GetNetworks)
 		networks.GET("/:networkId/bundles",  hdlrs.Network.GetDataBundles)
-		networks.POST("/validate",           hdlrs.Network.ValidatePhoneNetwork)
-		networks.POST("/cached",             hdlrs.Network.GetCachedNetwork)
-		networks.POST("/validate-selection", hdlrs.Network.ValidateNetworkSelection)
+		networks.POST("/validate",           middleware.RateLimitMiddleware(30), hdlrs.Network.ValidatePhoneNetwork)
+		networks.POST("/cached",             middleware.RateLimitMiddleware(30), hdlrs.Network.GetCachedNetwork)
+		networks.POST("/validate-selection", middleware.RateLimitMiddleware(30), hdlrs.Network.ValidateNetworkSelection)
 	}
 
 	// Guest recharge (no account needed)
 	recharge := v1.Group("/recharge")
 	{
-		recharge.POST("/airtime",             hdlrs.Recharge.InitiateAirtimeRecharge)
-		recharge.POST("/data",                hdlrs.Recharge.InitiateDataRecharge)
+		recharge.POST("/airtime",             middleware.RateLimitMiddleware(10), hdlrs.Recharge.InitiateAirtimeRecharge)
+		recharge.POST("/data",                middleware.RateLimitMiddleware(10), hdlrs.Recharge.InitiateDataRecharge)
 		recharge.GET("/:id",                  middleware.OptionalAuthMiddleware(), hdlrs.Recharge.GetRecharge)
 		recharge.GET("/reference/:reference", middleware.OptionalAuthMiddleware(), hdlrs.Recharge.GetRechargeByReference)
-		recharge.POST("/process/:reference",   hdlrs.Recharge.ProcessStuckRecharge)
+		// SEC: moved to admin-only — this debug/recovery endpoint must not be public
+		// recharge.POST("/process/:reference", ...) — see admin debug group
 	}
 
 	// Payment (Paystack callbacks are public)
@@ -160,7 +163,7 @@ func registerPublic(v1 *gin.RouterGroup, hdlrs *handlers.Registry, db *gorm.DB) 
 
 	// Affiliate click tracking — public (fires when anyone visits a referral link,
 	// including unauthenticated guests). No CSRF risk: no session mutation.
-	v1.POST("/affiliate/track-click", hdlrs.Affiliate.TrackClick)
+	v1.POST("/affiliate/track-click", middleware.RateLimitMiddleware(30), hdlrs.Affiliate.TrackClick)
 
 	// Subscription — public & guest-accessible
 	// Config is always public (pricing display before sign-up).
@@ -340,16 +343,16 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	admin.POST("/prize-templates",                   middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.CreatePrizeTemplate)
 	admin.PUT("/prize-templates/:id",                middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.UpdatePrizeTemplate)
 	admin.DELETE("/prize-templates/:id",             middleware.RequireRole("super_admin"), hdlrs.AdminComprehensive.DeletePrizeTemplate)
-	admin.POST("/prize-templates/:id/categories",    hdlrs.AdminComprehensive.AddPrizeCategory)
-	admin.PUT("/prize-categories/:id",               hdlrs.AdminComprehensive.UpdatePrizeCategory)
+	admin.POST("/prize-templates/:id/categories",    middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.AddPrizeCategory)
+	admin.PUT("/prize-categories/:id",               middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.UpdatePrizeCategory)
 	admin.DELETE("/prize-categories/:id",            middleware.RequireRole("super_admin"), hdlrs.AdminComprehensive.DeletePrizeCategory)
 
 	// ── Subscriptions ────────────────────────────────────────────────────────
 	admin.GET("/subscription-tiers",                       hdlrs.AdminComprehensive.GetSubscriptionTiers)
-	admin.POST("/subscription-tiers",                      hdlrs.AdminComprehensive.CreateSubscriptionTier)
-	admin.PUT("/subscription-tiers/:id",                   hdlrs.AdminComprehensive.UpdateSubscriptionTier)
-	admin.DELETE("/subscription-tiers/:id",                hdlrs.AdminComprehensive.DeleteSubscriptionTier)
-	admin.PATCH("/subscription-tiers/:id/toggle-active",   hdlrs.AdminComprehensive.ToggleSubscriptionTier)
+	admin.POST("/subscription-tiers",                      middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.CreateSubscriptionTier)
+	admin.PUT("/subscription-tiers/:id",                   middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.UpdateSubscriptionTier)
+	admin.DELETE("/subscription-tiers/:id",                middleware.RequireRole("super_admin"), hdlrs.AdminComprehensive.DeleteSubscriptionTier)
+	admin.PATCH("/subscription-tiers/:id/toggle-active",   middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.ToggleSubscriptionTier)
 	admin.GET("/subscription-pricing/current",    hdlrs.AdminComprehensive.GetCurrentPricing)
 	admin.GET("/subscription-pricing/history",    hdlrs.AdminComprehensive.GetPricingHistory)
 	admin.POST("/subscription-pricing",           middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.UpdatePricing)
@@ -358,19 +361,19 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	admin.GET("/daily-subscriptions/config",           hdlrs.AdminComprehensive.GetSubscriptionConfig)
 	admin.PUT("/daily-subscriptions/config",           middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.UpdateSubscriptionConfig)
 	admin.GET("/daily-subscriptions/:id",              hdlrs.AdminComprehensive.GetDailySubscriptionDetails)
-	admin.POST("/daily-subscriptions/:id/cancel",      hdlrs.AdminComprehensive.CancelDailySubscription)
-	admin.POST("/daily-subscriptions/:id/pause",       hdlrs.AdminComprehensive.PauseDailySubscription)
-	admin.POST("/daily-subscriptions/:id/resume",      hdlrs.AdminComprehensive.ResumeDailySubscription)
+	admin.POST("/daily-subscriptions/:id/cancel",      middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.CancelDailySubscription)
+	admin.POST("/daily-subscriptions/:id/pause",       middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.PauseDailySubscription)
+	admin.POST("/daily-subscriptions/:id/resume",      middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.ResumeDailySubscription)
 	admin.GET("/daily-subscriptions/:id/billings",     hdlrs.AdminComprehensive.GetSubscriptionBillingsByID)
 	admin.GET("/subscription-billings",                hdlrs.AdminComprehensive.GetSubscriptionBillings)
-	admin.POST("/subscription-billings/:id/retry",     hdlrs.AdminComprehensive.RetrySubscriptionBilling)
+	admin.POST("/subscription-billings/:id/retry",     middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.RetrySubscriptionBilling)
 
 	// ── USSD ─────────────────────────────────────────────────────────────────
 	admin.GET("/ussd/recharges",       hdlrs.AdminComprehensive.GetUSSDRecharges)
 	admin.GET("/ussd/recharges/:id",   hdlrs.AdminComprehensive.GetUSSDRechargeByID)
 	admin.GET("/ussd/statistics",    hdlrs.AdminComprehensive.GetUSSDStatistics)
 	admin.GET("/ussd/webhook-logs",  hdlrs.AdminComprehensive.GetUSSDWebhookLogs)
-	admin.POST("/ussd/retry-failed", hdlrs.AdminComprehensive.RetryFailedUSSDWebhooks)
+	admin.POST("/ussd/retry-failed", middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.RetryFailedUSSDWebhooks)
 
 	// ── Points ───────────────────────────────────────────────────────────────
 	admin.GET("/points/users",          hdlrs.AdminComprehensive.GetUsersWithPoints)
@@ -386,11 +389,11 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	admin.GET("/winners/pending-claims",              hdlrs.AdminComprehensive.GetPendingClaims)
 	admin.GET("/winners/claim-statistics",            hdlrs.AdminComprehensive.GetClaimStatistics)
 	admin.GET("/winners/:id",                         hdlrs.AdminComprehensive.GetWinnerByID)
-	admin.POST("/winners/:id/approve-claim",          hdlrs.AdminComprehensive.ApproveWinnerClaim)
-	admin.POST("/winners/:id/reject-claim",           hdlrs.AdminComprehensive.RejectWinnerClaim)
+	admin.POST("/winners/:id/approve-claim",          middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.ApproveWinnerClaim)
+	admin.POST("/winners/:id/reject-claim",           middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.RejectWinnerClaim)
 	admin.POST("/winners/:id/process-payout",         middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.ProcessWinnerPayout)
-	admin.POST("/winners/:id/mark-shipped",           hdlrs.AdminComprehensive.MarkWinnerShipped)
-	admin.POST("/winners/:id/send-notification",      hdlrs.AdminComprehensive.SendWinnerNotification)
+	admin.POST("/winners/:id/mark-shipped",           middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.MarkWinnerShipped)
+	admin.POST("/winners/:id/send-notification",      middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.SendWinnerNotification)
 	admin.POST("/winners/:id/invoke-runner-up",       middleware.RequireRole("super_admin"), hdlrs.AdminComprehensive.InvokeWinnerRunnerUp)
 	admin.GET("/prize-fulfillment/failed-provisions", hdlrs.AdminSpinClaims.GetPendingClaims)
 	admin.POST("/prize-fulfillment/retry/:id",        hdlrs.AdminSpinClaims.ApproveClaim)
@@ -399,100 +402,100 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 
 	// ── Spin wheel ───────────────────────────────────────────────────────────
 	admin.GET("/spin/config",        hdlrs.AdminComprehensive.GetSpinConfig)
-	admin.PUT("/spin/config",        hdlrs.AdminComprehensive.UpdateSpinConfig)
+	admin.PUT("/spin/config",        middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.UpdateSpinConfig)
 	admin.GET("/spin/prizes",        hdlrs.AdminComprehensive.GetAllPrizes)
 	admin.POST("/spin/prizes",       middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.CreatePrize)
 	admin.PUT("/spin/prizes/:id",    middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.UpdatePrize)
 	admin.DELETE("/spin/prizes/:id", middleware.RequireRole("super_admin"), hdlrs.AdminComprehensive.DeletePrize)
 	admin.GET("/spin-tiers",          hdlrs.AdminSpinTiers.GetAllTiers)
 	admin.GET("/spin-tiers/validate", hdlrs.AdminSpinTiers.ValidateTiers) // must be before /:id
-	admin.POST("/maintenance/backfill-user-ids", hdlrs.Health.BackfillTransactionUserIDs) // one-shot backfill
+	admin.POST("/maintenance/backfill-user-ids", middleware.RequireRole("super_admin"), hdlrs.Health.BackfillTransactionUserIDs) // one-shot backfill
 	admin.GET("/spin-tiers/:id",     hdlrs.AdminSpinTiers.GetTierByID)
-	admin.POST("/spin-tiers",        hdlrs.AdminSpinTiers.CreateTier)
-	admin.PUT("/spin-tiers/:id",     hdlrs.AdminSpinTiers.UpdateTier)
-	admin.DELETE("/spin-tiers/:id",  hdlrs.AdminSpinTiers.DeleteTier)
+	admin.POST("/spin-tiers",        middleware.RequireRole("super_admin","admin"), hdlrs.AdminSpinTiers.CreateTier)
+	admin.PUT("/spin-tiers/:id",     middleware.RequireRole("super_admin","admin"), hdlrs.AdminSpinTiers.UpdateTier)
+	admin.DELETE("/spin-tiers/:id",  middleware.RequireRole("super_admin"), hdlrs.AdminSpinTiers.DeleteTier)
 	admin.GET("/spin/claims",              hdlrs.AdminSpinClaims.ListClaims)
 	admin.GET("/spin/claims/pending",      hdlrs.AdminSpinClaims.GetPendingClaims)
 	admin.GET("/spin/claims/statistics",   hdlrs.AdminSpinClaims.GetStatistics)
 	admin.GET("/spin/claims/export",       hdlrs.AdminSpinClaims.ExportClaims)
 	admin.GET("/spin/claims/:id",          hdlrs.AdminSpinClaims.GetClaimDetails)
-	admin.POST("/spin/claims/:id/approve", hdlrs.AdminSpinClaims.ApproveClaim)
-	admin.POST("/spin/claims/:id/reject",  hdlrs.AdminSpinClaims.RejectClaim)
+	admin.POST("/spin/claims/:id/approve", middleware.RequireRole("super_admin","admin"), hdlrs.AdminSpinClaims.ApproveClaim)
+	admin.POST("/spin/claims/:id/reject",  middleware.RequireRole("super_admin","admin"), hdlrs.AdminSpinClaims.RejectClaim)
 
 	// ── Recharge monitoring ──────────────────────────────────────────────────
 	admin.GET("/recharge/transactions",        hdlrs.AdminComprehensive.GetRechargeTransactions)
 	admin.GET("/recharge/transactions/:id",    hdlrs.AdminComprehensive.GetRechargeByID)
 	admin.GET("/recharge/stats",               hdlrs.AdminComprehensive.GetRechargeStats)
-	admin.POST("/recharge/:id/retry",          hdlrs.AdminComprehensive.RetryFailedRecharge)
-	admin.POST("/recharge/bulk-retry-processing", hdlrs.AdminComprehensive.BulkRetryProcessingTransactions)
+	admin.POST("/recharge/:id/retry",          middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.RetryFailedRecharge)
+	admin.POST("/recharge/bulk-retry-processing", middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.BulkRetryProcessingTransactions)
 	admin.POST("/recharge/:id/refund",         middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.RefundRecharge)
-	admin.POST("/recharge/:id/mark-success",   hdlrs.AdminComprehensive.MarkRechargeSuccess)
-	admin.POST("/recharge/:id/mark-failed",    hdlrs.AdminComprehensive.MarkRechargeFailed)
+	admin.POST("/recharge/:id/mark-success",   middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.MarkRechargeSuccess)
+	admin.POST("/recharge/:id/mark-failed",    middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.MarkRechargeFailed)
 	admin.GET("/recharge/vtpass/status",       hdlrs.AdminComprehensive.GetVTPassStatus)
-	admin.PUT("/recharge/provider-config",     hdlrs.AdminComprehensive.UpdateProviderConfig)
+	admin.PUT("/recharge/provider-config",     middleware.RequireRole("super_admin"), hdlrs.AdminComprehensive.UpdateProviderConfig)
 	admin.GET("/recharge/network-configs",     hdlrs.AdminComprehensive.GetNetworkConfigurations)
 	admin.GET("/recharge/data-plans",          hdlrs.AdminComprehensive.GetDataPlans)
 
 	// ── Network & data plan CRUD ─────────────────────────────────────────────
 	admin.GET("/networks",        hdlrs.AdminComprehensive.GetNetworkConfigurations) // list
-	admin.POST("/networks",       hdlrs.AdminComprehensive.CreateNetwork)
-	admin.PUT("/networks/:id",    hdlrs.AdminComprehensive.UpdateNetwork)
-	admin.DELETE("/networks/:id", hdlrs.AdminComprehensive.DeleteNetwork)
-	admin.POST("/data-plans",       hdlrs.AdminComprehensive.CreateDataPlan)
-	admin.PUT("/data-plans/:id",    hdlrs.AdminComprehensive.UpdateDataPlan)
-	admin.DELETE("/data-plans/:id", hdlrs.AdminComprehensive.DeleteDataPlan)
+	admin.POST("/networks",       middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.CreateNetwork)
+	admin.PUT("/networks/:id",    middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.UpdateNetwork)
+	admin.DELETE("/networks/:id", middleware.RequireRole("super_admin"), hdlrs.AdminComprehensive.DeleteNetwork)
+	admin.POST("/data-plans",       middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.CreateDataPlan)
+	admin.PUT("/data-plans/:id",    middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.UpdateDataPlan)
+	admin.DELETE("/data-plans/:id", middleware.RequireRole("super_admin"), hdlrs.AdminComprehensive.DeleteDataPlan)
 
 	// ── User management ──────────────────────────────────────────────────────
 	admin.GET("/users/all",                  hdlrs.AdminComprehensive.GetAllUsers)
 	admin.GET("/users/:id/details",          hdlrs.AdminComprehensive.GetUserDetails)
 	admin.GET("/users/:id",                  hdlrs.AdminComprehensive.GetUser)           // alias — no /details suffix
-	admin.PUT("/users/:id",                  hdlrs.AdminComprehensive.UpdateUser)        // status + tier update
-	admin.PUT("/users/:id/status",           hdlrs.AdminComprehensive.UpdateUserStatus)
+	admin.PUT("/users/:id",                  middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.UpdateUser)        // status + tier update
+	admin.PUT("/users/:id/status",           middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.UpdateUserStatus)
 	admin.DELETE("/users/:id",               middleware.RequireRole("super_admin"), hdlrs.AdminComprehensive.DeleteUser)
 	admin.POST("/users/:id/suspend",         middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.SuspendUser)
-	admin.POST("/users/:id/activate",        hdlrs.AdminComprehensive.ActivateUser)
+	admin.POST("/users/:id/activate",        middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.ActivateUser)
 	admin.GET("/users/:id/points-history",   hdlrs.AdminComprehensive.GetUserPointsHistory)
 	admin.POST("/users/:id/adjust-points",   middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.AdjustUserPointsByID)
 
 	// ── Affiliate management ─────────────────────────────────────────────────
 	admin.GET("/affiliates",                       hdlrs.AdminComprehensive.GetAllAffiliates) // alias
 	admin.GET("/affiliates/all",                   hdlrs.AdminComprehensive.GetAllAffiliates)
-	admin.POST("/affiliates",                      hdlrs.AdminComprehensive.CreateAffiliate)
-	admin.PUT("/affiliates/:id",                   hdlrs.AdminComprehensive.UpdateAffiliate)
-	admin.DELETE("/affiliates/:id",                hdlrs.AdminComprehensive.DeleteAffiliate)
+	admin.POST("/affiliates",                      middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.CreateAffiliate)
+	admin.PUT("/affiliates/:id",                   middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.UpdateAffiliate)
+	admin.DELETE("/affiliates/:id",                middleware.RequireRole("super_admin"), hdlrs.AdminComprehensive.DeleteAffiliate)
 	admin.GET("/affiliates/:id/stats",             hdlrs.AdminComprehensive.GetAffiliateStats)
-	admin.POST("/affiliates/:id/approve",          hdlrs.AdminComprehensive.ApproveAffiliate)
-	admin.POST("/affiliates/:id/reject",           hdlrs.AdminComprehensive.RejectAffiliate)
-	admin.POST("/affiliates/:id/suspend",          hdlrs.AdminComprehensive.SuspendAffiliate)
+	admin.POST("/affiliates/:id/approve",          middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.ApproveAffiliate)
+	admin.POST("/affiliates/:id/reject",           middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.RejectAffiliate)
+	admin.POST("/affiliates/:id/suspend",          middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.SuspendAffiliate)
 	admin.GET("/affiliates/:id/commissions",       hdlrs.AdminComprehensive.GetAffiliateCommissions)
-	admin.PUT("/affiliates/:id/commission-rate",   hdlrs.AdminComprehensive.UpdateAffiliateCommissionRate)
+	admin.PUT("/affiliates/:id/commission-rate",   middleware.RequireRole("super_admin"), hdlrs.AdminComprehensive.UpdateAffiliateCommissionRate)
 	admin.GET("/affiliates/:id/payouts",           hdlrs.AdminComprehensive.GetAffiliatePayouts)
 	admin.POST("/affiliates/:id/payout",           middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.ProcessAffiliatePayout)
-	admin.POST("/affiliates/:id/process-payout",   hdlrs.AdminComprehensive.ProcessAffiliatePayout)   // alias
+	admin.POST("/affiliates/:id/process-payout",   middleware.RequireRole("super_admin","admin"), hdlrs.AdminComprehensive.ProcessAffiliatePayout)   // alias
 	admin.GET("/affiliates/:id/payout-history",    hdlrs.AdminComprehensive.GetAffiliatePayoutHistory)
 	admin.GET("/affiliates/analytics",             hdlrs.AdminComprehensive.GetAffiliateAnalytics)
 	// New commission + payout management routes
 	admin.GET("/affiliates/commissions",                           hdlrs.Affiliate.AdminListCommissions)
-	admin.POST("/affiliates/commissions/approve",                  hdlrs.Affiliate.AdminApproveCommissions)
+	admin.POST("/affiliates/commissions/approve",                  middleware.RequireRole("super_admin","admin"), hdlrs.Affiliate.AdminApproveCommissions)
 	admin.GET("/affiliates/payouts",                               hdlrs.Affiliate.AdminListPayouts)
-	admin.POST("/affiliates/payouts/:id/initiate",                 hdlrs.Affiliate.AdminInitiatePayout)
-	admin.POST("/affiliates/payouts/notify-weekly",                hdlrs.Affiliate.AdminWeeklyPayoutNotify)
+	admin.POST("/affiliates/payouts/:id/initiate",                 middleware.RequireRole("super_admin","admin"), hdlrs.Affiliate.AdminInitiatePayout)
+	admin.POST("/affiliates/payouts/notify-weekly",                middleware.RequireRole("super_admin","admin"), hdlrs.Affiliate.AdminWeeklyPayoutNotify)
 
 	// ── Admin user management ────────────────────────────────────────────────
 	admin.GET("/admins",            hdlrs.AdminUserManagement.GetAllAdmins)
 	admin.GET("/admins/:id",        hdlrs.AdminUserManagement.GetAdminByID)
-	admin.POST("/admins",           hdlrs.AdminUserManagement.CreateAdmin)
-	admin.PUT("/admins/:id",        hdlrs.AdminUserManagement.UpdateAdmin)
+	admin.POST("/admins",           middleware.RequireRole("super_admin"), hdlrs.AdminUserManagement.CreateAdmin)
+	admin.PUT("/admins/:id",        middleware.RequireRole("super_admin"), hdlrs.AdminUserManagement.UpdateAdmin)
 	admin.DELETE("/admins/:id",     middleware.RequireRole("super_admin"), hdlrs.AdminUserManagement.DeleteAdmin)
-	admin.PUT("/admins/:id/status", hdlrs.AdminUserManagement.UpdateAdminStatus)
+	admin.PUT("/admins/:id/status", middleware.RequireRole("super_admin"), hdlrs.AdminUserManagement.UpdateAdminStatus)
 
 	// ── Platform settings ────────────────────────────────────────────────────
 	admin.GET("/settings",                    hdlrs.PlatformSettings.GetAllSettings)
-	admin.PUT("/settings",                    hdlrs.PlatformSettings.UpdateSettings)
+	admin.PUT("/settings",                    middleware.RequireRole("super_admin","admin"), hdlrs.PlatformSettings.UpdateSettings)
 	admin.GET("/settings/category/:category", hdlrs.PlatformSettings.GetSettingsByCategory)
-	admin.PUT("/settings/category/:category", hdlrs.PlatformSettings.UpdateCategorySettings)
+	admin.PUT("/settings/category/:category", middleware.RequireRole("super_admin","admin"), hdlrs.PlatformSettings.UpdateCategorySettings)
 	admin.GET("/settings/:key",               hdlrs.PlatformSettings.GetSetting)
-	admin.PUT("/settings/:key",               hdlrs.PlatformSettings.UpdateSetting)
+	admin.PUT("/settings/:key",               middleware.RequireRole("super_admin","admin"), hdlrs.PlatformSettings.UpdateSetting)
 
 	// ── Commissions ──────────────────────────────────────────────────────────
 	admin.POST("/commissions/reconciliation", hdlrs.Commission.GetCommissionReconciliation)
@@ -515,11 +518,16 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	// ── System monitoring ────────────────────────────────────────────────────
 	admin.GET("/monitoring/system", hdlrs.Monitoring.GetSystemMetrics)
 
+	// ── Maintenance / recovery (admin-only, super_admin only) ─────────────────
+	// ProcessStuckRecharge: moved from public to admin — prevents unauthenticated
+	// users from triggering arbitrary transaction re-processing (SEC fix).
+	admin.POST("/recharge/process/:reference", middleware.RequireRole("super_admin","admin"), hdlrs.Recharge.ProcessStuckRecharge)
+
 	// ── STAGING-ONLY debug helpers (remove before full production go-live) ──────
 	admin.GET("/debug/otp/:msisdn", func(c *gin.Context) {
 		msisdn := c.Param("msisdn")
-		env := os.Getenv("APP_ENV")
-		if env == "production" {
+		env := os.Getenv("ENVIRONMENT")
+		if env == "production" || gin.Mode() == gin.ReleaseMode {
 			c.JSON(http.StatusForbidden, gin.H{"error": "not available in production"})
 			return
 		}
@@ -547,8 +555,8 @@ func registerAdmin(v1 *gin.RouterGroup, hdlrs *handlers.Registry, svcs *services
 	// Deletes any existing unused OTPs for that MSISDN and inserts a fresh one valid for 30 mins.
 	// STAGING/DEV ONLY — blocked in production.
 	admin.POST("/debug/inject-otp/:msisdn", func(c *gin.Context) {
-		env := os.Getenv("APP_ENV")
-		if env == "production" {
+		env := os.Getenv("ENVIRONMENT")
+		if env == "production" || gin.Mode() == gin.ReleaseMode {
 			c.JSON(http.StatusForbidden, gin.H{"error": "not available in production"})
 			return
 		}

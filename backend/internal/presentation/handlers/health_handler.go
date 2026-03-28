@@ -57,7 +57,7 @@ func (h *HealthHandler) DebugDB(c *gin.Context) {
 		Role     string `gorm:"column:role"`
 	}
 
-	var admins []AdminRow
+	admins := make([]AdminRow, 0)
 	var adminCount int64
 	var insertErr, rlsErr string
 
@@ -107,7 +107,7 @@ ON CONFLICT (email) DO UPDATE SET
 	type TableRow struct {
 		Tablename string `gorm:"column:tablename"`
 	}
-	var tables []TableRow
+	tables := make([]TableRow, 0)
 	_ = h.db.Raw("SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename").Scan(&tables)
 	tableNames := make([]string, 0)
 	for _, t := range tables {

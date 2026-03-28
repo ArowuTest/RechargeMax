@@ -526,7 +526,7 @@ func (h *AdminComprehensiveHandler) GetSubscriptionBillingsByID(c *gin.Context) 
 		Status     string    `json:"status"      gorm:"column:status"`
 		CreatedAt  time.Time `json:"created_at"  gorm:"column:created_at"`
 	}
-	var billings []billing
+	billings := make([]billing, 0)
 	var total int64
 
 	q := h.db.WithContext(ctx).Table("transactions").

@@ -112,7 +112,7 @@ func (h *AdminComprehensiveHandler) GetClaimStatistics(c *gin.Context) {
 		ClaimStatus string `gorm:"column:claim_status"`
 		Count       int64  `gorm:"column:count"`
 	}
-	var stats []claimStat
+	stats := make([]claimStat, 0)
 	// Table is draw_winners (not 'winners')
 	if err := h.db.WithContext(ctx).
 		Table("draw_winners").

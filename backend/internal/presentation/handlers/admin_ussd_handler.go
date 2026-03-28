@@ -53,7 +53,7 @@ func (h *AdminComprehensiveHandler) GetUSSDRecharges(c *gin.Context) {
 		Status          string    `json:"status"           gorm:"column:status"`
 		CreatedAt       time.Time `json:"created_at"       gorm:"column:created_at"`
 	}
-	var rows []ussdRow
+	rows := make([]ussdRow, 0)
 	q := h.db.WithContext(ctx).Table("ussd_recharges")
 	if network != "" {
 		q = q.Where("network_provider = ?", network)

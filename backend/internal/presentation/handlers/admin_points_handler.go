@@ -205,7 +205,7 @@ func (h *AdminComprehensiveHandler) ExportDrawToCSV(c *gin.Context) {
 		Source    string `gorm:"column:entry_source"`
 		CreatedAt string `gorm:"column:created_at"`
 	}
-	var entries []entryRow
+	entries := make([]entryRow, 0)
 	if err := h.db.WithContext(c.Request.Context()).
 		Table("draw_entries").
 		Where("draw_id = ?", drawID).
@@ -360,7 +360,7 @@ func (h *AdminComprehensiveHandler) GetDrawExportHistory(c *gin.Context) {
 		q = q.Where("entity_id = ?", drawID)
 	}
 
-	var rows []exportHistoryRow
+	rows := make([]exportHistoryRow, 0)
 	if err := q.Scan(&rows).Error; err != nil {
 		// Return empty list instead of 500 — no export history yet is not an error
 		rows = []exportHistoryRow{}

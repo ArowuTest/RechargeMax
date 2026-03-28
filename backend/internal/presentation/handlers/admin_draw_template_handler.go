@@ -124,7 +124,7 @@ func (h *AdminComprehensiveHandler) GetDrawTypes(c *gin.Context) {
 func (h *AdminComprehensiveHandler) GetPrizeTemplates(c *gin.Context) {
 	drawTypeIDStr := c.Query("draw_type_id")
 
-	var templates []entities.PrizeTemplate
+	templates := make([]entities.PrizeTemplate, 0)
 	var err error
 
 	if drawTypeIDStr != "" {

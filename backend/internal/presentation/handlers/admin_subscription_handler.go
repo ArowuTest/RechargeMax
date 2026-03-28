@@ -235,7 +235,7 @@ func (h *AdminComprehensiveHandler) GetPricingHistory(c *gin.Context) {
 		CreatedAt   time.Time `json:"changed_at"  gorm:"column:created_at"`
 		AdminID     string    `json:"admin_id"    gorm:"column:admin_id"`
 	}
-	var entries []pricingEntry
+	entries := make([]pricingEntry, 0)
 	h.db.WithContext(ctx).
 		Table("audit_logs").
 		Where("entity_type = ? AND action IN (?,?)", "subscription_pricing", "UPDATE", "CREATE").
@@ -401,7 +401,7 @@ func (h *AdminComprehensiveHandler) GetSubscriptionBillings(c *gin.Context) {
 		Status      string    `json:"status"      gorm:"column:status"`
 		CreatedAt   time.Time `json:"created_at"  gorm:"column:created_at"`
 	}
-	var billings []billing
+	billings := make([]billing, 0)
 	var total int64
 	q := h.db.WithContext(ctx).Table("transactions").
 		Where("payment_method = ? OR recharge_type = ?", "subscription", "SUBSCRIPTION")

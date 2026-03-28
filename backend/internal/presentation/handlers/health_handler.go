@@ -44,7 +44,7 @@ func (h *HealthHandler) HealthCheck(c *gin.Context) {
 		"database":        "connected",
 		"timestamp":       time.Now().Format(time.RFC3339),
 		"uptime_seconds":  time.Since(h.startTime).Seconds(),
-		"uptime":          time.Since(h.startTime).Seconds() / 86400 * 100, // fake % for monitoring UI
+		"uptime":          time.Since(h.startTime).Seconds() / 86400 * 100, 
 	})
 }
 

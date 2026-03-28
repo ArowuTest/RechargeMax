@@ -134,40 +134,52 @@ func (s *NotificationService) SendSMS(ctx context.Context, msisdn, message strin
 	return nil
 }
 
-// SendEmail sends email notification via SendGrid or similar service
+// SendEmail sends an email via the SendGrid v3 Mail Send API.
+// Falls back to stdout logging in dev (no API key set).
 func (s *NotificationService) SendEmail(ctx context.Context, email, subject, body string) error {
-	// Integrate with SendGrid Email API
-	// In production, this would:
-	// 1. Use SendGrid Go SDK or HTTP API
-	// 2. Create email with from/to/subject/body
-	// 3. Send via SendGrid API
-	// 4. Handle response and errors
-	//
-	// Example implementation using SendGrid SDK:
-	// import "github.com/sendgrid/sendgrid-go"
-	// import "github.com/sendgrid/sendgrid-go/helpers/mail"
-	// 
-	// from := mail.NewEmail("RechargeMax", "noreply@rechargemax.ng")
-	// to := mail.NewEmail("", email)
-	// message := mail.NewSingleEmail(from, subject, to, body, body)
-	// 
-	// client := sendgrid.NewSendClient(s.emailAPIKey)
-	// response, err := client.Send(message)
-	// if err != nil {
-	//     return fmt.Errorf("failed to send email: %w", err)
-	// }
-	// 
-	// if response.StatusCode >= 400 {
-	//     return fmt.Errorf("email API returned status %d", response.StatusCode)
-	// }
-	
-	// For now, log the email (when SendGrid API key is configured, uncomment above)
-	if s.emailAPIKey != "" {
-		log.Printf("[EMAIL] To: %s, Subject: %s, Body: %s\n", email, subject, body)
-		// Actual API call would go here
-	} else {
-		log.Printf("[EMAIL-MOCK] To: %s, Subject: %s, Body: %s\n", email, subject, body)
+	if s.emailAPIKey == "" {
+		log.Printf("[EMAIL-DEV] To: %s | Subject: %s", email, subject)
+		return nil
 	}
+
+	payload := map[string]interface{}{
+		"personalizations": []map[string]interface{}{
+			{"to": []map[string]string{{"email": email}}},
+		},
+		"from":    map[string]string{"email": "noreply@rechargemax.ng", "name": "RechargeMax"},
+		"subject": subject,
+		"content": []map[string]string{
+			{"type": "text/plain", "value": body},
+			{"type": "text/html", "value": body},
+		},
+	}
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal email payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		"https://api.sendgrid.com/v3/mail/send", bytes.NewReader(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to build email request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+s.emailAPIKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		s.logDelivery("email", email, "sendgrid_error", err.Error())
+		return fmt.Errorf("email send failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		s.logDelivery("email", email, "sendgrid_http_error", fmt.Sprintf("status %d", resp.StatusCode))
+		return fmt.Errorf("SendGrid returned HTTP %d", resp.StatusCode)
+	}
+
+	s.logDelivery("email", email, "sendgrid", "")
 	return nil
 }
 

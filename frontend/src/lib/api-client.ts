@@ -1454,7 +1454,7 @@ export const winnerClaimApi: any = {
     return winnerClaimApi.markShipped(winnerId, trackingNumber);
   },
 
-  // Invoke runner-up (placeholder - needs backend implementation)
+  // Invoke runner-up for a winner draw
   invokeRunnerUp: async (winnerId: string) => {
     const response = await apiClient.post<ApiResponse>(`/admin/winners/${winnerId}/invoke-runner-up`);
     return response.data;

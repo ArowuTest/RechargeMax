@@ -156,20 +156,30 @@ func (h *MonitoringHandler) GetSystemMetrics(c *gin.Context) {
 		serverStatus = "critical"
 	}
 
+	// ── Real API request metrics from application_logs ─────────────────────
+	var recentRequests int64
+	var recentErrors   int64
+	h.db.Raw(`SELECT COUNT(*) FROM application_logs WHERE created_at > NOW() - INTERVAL '1 minute'`).Scan(&recentRequests)
+	h.db.Raw(`SELECT COUNT(*) FROM application_logs WHERE level IN ('ERROR','FATAL') AND created_at > NOW() - INTERVAL '1 minute'`).Scan(&recentErrors)
+	errorRate := 0.0
+	if recentRequests > 0 {
+		errorRate = float64(recentErrors) / float64(recentRequests) * 100
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": gin.H{
 			"server": gin.H{
-				"status":        serverStatus,
-				"uptime":        uptimePct,
+				"status":         serverStatus,
+				"uptime":         uptimePct,
 				"uptime_seconds": uptimeSeconds,
-				"cpu_usage":     float64(runtime.NumGoroutine()) / 100 * 10, // goroutine pressure proxy
-				"memory_usage":  memPct,
+				"cpu_usage":      float64(runtime.NumGoroutine()) / 100 * 10, // goroutine pressure proxy
+				"memory_usage":   memPct,
 				"memory_used_mb": memUsedMB,
-				"disk_usage":    getDiskUsagePct("/"),
-				"response_time": apiResponseMs,
-				"goroutines":    runtime.NumGoroutine(),
-				"go_version":    runtime.Version(),
+				"disk_usage":     getDiskUsagePct("/"),
+				"response_time":  apiResponseMs,
+				"goroutines":     runtime.NumGoroutine(),
+				"go_version":     runtime.Version(),
 			},
 			"database": gin.H{
 				"status":          dbStatus,
@@ -181,10 +191,10 @@ func (h *MonitoringHandler) GetSystemMetrics(c *gin.Context) {
 				"slow_queries":    0,
 			},
 			"api": gin.H{
-				"status":             "healthy",
-				"requests_per_minute": 0,
-				"error_rate":         0,
-				"avg_response_time":  apiResponseMs,
+				"status":              "healthy",
+				"requests_per_minute": recentRequests,
+				"error_rate":          errorRate,
+				"avg_response_time":   apiResponseMs,
 			},
 			"external_services": gin.H{
 				"paystack": "online",
@@ -199,7 +209,7 @@ func (h *MonitoringHandler) GetSystemMetrics(c *gin.Context) {
 				"audit_logs": auditCount,
 			},
 			"recent_alerts": alertList,
-			"build":         "20260326-draw-engine-v19",
+			
 			"timestamp":     time.Now().Format(time.RFC3339),
 		},
 	})

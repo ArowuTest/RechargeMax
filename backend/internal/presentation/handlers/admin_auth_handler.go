@@ -6,22 +6,26 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 
+	"rechargemax/internal/application/services"
 	"rechargemax/internal/domain/repositories"
 	"rechargemax/internal/middleware"
 )
 
 type AdminAuthHandler struct {
-	adminRepo repositories.AdminRepository
-	jwtSecret string
+	adminRepo    repositories.AdminRepository
+	jwtSecret    string
+	tokenService *services.TokenService
 }
 
-func NewAdminAuthHandler(adminRepo repositories.AdminRepository, jwtSecret string) *AdminAuthHandler {
+func NewAdminAuthHandler(adminRepo repositories.AdminRepository, jwtSecret string, tokenService *services.TokenService) *AdminAuthHandler {
 	return &AdminAuthHandler{
-		adminRepo: adminRepo,
-		jwtSecret: jwtSecret,
+		adminRepo:    adminRepo,
+		jwtSecret:    jwtSecret,
+		tokenService: tokenService,
 	}
 }
 
@@ -178,6 +182,30 @@ func (h *AdminAuthHandler) RefreshToken(c *gin.Context) {
 
 // Logout handles admin logout
 func (h *AdminAuthHandler) Logout(c *gin.Context) {
+	// Blacklist the token so it cannot be reused even if held by a client (SEC-003)
+	if h.tokenService != nil {
+		token := c.GetString("admin_token") // set by AdminAuthMiddleware
+		if token == "" {
+			// Fallback: read from Authorization header directly
+			if auth := c.GetHeader("Authorization"); len(auth) > 7 {
+				token = auth[7:] // strip "Bearer "
+			}
+		}
+		if token != "" {
+			// Parse admin_id from context if available
+			adminID := uuid.Nil
+			if raw, ok := c.Get("admin_id"); ok {
+				if s, ok2 := raw.(string); ok2 {
+					if id, err := uuid.Parse(s); err == nil {
+						adminID = id
+					}
+				}
+			}
+			_ = h.tokenService.BlacklistToken(
+				c.Request.Context(), token, adminID, "admin_logout",
+			)
+		}
+	}
 	// Clear the httpOnly admin auth cookie
 	middleware.ClearAuthCookie(c, "admin")
 	c.JSON(http.StatusOK, gin.H{

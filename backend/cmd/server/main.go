@@ -667,7 +667,7 @@ func initHandlers(svcs *services.Registry, repos *Repositories, appConfig *Confi
 		Winner:       handlers.NewWinnerHandler(svcs.Winner),
 		Notification: handlers.NewNotificationHandler(svcs.Notification),
 		Admin:        handlers.NewAdminHandler(svcs.Draw, svcs.Winner, svcs.User),
-		AdminAuth:    handlers.NewAdminAuthHandler(repos.Admin, appConfig.AdminJWTSecret),
+		AdminAuth:    handlers.NewAdminAuthHandler(repos.Admin, appConfig.AdminJWTSecret, tokenService),
 			AdminComprehensive: handlers.NewAdminComprehensiveHandler(
 				svcs.SubscriptionTier,
 				svcs.USSDRecharge,

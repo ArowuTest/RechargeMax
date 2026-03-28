@@ -5,7 +5,7 @@ backend/tmp/
 
 # Frontend
 frontend/node_modules/
-frontend/dist/
+
 frontend/.vite/
 frontend/pnpm-lock.yaml
 

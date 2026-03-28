@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>App Test</title>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module">
+    console.log('Test starting...');
+    
+    // Try to import App and see where it fails
+    import('/src/App.tsx').then(
+      (module) => {
+        console.log('SUCCESS: App.tsx loaded', module);
+      },
+      (error) => {
+        console.error('FAILED: App.tsx import error:', error);
+        console.error('Error stack:', error.stack);
+      }
+    );
+  </script>
+</body>
+</html>

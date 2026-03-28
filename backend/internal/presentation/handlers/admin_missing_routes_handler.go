@@ -273,10 +273,24 @@ func (h *AdminComprehensiveHandler) SendWinnerNotification(c *gin.Context) {
 		req.Message = "Congratulations! You have won a prize on RechargeMax. Please log in to claim your prize."
 	}
 
-	// Send notification via DB-backed notification record (no direct SMS service dependency)
+	// Look up the user_id from the users table using the winner's MSISDN
+	var userID *string
+	var row struct {
+		ID string `gorm:"column:id"`
+	}
+	if err := h.db.WithContext(ctx).Raw(
+		"SELECT id FROM users WHERE msisdn = ? LIMIT 1", winner.MSISDN,
+	).Scan(&row).Error; err == nil && row.ID != "" {
+		userID = &row.ID
+	}
+
+	// Insert into user_notifications (correct table + schema)
 	if err := h.db.WithContext(ctx).Exec(
-		"INSERT INTO notifications (id, user_msisdn, type, title, message, is_read, created_at, updated_at) VALUES (gen_random_uuid(), ?, 'PRIZE_WIN', 'Prize Notification', ?, false, NOW(), NOW())",
-		winner.MSISDN, req.Message,
+		`INSERT INTO user_notifications
+		   (id, user_id, title, body, notification_type, is_read, created_at, updated_at)
+		 VALUES
+		   (gen_random_uuid(), ?, 'Prize Notification', ?, 'prize', false, NOW(), NOW())`,
+		userID, req.Message,
 	).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to queue notification"})
 		return

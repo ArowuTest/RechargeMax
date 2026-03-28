@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -285,6 +286,26 @@ func handleError(c *gin.Context, err error) {
 			},
 		})
 	default:
+		// Map well-known business logic error strings to 4xx before falling back to 500
+		msg := err.Error()
+		if strings.Contains(msg, "not pending") || strings.Contains(msg, "already") ||
+			strings.Contains(msg, "invalid") || strings.Contains(msg, "not found") {
+			status := http.StatusConflict
+			if strings.Contains(msg, "not found") {
+				status = http.StatusNotFound
+			}
+			if strings.Contains(msg, "invalid") {
+				status = http.StatusBadRequest
+			}
+			c.JSON(status, gin.H{
+				"success": false,
+				"error": gin.H{
+					"code":    "BUSINESS_RULE_VIOLATION",
+					"message": msg,
+				},
+			})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
 			"error": gin.H{

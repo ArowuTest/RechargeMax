@@ -67,7 +67,7 @@ func Register(
 			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"service":   "rechargemax-api",
 			"version":   "1.1.0",
-			"build":     "20260326-draw-engine-v19",
+			"build":     "20260328-security-hardening-v20",
 		})
 	})
 	registerPublic(v1, hdlrs, db)
@@ -89,7 +89,7 @@ func registerInfra(r *gin.Engine) {
 			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"service":   "rechargemax-api",
 			"version":   "1.1.0",
-			"build":     "20260326-draw-engine-v19",
+			"build":     "20260328-security-hardening-v20",
 		})
 	})
 

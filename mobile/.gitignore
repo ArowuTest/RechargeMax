@@ -35,7 +35,6 @@ ios/Pods/
 ios/*.xcworkspace/xcuserdata/
 
 # Web
-lib/generated_plugin_registrant.dart
 
 # Coverage
 coverage/

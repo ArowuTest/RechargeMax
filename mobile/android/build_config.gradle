@@ -1,0 +1,31 @@
+<!-- build.gradle.kts (app level) configuration reference -->
+android {
+    namespace = "com.bridgetunes.rechargemax"
+    compileSdk = 34
+
+    defaultConfig {
+        applicationId = "com.bridgetunes.rechargemax"
+        minSdk = 21          // Android 5.0+ (covers 99%+ of Nigerian market)
+        targetSdk = 34
+        versionCode = 1
+        versionName = "1.0.0"
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.getByName("release")
+            minifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation("androidx.window:window:1.0.0")
+    implementation("androidx.window:window-java:1.0.0")
+}

@@ -1,0 +1,1 @@
+ /workspace/RechargeMax/mobile/.dart_tool/flutter_build/51bca049d308bebe90aa183f6e261cc1/native_assets.json: 

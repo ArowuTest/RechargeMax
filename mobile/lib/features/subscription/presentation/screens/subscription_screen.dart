@@ -101,7 +101,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.brand600.withOpacity(0.3),
+                    color: AppColors.brand600.withValues(alpha: 0.3),
                     blurRadius: 20,
                     offset: const Offset(0, 8),
                   ),
@@ -129,7 +129,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                   const SizedBox(height: 4),
                   Text(
                     'Guaranteed daily draw entries',
-                    style: AppTextStyles.bodyMd.copyWith(color: Colors.white.withOpacity(0.8)),
+                    style: AppTextStyles.bodyMd.copyWith(color: Colors.white.withValues(alpha: 0.8)),
                   ),
                 ],
               ),
@@ -168,8 +168,8 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                             height: 48,
                             decoration: BoxDecoration(
                               color: isActive
-                                  ? AppColors.success500.withOpacity(0.1)
-                                  : AppColors.error500.withOpacity(0.1),
+                                  ? AppColors.success500.withValues(alpha: 0.1)
+                                  : AppColors.error500.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Icon(
@@ -199,8 +199,8 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                             decoration: BoxDecoration(
                               color: isActive
-                                  ? AppColors.success500.withOpacity(0.1)
-                                  : AppColors.error500.withOpacity(0.1),
+                                  ? AppColors.success500.withValues(alpha: 0.1)
+                                  : AppColors.error500.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(

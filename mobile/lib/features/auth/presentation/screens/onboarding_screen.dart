@@ -119,8 +119,6 @@ class _OnboardingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -162,7 +160,7 @@ class _OnboardingPage extends StatelessWidget {
               Text(
                 data.description,
                 style: AppTextStyles.bodyXl.copyWith(
-                  color: Colors.white.withOpacity(0.72),
+                  color: Colors.white.withValues(alpha: 0.72),
                   height: 1.6,
                 ),
               )
@@ -193,7 +191,7 @@ class _IllustrationArea extends StatelessWidget {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(
-              color: data.accentColor.withOpacity(0.12),
+              color: data.accentColor.withValues(alpha: 0.12),
               width: 1,
             ),
           ),
@@ -205,7 +203,7 @@ class _IllustrationArea extends StatelessWidget {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(
-              color: data.accentColor.withOpacity(0.18),
+              color: data.accentColor.withValues(alpha: 0.18),
               width: 1,
             ),
           ),
@@ -218,8 +216,8 @@ class _IllustrationArea extends StatelessWidget {
             shape: BoxShape.circle,
             gradient: RadialGradient(
               colors: [
-                data.accentColor.withOpacity(0.2),
-                data.accentColor.withOpacity(0.05),
+                data.accentColor.withValues(alpha: 0.2),
+                data.accentColor.withValues(alpha: 0.05),
                 Colors.transparent,
               ],
             ),
@@ -271,7 +269,7 @@ class _OnboardingControls extends StatelessWidget {
           end: Alignment.bottomCenter,
           colors: [
             Colors.transparent,
-            AppColors.brand950.withOpacity(0.95),
+            AppColors.brand950.withValues(alpha: 0.95),
           ],
         ),
       ),
@@ -291,7 +289,7 @@ class _OnboardingControls extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: i == currentPage
                         ? AppColors.brand400
-                        : Colors.white.withOpacity(0.25),
+                        : Colors.white.withValues(alpha: 0.25),
                     borderRadius: BorderRadius.circular(4),
                   ),
                 );
@@ -307,8 +305,8 @@ class _OnboardingControls extends StatelessWidget {
                     child: OutlinedButton(
                       onPressed: onSkip,
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white.withOpacity(0.6),
-                        side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                        foregroundColor: Colors.white.withValues(alpha: 0.6),
+                        side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
@@ -317,7 +315,7 @@ class _OnboardingControls extends StatelessWidget {
                       child: Text(
                         'Skip',
                         style: AppTextStyles.labelXl.copyWith(
-                          color: Colors.white.withOpacity(0.6),
+                          color: Colors.white.withValues(alpha: 0.6),
                         ),
                       ),
                     ),

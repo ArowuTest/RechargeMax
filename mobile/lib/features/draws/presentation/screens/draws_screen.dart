@@ -194,7 +194,7 @@ class _DrawCardState extends State<_DrawCard> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: typeColor.withOpacity(0.1),
+              color: typeColor.withValues(alpha: 0.1),
               borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
             ),
             child: Row(
@@ -371,7 +371,7 @@ class _MyEntriesTab extends ConsumerWidget {
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
-                              color: AppColors.brand500.withOpacity(0.1),
+                              color: AppColors.brand500.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: const Icon(Icons.confirmation_number_rounded, color: AppColors.brand500, size: 20),
@@ -390,7 +390,7 @@ class _MyEntriesTab extends ConsumerWidget {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                             decoration: BoxDecoration(
-                              color: AppColors.brand500.withOpacity(0.1),
+                              color: AppColors.brand500.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
@@ -461,7 +461,7 @@ class _WinnersTab extends ConsumerWidget {
               child: Row(
                 children: [
                   CircleAvatar(
-                    backgroundColor: AppColors.gold500.withOpacity(0.15),
+                    backgroundColor: AppColors.gold500.withValues(alpha: 0.15),
                     child: const Text('🏆'),
                   ),
                   const SizedBox(width: 12),

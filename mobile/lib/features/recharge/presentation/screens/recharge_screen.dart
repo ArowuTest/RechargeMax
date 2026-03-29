@@ -48,7 +48,7 @@ class RechargeFormState {
 }
 
 class RechargeNotifier extends StateNotifier<RechargeFormState> {
-  final ApiClient _api;
+  final ApiBase _api;
   RechargeNotifier(this._api) : super(const RechargeFormState());
 
   void setPhone(String phone) => state = state.copyWith(phone: phone);
@@ -537,9 +537,9 @@ class _DrawEntryBanner extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.gold500.withOpacity(0.15),
+        color: AppColors.gold500.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.gold500.withOpacity(0.3)),
+        border: Border.all(color: AppColors.gold500.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [

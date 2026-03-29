@@ -83,7 +83,7 @@ class AppTheme {
       // ─── Navigation Bar (Material 3) ──────────────────────────────────────
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: isDark ? AppColors.darkBgSecondary : AppColors.bgPrimary,
-        indicatorColor: AppColors.brand500.withOpacity(0.15),
+        indicatorColor: AppColors.brand500.withValues(alpha: 0.15),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
             return const IconThemeData(color: AppColors.brand500, size: 24);
@@ -202,7 +202,7 @@ class AppTheme {
       // ─── Chip ─────────────────────────────────────────────────────────────
       chipTheme: ChipThemeData(
         backgroundColor: isDark ? AppColors.darkBgTertiary : AppColors.bgTertiary,
-        selectedColor: AppColors.brand500.withOpacity(0.15),
+        selectedColor: AppColors.brand500.withValues(alpha: 0.15),
         labelStyle: AppTextStyles.labelMd,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),

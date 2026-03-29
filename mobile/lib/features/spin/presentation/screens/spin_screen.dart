@@ -27,24 +27,26 @@ class SpinState {
     this.spinsRemaining = 0,
   });
 
+  static const _clear = Object();
+
   SpinState copyWith({
     SpinStatus? status,
     bool? eligible,
-    Map<String, dynamic>? result,
+    Object? result = _clear,
     String? error,
     int? spinsRemaining,
   }) =>
       SpinState(
         status: status ?? this.status,
         eligible: eligible ?? this.eligible,
-        result: result ?? this.result,
+        result: identical(result, _clear) ? this.result : result as Map<String, dynamic>?,
         error: error,
         spinsRemaining: spinsRemaining ?? this.spinsRemaining,
       );
 }
 
 class SpinNotifier extends StateNotifier<SpinState> {
-  final ApiClient _api;
+  final ApiBase _api;
   SpinNotifier(this._api) : super(const SpinState());
 
   Future<void> checkEligibility() async {
@@ -253,9 +255,9 @@ class _SpinScreenState extends ConsumerState<SpinScreen>
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
-                            color: AppColors.gold500.withOpacity(0.2),
+                            color: AppColors.gold500.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: AppColors.gold500.withOpacity(0.4)),
+                            border: Border.all(color: AppColors.gold500.withValues(alpha: 0.4)),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -325,7 +327,7 @@ class _SpinScreenState extends ConsumerState<SpinScreen>
               ? '✨ Spinning...'
               : 'Tap SPIN to try your luck!',
           style: AppTextStyles.bodyLg.copyWith(
-            color: Colors.white.withOpacity(0.7),
+            color: Colors.white.withValues(alpha: 0.7),
           ),
         ).animate(onPlay: (c) => c.repeat(reverse: true))
             .fadeIn(duration: 600.ms),
@@ -362,7 +364,7 @@ class _SpinWheel extends StatelessWidget {
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.brand500.withOpacity(isSpinning ? 0.6 : 0.3),
+                  color: AppColors.brand500.withValues(alpha: isSpinning ? 0.6 : 0.3),
                   blurRadius: isSpinning ? 40 : 20,
                   spreadRadius: isSpinning ? 10 : 2,
                 ),
@@ -388,7 +390,7 @@ class _SpinWheel extends StatelessWidget {
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.brand700.withOpacity(0.5),
+                  color: AppColors.brand700.withValues(alpha: 0.5),
                   blurRadius: 12,
                   spreadRadius: 2,
                 ),
@@ -427,7 +429,7 @@ class _PointerPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
 
     final shadow = Paint()
-      ..color = AppColors.gold600.withOpacity(0.4)
+      ..color = AppColors.gold600.withValues(alpha: 0.4)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
 
     final path = Path()
@@ -476,7 +478,7 @@ class _WheelPainter extends CustomPainter {
 
       // Segment border
       final borderPaint = Paint()
-        ..color = Colors.white.withOpacity(0.2)
+        ..color = Colors.white.withValues(alpha: 0.2)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5;
 
@@ -614,7 +616,7 @@ class _UnlockInfo extends StatelessWidget {
       child: Text(
         'Recharge ₦1,000 or more to unlock 1 free spin. More recharges = more spins!',
         style: AppTextStyles.bodyMd.copyWith(
-          color: Colors.white.withOpacity(0.7),
+          color: Colors.white.withValues(alpha: 0.7),
         ),
         textAlign: TextAlign.center,
       ),
@@ -672,7 +674,7 @@ class _IneligibleState extends StatelessWidget {
             width: 100,
             height: 100,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.08),
+              color: Colors.white.withValues(alpha: 0.08),
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.lock_rounded, color: Colors.white54, size: 48),
@@ -694,7 +696,7 @@ class _IneligibleState extends StatelessWidget {
           Text(
             'Recharge ₦1,000 or more to unlock the spin wheel and win amazing prizes!',
             style: AppTextStyles.bodyLg.copyWith(
-              color: Colors.white.withOpacity(0.6),
+              color: Colors.white.withValues(alpha: 0.6),
             ),
             textAlign: TextAlign.center,
           ),

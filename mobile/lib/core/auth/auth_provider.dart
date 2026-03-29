@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/api_client.dart';
 import '../../shared/constants/app_constants.dart';
-import '../api/api_client.dart' show secureStorageProvider;
 
 // ─── Auth State ──────────────────────────────────────────────────────────────
 enum AuthStatus { unknown, authenticated, unauthenticated }

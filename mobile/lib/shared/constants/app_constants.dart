@@ -1,7 +1,7 @@
 /// App-wide constants
 abstract class AppConstants {
   // ─── API ──────────────────────────────────────────────────────────────────
-  static const String baseUrl = 'https://rechargemax-api.onrender.com/api/v1';
+  static const String baseUrl = 'https://rechargemax-backend.onrender.com/api/v1';
   static const Duration connectTimeout = Duration(seconds: 30);
   static const Duration receiveTimeout = Duration(seconds: 30);
 

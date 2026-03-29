@@ -84,7 +84,7 @@ class _RechargeSuccessScreenState extends State<RechargeSuccessScreen> {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.success500.withOpacity(0.4),
+                          color: AppColors.success500.withValues(alpha: 0.4),
                           blurRadius: 24,
                           spreadRadius: 4,
                         ),
@@ -148,7 +148,7 @@ class _RechargeSuccessScreenState extends State<RechargeSuccessScreen> {
                         onPressed: () => context.go('/home'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.white,
-                          side: BorderSide(color: Colors.white.withOpacity(0.3)),
+                          side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
                           minimumSize: const Size(double.infinity, 52),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
@@ -184,16 +184,16 @@ class _RewardsCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
+        color: Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.15)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
       ),
       child: Column(
         children: [
           Text(
             'You Earned',
             style: AppTextStyles.labelLg.copyWith(
-              color: Colors.white.withOpacity(0.7),
+              color: Colors.white.withValues(alpha: 0.7),
             ),
           ),
           const SizedBox(height: 16),
@@ -205,7 +205,7 @@ class _RewardsCard extends StatelessWidget {
                 value: '$entries',
                 label: 'Draw ${entries == 1 ? 'Entry' : 'Entries'}',
               ),
-              Container(width: 1, height: 50, color: Colors.white.withOpacity(0.15)),
+              Container(width: 1, height: 50, color: Colors.white.withValues(alpha: 0.15)),
               _RewardItem(
                 icon: spinUnlocked ? '🎰' : '🔒',
                 value: spinUnlocked ? 'UNLOCKED' : 'LOCKED',
@@ -249,7 +249,7 @@ class _RewardItem extends StatelessWidget {
         Text(
           label,
           style: AppTextStyles.bodySm.copyWith(
-            color: Colors.white.withOpacity(0.6),
+            color: Colors.white.withValues(alpha: 0.6),
           ),
         ),
       ],

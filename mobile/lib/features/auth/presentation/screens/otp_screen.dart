@@ -199,7 +199,6 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                   color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
                   fontWeight: FontWeight.w700,
                 ),
-                hasError: _error != null,
                 errorAnimationController: null,
               ).animate(delay: 300.ms).fadeIn().slideY(begin: 0.2, end: 0),
 

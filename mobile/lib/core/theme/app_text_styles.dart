@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'app_colors.dart';
 
 abstract class AppTextStyles {
   static const String fontFamily = 'PlusJakartaSans';

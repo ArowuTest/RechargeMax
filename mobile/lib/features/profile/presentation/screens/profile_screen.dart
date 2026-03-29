@@ -40,7 +40,7 @@ class ProfileScreen extends ConsumerWidget {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.brand500.withOpacity(0.4),
+                          color: AppColors.brand500.withValues(alpha: 0.4),
                           blurRadius: 16,
                           spreadRadius: 2,
                         ),
@@ -262,7 +262,7 @@ class _MenuItem extends StatelessWidget {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: itemColor.withOpacity(0.08),
+                color: itemColor.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(icon, color: itemColor, size: 20),
@@ -347,7 +347,7 @@ class _TierProgressItem extends StatelessWidget {
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: isActive ? color.withOpacity(0.15) : AppColors.bgTertiary,
+                      color: isActive ? color.withValues(alpha: 0.15) : AppColors.bgTertiary,
                       shape: BoxShape.circle,
                       border: Border.all(
                         color: isActive ? color : AppColors.borderSecondary,

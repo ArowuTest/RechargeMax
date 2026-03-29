@@ -106,7 +106,7 @@ class _AffiliateScreenState extends ConsumerState<AffiliateScreen> {
         backgroundColor: isDark ? AppColors.darkBgPrimary : AppColors.bgPrimary,
       ),
       body: isAffiliate
-          ? _AffiliateDashboard(onRequestPayout: _requestPayout)
+          ? _AffiliateDashboard(onRequestPayout: _requestPayout, isPayoutLoading: _isRequestingPayout)
           : _AffiliateJoin(onJoin: _register, isLoading: _isRegistering),
     );
   }
@@ -153,7 +153,7 @@ class _AffiliateJoin extends StatelessWidget {
                 Text(
                   'Get 5% commission on every recharge made by your referrals. Unlimited earnings!',
                   style: AppTextStyles.bodyLg.copyWith(
-                    color: Colors.white.withOpacity(0.8),
+                    color: Colors.white.withValues(alpha: 0.8),
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -183,7 +183,7 @@ class _AffiliateJoin extends StatelessWidget {
                         width: 28,
                         height: 28,
                         decoration: BoxDecoration(
-                          color: s.$3.withOpacity(0.15),
+                          color: s.$3.withValues(alpha: 0.15),
                           shape: BoxShape.circle,
                         ),
                         child: Center(
@@ -216,8 +216,9 @@ class _AffiliateJoin extends StatelessWidget {
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 class _AffiliateDashboard extends ConsumerWidget {
   final Future<void> Function(double) onRequestPayout;
+  final bool isPayoutLoading;
 
-  const _AffiliateDashboard({required this.onRequestPayout});
+  const _AffiliateDashboard({required this.onRequestPayout, this.isPayoutLoading = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -307,7 +308,7 @@ class _AffiliateDashboard extends ConsumerWidget {
                             ),
                             GestureDetector(
                               onTap: () {
-                                Clipboard.copy(referralLink);
+                                Clipboard.setData(ClipboardData(text: referralLink));
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(content: Text('Copied!')),
                                 );
@@ -332,8 +333,10 @@ class _AffiliateDashboard extends ConsumerWidget {
                           const SizedBox(width: 10),
                           Expanded(
                             child: ElevatedButton.icon(
-                              onPressed: balance >= 1000 ? () => onRequestPayout(balance.toDouble()) : null,
-                              icon: const Icon(Icons.account_balance_rounded, size: 18),
+                              onPressed: (balance >= 1000 && !isPayoutLoading) ? () => onRequestPayout(balance.toDouble()) : null,
+                              icon: isPayoutLoading
+                                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                                  : const Icon(Icons.account_balance_rounded, size: 18),
                               label: const Text('Withdraw'),
                             ),
                           ),

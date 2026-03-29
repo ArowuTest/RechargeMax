@@ -156,7 +156,7 @@ class _PhoneEntryScreenState extends ConsumerState<PhoneEntryScreen> {
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.15),
+                    color: Colors.black.withValues(alpha: 0.15),
                     blurRadius: 20,
                     offset: const Offset(0, -4),
                   ),

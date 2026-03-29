@@ -67,7 +67,34 @@ final dioProvider = Provider<Dio>((ref) {
 });
 
 // ─── API Client ──────────────────────────────────────────────────────────────
-class ApiClient {
+
+/// Abstract interface — implemented by ApiClient (production) and MockApiClient (tests)
+abstract class ApiBase {
+  Future<Map<String, dynamic>> sendOtp(String msisdn);
+  Future<Map<String, dynamic>> verifyOtp(String msisdn, String otp);
+  Future<Map<String, dynamic>> getDashboard();
+  Future<Map<String, dynamic>> getProfile();
+  Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> data);
+  Future<Map<String, dynamic>> initiateRecharge(Map<String, dynamic> data);
+  Future<Map<String, dynamic>> getRechargeHistory({int page = 1});
+  Future<List<dynamic>> getDataBundles(String network);
+  Future<Map<String, dynamic>> getActiveDraws();
+  Future<Map<String, dynamic>> getDrawHistory({int page = 1, String? drawId});
+  Future<Map<String, dynamic>> getMyDrawEntries({int page = 1});
+  Future<Map<String, dynamic>> checkSpinEligibility();
+  Future<Map<String, dynamic>> playSpin();
+  Future<Map<String, dynamic>> getSpinHistory({int page = 1});
+  Future<Map<String, dynamic>> getSpinTiers();
+  Future<Map<String, dynamic>> getSubscriptionStatus();
+  Future<Map<String, dynamic>> subscribe(Map<String, dynamic> paymentData);
+  Future<Map<String, dynamic>> cancelSubscription();
+  Future<Map<String, dynamic>> registerAffiliate();
+  Future<Map<String, dynamic>> getAffiliateDashboard();
+  Future<Map<String, dynamic>> requestPayout(Map<String, dynamic> data);
+  Future<Map<String, dynamic>> getWinners({int page = 1, String? drawId});
+}
+
+class ApiClient implements ApiBase {
   final Dio _dio;
   ApiClient(this._dio);
 
@@ -97,7 +124,8 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> data) async {
-    final res = await _dio.put('/user/profile', data: data);
+    // Backend uses POST /user/profile for updates (not PUT — router.go:user.POST("/profile"))
+    final res = await _dio.post('/user/profile', data: data);
     return res.data as Map<String, dynamic>;
   }
 
@@ -113,8 +141,9 @@ class ApiClient {
   }
 
   Future<List<dynamic>> getDataBundles(String network) async {
-    final res = await _dio.get('/recharge/data-bundles', queryParameters: {'network': network});
-    return (res.data['bundles'] ?? res.data['data'] ?? []) as List<dynamic>;
+    // Correct backend route: GET /networks/:networkId/bundles
+    final res = await _dio.get('/networks/${network.toLowerCase()}/bundles');
+    return (res.data['data'] ?? res.data['bundles'] ?? []) as List<dynamic>;
   }
 
   // Draws
@@ -123,8 +152,9 @@ class ApiClient {
     return res.data as Map<String, dynamic>;
   }
 
-  Future<Map<String, dynamic>> getDrawHistory({int page = 1}) async {
-    final res = await _dio.get('/draws/history', queryParameters: {'page': page});
+  Future<Map<String, dynamic>> getDrawHistory({int page = 1, String? drawId}) async {
+    // Backend route: GET /draws (list of all draws with history) — /draws/history needs draw_id
+    final res = await _dio.get('/draws', queryParameters: {'page': page});
     return res.data as Map<String, dynamic>;
   }
 
@@ -161,7 +191,8 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> subscribe(Map<String, dynamic> paymentData) async {
-    final res = await _dio.post('/subscription/subscribe', data: paymentData);
+    // Correct backend route: POST /subscription/create
+    final res = await _dio.post('/subscription/create', data: paymentData);
     return res.data as Map<String, dynamic>;
   }
 
@@ -182,12 +213,19 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> requestPayout(Map<String, dynamic> data) async {
-    final res = await _dio.post('/affiliate/payment', data: data);
+    // Correct backend route: POST /affiliate/payout
+    final res = await _dio.post('/affiliate/payout', data: data);
     return res.data as Map<String, dynamic>;
   }
 
-  Future<Map<String, dynamic>> getWinners({int page = 1}) async {
-    final res = await _dio.get('/draws/winners', queryParameters: {'page': page});
+  Future<Map<String, dynamic>> getWinners({int page = 1, String? drawId}) async {
+    // Backend route: GET /draws/:id/winners OR GET /winners (public recent winners)
+    if (drawId != null) {
+      final res = await _dio.get('/draws/$drawId/winners');
+      return res.data as Map<String, dynamic>;
+    }
+    // Fallback: public recent winners list
+    final res = await _dio.get('/winners', queryParameters: {'page': page});
     return res.data as Map<String, dynamic>;
   }
 }

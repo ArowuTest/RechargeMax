@@ -81,7 +81,7 @@ class _AppGradientButtonState extends State<AppGradientButton>
             boxShadow: isEnabled
                 ? [
                     BoxShadow(
-                      color: AppColors.brand600.withOpacity(0.35),
+                      color: AppColors.brand600.withValues(alpha: 0.35),
                       blurRadius: 16,
                       offset: const Offset(0, 6),
                     )
@@ -152,13 +152,13 @@ class GlassCard extends StatelessWidget {
         padding: padding ?? const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: (backgroundColor ?? (isDark ? Colors.white : AppColors.brand900))
-              .withOpacity(backgroundOpacity),
+              .withValues(alpha: backgroundOpacity),
           borderRadius: BorderRadius.circular(borderRadius),
           border: hasBorder
               ? Border.all(
                   color: isDark
-                      ? Colors.white.withOpacity(0.1)
-                      : AppColors.brand800.withOpacity(0.2),
+                      ? Colors.white.withValues(alpha: 0.1)
+                      : AppColors.brand800.withValues(alpha: 0.2),
                   width: 1,
                 )
               : null,
@@ -173,6 +173,7 @@ class GlassCard extends StatelessWidget {
 class AppCard extends StatelessWidget {
   final Widget child;
   final EdgeInsets? padding;
+  final EdgeInsets? margin;
   final double borderRadius;
   final Color? backgroundColor;
   final VoidCallback? onTap;
@@ -182,6 +183,7 @@ class AppCard extends StatelessWidget {
     super.key,
     required this.child,
     this.padding,
+    this.margin,
     this.borderRadius = 16,
     this.backgroundColor,
     this.onTap,
@@ -196,6 +198,7 @@ class AppCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
+        margin: margin,
         padding: padding ?? const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: backgroundColor ?? (isDark ? AppColors.darkBgCard : AppColors.bgPrimary),
@@ -207,7 +210,7 @@ class AppCard extends StatelessWidget {
           boxShadow: hasShadow
               ? [
                   BoxShadow(
-                    color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
+                    color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
                     blurRadius: 12,
                     offset: const Offset(0, 2),
                   ),
@@ -252,9 +255,9 @@ class TierBadge extends StatelessWidget {
     return Container(
       padding: padding,
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.4), width: 1),
+        border: Border.all(color: color.withValues(alpha: 0.4), width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -292,7 +295,7 @@ class PointsDisplay extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
-            color: AppColors.gold500.withOpacity(0.2),
+            color: AppColors.gold500.withValues(alpha: 0.2),
             shape: BoxShape.circle,
           ),
           child: Icon(
@@ -319,7 +322,7 @@ class PointsDisplay extends StatelessWidget {
           Text(
             'pts',
             style: AppTextStyles.bodyMd.copyWith(
-              color: AppColors.gold400.withOpacity(0.8),
+              color: AppColors.gold400.withValues(alpha: 0.8),
             ),
           ),
         ],
@@ -426,7 +429,7 @@ class AppEmptyState extends StatelessWidget {
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                color: AppColors.brand500.withOpacity(0.1),
+                color: AppColors.brand500.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(icon, size: 36, color: AppColors.brand400),
@@ -487,7 +490,7 @@ class NetworkBadge extends StatelessWidget {
       duration: const Duration(milliseconds: 200),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: selected ? color.withOpacity(0.15) : Colors.transparent,
+        color: selected ? color.withValues(alpha: 0.15) : Colors.transparent,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: selected ? color : AppColors.borderSecondary,

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../core/theme/app_colors.dart';
-import '../core/theme/app_text_styles.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_text_styles.dart';
 
 // ─── Bottom Nav State ─────────────────────────────────────────────────────────
 final bottomNavIndexProvider = StateProvider<int>((ref) => 0);
@@ -78,7 +78,7 @@ class _AppBottomNav extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.3 : 0.06),
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
             blurRadius: 20,
             offset: const Offset(0, -4),
           ),
@@ -170,7 +170,7 @@ class _SpinNavItem extends StatelessWidget {
             boxShadow: isSelected
                 ? [
                     BoxShadow(
-                      color: AppColors.brand500.withOpacity(0.4),
+                      color: AppColors.brand500.withValues(alpha: 0.4),
                       blurRadius: 12,
                       spreadRadius: 0,
                       offset: const Offset(0, 4),

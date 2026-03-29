@@ -144,7 +144,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
               child: Text(
                 'by BridgeTunes',
                 style: AppTextStyles.bodySm.copyWith(
-                  color: Colors.white.withOpacity(0.4),
+                  color: Colors.white.withValues(alpha: 0.4),
                 ),
                 textAlign: TextAlign.center,
               ).animate(delay: 1000.ms).fadeIn(duration: 400.ms),
@@ -173,7 +173,7 @@ class _LogoMark extends StatelessWidget {
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
-                color: AppColors.brand500.withOpacity(
+                color: AppColors.brand500.withValues(alpha: 
                     0.3 + 0.2 * pulseController.value),
                 blurRadius: 30 + 10 * pulseController.value,
                 spreadRadius: 5 * pulseController.value,
@@ -201,7 +201,7 @@ class _GlowOrb extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: RadialGradient(
-          colors: [color.withOpacity(opacity), Colors.transparent],
+          colors: [color.withValues(alpha: opacity), Colors.transparent],
         ),
       ),
     );
@@ -248,7 +248,7 @@ class _LoadingDotsState extends State<_LoadingDots>
               height: 8,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.3 + 0.7 * bounce),
+                color: Colors.white.withValues(alpha: 0.3 + 0.7 * bounce),
               ),
             );
           },

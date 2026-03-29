@@ -1,1 +1,0 @@
- build/web/manifest.json:  /workspace/RechargeMax/mobile/web/index.html /workspace/RechargeMax/mobile/web/manifest.json

@@ -28,6 +28,7 @@ import PrizeTemplateManagement from './PrizeTemplateManagement';
 import StrategicAffiliateAdminDashboard from './StrategicAffiliateAdminDashboard';
 // ── Extracted sub-components (P1 refactor) ────────────────────────────────
 import PlatformSettingsPage from './PlatformSettingsPage';
+import { TabErrorBoundary } from '@/components/ui/TabErrorBoundary';
 import UserManagementTab from './UserManagementTab';
 import AuditLogTab from './AuditLogTab';
 import { 
@@ -1083,6 +1084,7 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
 
           {/* Dashboard */}
           <TabsContent value="dashboard">
+            <TabErrorBoundary tabName="Dashboard">
             <div className="space-y-6">
               {/* Key Performance Indicators */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1268,23 +1270,31 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
                 </Card>
               )}
             </div>
+            </TabErrorBoundary>
           </TabsContent>
 
           {/* System Monitoring */}
           <TabsContent value="monitoring">
+            <TabErrorBoundary tabName="Monitoring">
             <SystemMonitoringDashboard />
+            </TabErrorBoundary>
           </TabsContent>
 
           {/* Draw Engine Integration */}
           <TabsContent value="draw">
+            <TabErrorBoundary tabName="Draw Engine">
             <DrawIntegrationDashboard />
+            </TabErrorBoundary>
           </TabsContent>
 
           <TabsContent value="prize-templates">
+            <TabErrorBoundary tabName="Prize Templates">
             <PrizeTemplateManagement />
+            </TabErrorBoundary>
           </TabsContent>
 
           <TabsContent value="networks">
+            <TabErrorBoundary tabName="Networks">
             <div className="space-y-6">
               <Card>
                 <CardHeader>
@@ -1485,9 +1495,11 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
                 </CardContent>
               </Card>
             </div>
+            </TabErrorBoundary>
           </TabsContent>
 
           <TabsContent value="prizes">
+            <TabErrorBoundary tabName="Prizes">
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -1599,20 +1611,26 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
                 </Table>
               </CardContent>
             </Card>
+            </TabErrorBoundary>
           </TabsContent>
 
           {/* Spin Tiers Management */}
           <TabsContent value="spin-tiers">
+            <TabErrorBoundary tabName="Spin Tiers">
             <SpinTiersManagement />
+            </TabErrorBoundary>
           </TabsContent>
 
           {/* Spin Prize Claims Management */}
           <TabsContent value="spin-claims">
+            <TabErrorBoundary tabName="Prize Claims">
             <SpinPrizeClaimsManagement />
+            </TabErrorBoundary>
           </TabsContent>
 
           {/* Daily Subscription Management */}
           <TabsContent value="subscription">
+            <TabErrorBoundary tabName="Daily Draw">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1804,29 +1822,37 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
                 )}
               </CardContent>
             </Card>
+            </TabErrorBoundary>
           </TabsContent>
 
           {/* Strategic Affiliate Management */}
           <TabsContent value="strategic-affiliates">
+            <TabErrorBoundary tabName="Strategic Affiliates">
             <StrategicAffiliateAdminDashboard sessionToken={sessionToken || ''} />
+            </TabErrorBoundary>
           </TabsContent>
 
           {/* User Management */}
           <TabsContent value="users">
+            <TabErrorBoundary tabName="Users">
             <UserManagementTab />
+            </TabErrorBoundary>
           </TabsContent>
 
           
 
           {/* Platform Settings */}
           <TabsContent value="settings">
+            <TabErrorBoundary tabName="Settings">
             <PlatformSettingsPage />
+            </TabErrorBoundary>
           </TabsContent>
 
           
 
           {/* Admin Management */}
           <TabsContent value="admins">
+            <TabErrorBoundary tabName="Admins">
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -1914,11 +1940,14 @@ export const ComprehensiveAdminPortal: React.FC<ComprehensiveAdminPortalProps> =
                 </Table>
               </CardContent>
             </Card>
+            </TabErrorBoundary>
           </TabsContent>
 
           {/* Audit Log */}
           <TabsContent value="audit">
+            <TabErrorBoundary tabName="Audit Log">
             <AuditLogTab />
+            </TabErrorBoundary>
           </TabsContent>
 
         </Tabs>

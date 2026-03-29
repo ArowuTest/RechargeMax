@@ -38,6 +38,7 @@ func Register(
 	// ── Global middleware ────────────────────────────────────────────────────
 	router.Use(gin.Recovery())
 	router.Use(middleware.LoggingMiddleware())
+	router.Use(middleware.DBLoggingMiddleware(db)) // async DB write for /admin/monitoring/system req metrics
 	router.Use(middleware.CORSMiddleware())
 	router.Use(middleware.SecurityHeadersMiddleware())
 	router.Use(middleware.RequestIDMiddleware())

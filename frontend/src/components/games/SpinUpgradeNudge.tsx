@@ -7,14 +7,16 @@
  *   - Exactly how much to recharge next to unlock the next tier
  *   - A clear CTA to recharge again
  *
- * This replaces the current bad UX of: wheel popup → hit SPIN → "Spin Failed" toast.
+ * Tier table is fetched live from GET /spins/tiers so admin changes
+ * (amounts, spins, names) are reflected instantly without a frontend deploy.
  */
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { formatCurrency } from '@/lib/utils';
-import { Zap, Trophy, ArrowRight, X, RotateCcw, Ticket } from 'lucide-react';
+import { Zap, Trophy, ArrowRight, X, RotateCcw, Ticket, Loader2 } from 'lucide-react';
+import apiClient from '@/lib/api-client';
 
 interface SpinUpgradeNudgeProps {
   isOpen: boolean;
@@ -33,6 +35,20 @@ interface SpinUpgradeNudgeProps {
   nextTierSpins?: number;
 }
 
+interface SpinTier {
+  id: string;
+  tier_name: string;
+  tier_display_name: string;
+  min_daily_amount: number; // kobo
+  max_daily_amount: number; // kobo  (-1 = unlimited)
+  spins_per_day: number;
+  tier_icon: string;
+  tier_badge: string;
+  description: string;
+  sort_order: number;
+  is_active: boolean;
+}
+
 const TIER_COLORS: Record<string, string> = {
   Bronze:   'from-amber-600  to-yellow-500',
   Silver:   'from-slate-400  to-gray-300',
@@ -40,12 +56,12 @@ const TIER_COLORS: Record<string, string> = {
   Platinum: 'from-purple-500 to-indigo-400',
 };
 
-const TIER_EMOJI: Record<string, string> = {
-  Bronze:   '🥉',
-  Silver:   '🥈',
-  Gold:     '🥇',
-  Platinum: '💎',
-};
+/** Format kobo range into a display string like "₦1,000 – ₦2,499" */
+function formatTierRange(minKobo: number, maxKobo: number): string {
+  const min = formatCurrency(minKobo / 100);
+  if (maxKobo < 0 || maxKobo === 0) return `${min}+`;
+  return `${min} – ${formatCurrency(maxKobo / 100)}`;
+}
 
 export const SpinUpgradeNudge: React.FC<SpinUpgradeNudgeProps> = ({
   isOpen,
@@ -57,26 +73,51 @@ export const SpinUpgradeNudge: React.FC<SpinUpgradeNudgeProps> = ({
   amountToNextTier,
   nextTierSpins,
 }) => {
+  const [tiers, setTiers] = useState<SpinTier[]>([]);
+  const [tiersLoading, setTiersLoading] = useState(false);
+
+  // Fetch live tier data when the nudge opens
+  useEffect(() => {
+    if (!isOpen) return;
+    setTiersLoading(true);
+    apiClient
+      .get<any>('/spins/tiers')
+      .then((res) => {
+        // res is AxiosResponse<any> — the backend wraps in { success, data: { tiers: [...] } }
+        // res.data is the parsed JSON body
+        const body = res?.data ?? {};
+        const fetched: SpinTier[] = body?.data?.tiers ?? body?.tiers ?? [];
+        if (Array.isArray(fetched) && fetched.length > 0) {
+          setTiers(fetched.filter((t) => t.is_active).sort((a, b) => a.sort_order - b.sort_order));
+        }
+      })
+      .catch(() => {
+        // Silently fall back to empty — component still renders without the table
+      })
+      .finally(() => setTiersLoading(false));
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const hasNextTier    = !!nextTierName && !!nextTierSpins;
   const tierGradient   = nextTierName ? (TIER_COLORS[nextTierName] ?? 'from-green-500 to-emerald-400') : '';
-  const tierEmoji      = nextTierName ? (TIER_EMOJI[nextTierName] ?? '🏆') : '🏆';
-  // "Recharge X MORE today" is more actionable than the absolute minimum
+  const tierEmoji      = nextTierName
+    ? (tiers.find((t) => t.tier_display_name === nextTierName)?.tier_icon ?? '🏆')
+    : '🏆';
+
   const nudgeAmountNaira = amountToNextTier
     ? amountToNextTier / 100
     : nextTierMinAmount
       ? nextTierMinAmount / 100
       : 0;
 
-  // Calculate draw entries the nudge amount would earn (₦200 = 1 point = 1 entry)
   const nudgeDrawEntries = nudgeAmountNaira > 0 ? Math.floor(nudgeAmountNaira / 200) : 0;
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-start sm:items-center justify-center z-50 p-4 overflow-y-auto">
       <Card className="w-full max-w-md shadow-2xl border-0 overflow-hidden my-auto">
 
-        {/* Header — spinning coins animation feel */}
+        {/* Header */}
         <CardHeader className="bg-gradient-to-br from-gray-900 to-gray-800 text-white pb-6 relative">
           <button
             onClick={onClose}
@@ -90,7 +131,6 @@ export const SpinUpgradeNudge: React.FC<SpinUpgradeNudgeProps> = ({
               <div className="w-16 h-16 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center shadow-lg">
                 <RotateCcw className="w-8 h-8 text-white" />
               </div>
-              {/* Checkmark badge */}
               <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center text-white text-xs font-bold shadow">
                 ✓
               </div>
@@ -130,7 +170,7 @@ export const SpinUpgradeNudge: React.FC<SpinUpgradeNudgeProps> = ({
           {/* Upgrade nudge */}
           {hasNextTier ? (
             <div className={`rounded-xl bg-gradient-to-br ${tierGradient} p-[2px] shadow-lg`}>
-                <div className="rounded-[10px] bg-white p-4 space-y-3">
+              <div className="rounded-[10px] bg-white p-4 space-y-3">
                 <div className="flex items-center gap-2">
                   <span className="text-2xl">{tierEmoji}</span>
                   <div>
@@ -170,7 +210,6 @@ export const SpinUpgradeNudge: React.FC<SpinUpgradeNudgeProps> = ({
               </div>
             </div>
           ) : (
-            /* Already at max tier */
             <div className="rounded-xl bg-gradient-to-br from-purple-500 to-indigo-400 p-[2px] shadow-lg">
               <div className="rounded-[10px] bg-white p-4 text-center space-y-2">
                 <span className="text-3xl">💎</span>
@@ -182,7 +221,7 @@ export const SpinUpgradeNudge: React.FC<SpinUpgradeNudgeProps> = ({
             </div>
           )}
 
-          {/* Prize draw motivation banner */}
+          {/* Draw entries motivation */}
           <div className="rounded-xl bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 p-4 space-y-2">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
@@ -206,30 +245,40 @@ export const SpinUpgradeNudge: React.FC<SpinUpgradeNudgeProps> = ({
             </p>
           </div>
 
-          {/* Recharge tier ladder (quick reference) */}
+          {/* Live tier ladder — fetched from API */}
           <div className="space-y-1.5">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Spin tiers</p>
-            {[
-              { name: 'Bronze',   range: '₦1,000 – ₦2,499',  spins: 1, emoji: '🥉', entries: '5+' },
-              { name: 'Silver',   range: '₦2,500 – ₦4,999',  spins: 2, emoji: '🥈', entries: '12+' },
-              { name: 'Gold',     range: '₦5,000 – ₦9,999',  spins: 3, emoji: '🥇', entries: '25+' },
-              { name: 'Platinum', range: '₦10,000+',          spins: 5, emoji: '💎', entries: '50+' },
-            ].map((t) => (
-              <div
-                key={t.name}
-                className={`flex items-center justify-between px-3 py-1.5 rounded-lg text-xs ${
-                  t.name === nextTierName
-                    ? 'bg-yellow-50 border border-yellow-300 font-semibold'
-                    : 'bg-gray-50 text-gray-600'
-                }`}
-              >
-                <span>{t.emoji} {t.name} <span className="text-gray-400 font-normal">({t.range})</span></span>
-                <div className="flex items-center gap-3">
-                  <span className="text-indigo-500 font-medium text-[10px]">{t.entries} entries</span>
-                  <span className="font-bold text-gray-700">{t.spins} spin{t.spins > 1 ? 's' : ''}</span>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Spin tiers</p>
+              {tiersLoading && <Loader2 className="w-3 h-3 text-gray-400 animate-spin" />}
+            </div>
+
+            {tiers.length > 0 ? (
+              tiers.map((t) => (
+                <div
+                  key={t.id}
+                  className={`flex items-center justify-between px-3 py-1.5 rounded-lg text-xs ${
+                    t.tier_display_name === nextTierName
+                      ? 'bg-yellow-50 border border-yellow-300 font-semibold'
+                      : 'bg-gray-50 text-gray-600'
+                  }`}
+                >
+                  <span>
+                    {t.tier_icon} {t.tier_display_name}{' '}
+                    <span className="text-gray-400 font-normal">
+                      ({formatTierRange(t.min_daily_amount, t.max_daily_amount)})
+                    </span>
+                  </span>
+                  <span className="font-bold text-gray-700">
+                    {t.spins_per_day} spin{t.spins_per_day > 1 ? 's' : ''}
+                  </span>
                 </div>
-              </div>
-            ))}
+              ))
+            ) : !tiersLoading ? (
+              /* Skeleton rows shown while loading or if API failed silently */
+              [1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-7 bg-gray-100 rounded-lg animate-pulse" />
+              ))
+            ) : null}
           </div>
 
           {/* Action buttons */}

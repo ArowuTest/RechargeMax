@@ -36,6 +36,11 @@ type TransactionRepository interface {
 	// CountByMSISDN counts successful transactions for a given MSISDN (used as
 	// a user_id-independent fallback when user_id is NULL on legacy rows)
 	CountByMSISDN(ctx context.Context, msisdn string) (int64, error)
+	// SumSuccessfulAmountByMSISDNSince returns the total kobo amount of all
+	// SUCCESS transactions for a given MSISDN on or after the given timestamp.
+	// Used by CheckEligibility to determine the user's cumulative daily recharge
+	// total without bypassing the repository layer.
+	SumSuccessfulAmountByMSISDNSince(ctx context.Context, msisdn string, since time.Time) (int64, error)
 	
 	// Recharge-specific methods (Transactions are recharges)
 	FindByPaymentRef(ctx context.Context, paymentRef string) (*entities.Transactions, error)

@@ -262,3 +262,22 @@ func (r *transactionRepositoryGORM) SumAmountByUserIDAndDateRange(ctx context.Co
 		Scan(&result).Error
 	return result.Total, err
 }
+
+// SumSuccessfulAmountByMSISDNSince returns the total kobo amount of all SUCCESS
+// transactions for a given MSISDN on or after the given timestamp.
+// Queries by MSISDN (not user_id) so that guest transactions with NULL user_id
+// are included — essential for the spin eligibility daily-total check.
+func (r *transactionRepositoryGORM) SumSuccessfulAmountByMSISDNSince(ctx context.Context, msisdn string, since time.Time) (int64, error) {
+	var result struct {
+		Total int64
+	}
+	err := r.db.WithContext(ctx).
+		Model(&entities.Transactions{}).
+		Select("COALESCE(SUM(amount), 0) as total").
+		Where("msisdn = ? AND status = ? AND created_at >= ?", msisdn, "SUCCESS", since).
+		Scan(&result).Error
+	if err != nil {
+		return 0, err
+	}
+	return result.Total, nil
+}

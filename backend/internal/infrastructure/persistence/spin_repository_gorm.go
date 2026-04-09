@@ -2,10 +2,11 @@ package persistence
 
 import (
 	"context"
-	
+	"time"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
-	
+
 	"rechargemax/internal/domain/entities"
 	"rechargemax/internal/domain/repositories"
 )
@@ -93,6 +94,19 @@ func (r *spinRepositoryGORM) CountPendingByUserID(ctx context.Context, userID uu
 	err := r.db.WithContext(ctx).
 		Model(&entities.SpinResults{}).
 		Where("user_id = ? AND claim_status = ?", userID, "PENDING").
+		Count(&count).Error
+	return count, err
+}
+
+// CountTodayByMSISDN counts all spin_results rows for a given MSISDN on or
+// after the given timestamp. Counts ALL claim statuses because PENDING means
+// the spin was already played and the prize is awaiting collection — it must
+// NOT be treated as a fresh spin slot.
+func (r *spinRepositoryGORM) CountTodayByMSISDN(ctx context.Context, msisdn string, since time.Time) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&entities.SpinResults{}).
+		Where("msisdn = ? AND created_at >= ?", msisdn, since).
 		Count(&count).Error
 	return count, err
 }

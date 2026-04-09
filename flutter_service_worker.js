@@ -287,7 +287,7 @@ const RESOURCES = {"assets/assets/fonts/PlusJakartaSans-SemiBold.ttf": "c9e4aa89
 "canvaskit/skwasm.js": "f2ad9363618c5f62e813740099a80e63",
 "canvaskit/skwasm_st.js": "d1326ceef381ad382ab492ba5d96f04d",
 "flutter.js": "76f08d47ff9f5715220992f993002504",
-"flutter_bootstrap.js": "032c04511ef02c837f6c04f13868f20a",
+"flutter_bootstrap.js": "5c21cc081e9b676feb297d9364f43fd5",
 "main.dart.js": "ce6f5ccdd4579f68b810e3976f1b7b4c",
 "version.json": "185ade19a8ee6c5c17f73109c7b27876"};
 // The application shell files that are downloaded before a service worker can

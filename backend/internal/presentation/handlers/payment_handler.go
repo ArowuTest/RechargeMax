@@ -343,13 +343,13 @@ func (h *PaymentHandler) HandleCallback(c *gin.Context) {
 		if len(reference) >= 4 {
 			prefix := reference[:4]
 			switch prefix {
-			case "RCH_":
-				// PERF: Try VTPass synchronously with a 6-second deadline.
-				// In production VTPass typically responds in 2-5s — if it does, we can
-				// pass the confirmed result directly in the redirect URL so the frontend
-				// shows the success panel instantly without any polling round-trips.
-				// If VTPass takes longer than 6s we fall back to the async/poll path.
-				syncCtx, syncCancel := context.WithTimeout(context.Background(), 6*time.Second)
+				case "RCH_":
+					// PERF: Try VTPass synchronously with a 15-second deadline.
+					// VTPass sandbox responds in <1s; production typically 2-5s.
+					// 15s gives enough headroom for slow responses while still
+					// allowing the frontend to receive a confirmed SUCCESS redirect.
+					// If VTPass takes longer than 15s we fall back to the async/poll path.
+					syncCtx, syncCancel := context.WithTimeout(context.Background(), 15*time.Second)
 				vtpassDone := make(chan error, 1)
 				go func() {
 					vtpassDone <- h.rechargeService.ProcessSuccessfulPayment(context.Background(), reference)

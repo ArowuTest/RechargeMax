@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"go.uber.org/zap"
-	"rechargemax/internal/logger"
 	"encoding/json"
 
 	"github.com/gin-gonic/gin"
@@ -91,15 +89,12 @@ func (h *RechargeHandler) InitiateRecharge(c *gin.Context) {
 func (h *RechargeHandler) InitiateAirtimeRecharge(c *gin.Context) {
 	// Get msisdn from auth context (if authenticated) or use phone number from request
 	msisdn := c.GetString("msisdn")
-	logger.Info("[DEBUG] InitiateAirtimeRecharge called, msisdn from context", zap.String("msisdn", msisdn))
 
 	var req validation.AirtimeRechargeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		logger.Info("[ERROR] Failed to bind JSON: %v", zap.Error(err))
 		middleware.RespondWithError(c, errors.BadRequest("Invalid request format"))
 		return
 	}
-	logger.Info("[DEBUG] Request parsed: phone=, network=, amount=%.2f", zap.String("msisdn", req.PhoneNumber), zap.Any("req.Network", req.Network), zap.Any("req.Amount", req.Amount))
 
 	// Validate request
 	if err := req.Validate(); err != nil {
@@ -123,14 +118,11 @@ func (h *RechargeHandler) InitiateAirtimeRecharge(c *gin.Context) {
 		AffiliateCode: req.AffiliateCode,
 	}
 
-	logger.Info("[DEBUG] Calling CreateRecharge service...")
 	result, err := h.rechargeService.CreateRecharge(c.Request.Context(), rechargeReq)
 	if err != nil {
-		logger.Info("[ERROR] CreateRecharge failed: %v", zap.Error(err))
 		middleware.RespondWithError(c, err)
 		return
 	}
-	logger.Info("[DEBUG] CreateRecharge succeeded, result:v", zap.Any("result", result))
 
 	// Log transaction
 	errors.LogTransaction("AIRTIME_RECHARGE", result.ID.String(), msisdn, float64(amountKobo)/100, "INITIATED")
@@ -420,23 +412,17 @@ func (h *RechargeHandler) ProcessStuckRecharge(c *gin.Context) {
 // @Router /api/v1/recharge/reference/{reference} [get]
 func (h *RechargeHandler) GetRechargeByReference(c *gin.Context) {
 	reference := c.Param("reference")
-	logger.Info("[DEBUG] GetRechargeByReference called with reference", zap.Any("reference", reference))
 
 	if reference == "" {
-		logger.Info("[ERROR] Reference is empty")
 		middleware.RespondWithError(c, errors.BadRequest("Payment reference is required"))
 		return
 	}
 
-	// Get recharge details by reference
-	logger.Info("[DEBUG] Calling rechargeService.GetRechargeByReference...")
 	recharge, err := h.rechargeService.GetRechargeByReference(c.Request.Context(), reference)
 	if err != nil {
-		logger.Info("[ERROR] GetRechargeByReference failed: %v", zap.Error(err))
 		middleware.RespondWithError(c, errors.NotFound("Recharge not found"))
 		return
 	}
-	logger.Info("[DEBUG] Recharge found:v", zap.Any("recharge", recharge))
 
 	// SECURITY: If authenticated, verify the caller owns this transaction.
 	// Unauthenticated callers (Paystack redirect callback) are still allowed through.

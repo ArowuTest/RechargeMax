@@ -106,10 +106,12 @@ func (j *ReconciliationJob) Run(ctx context.Context) error {
 
 	var rows []stuckTransaction
 	err := j.db.WithContext(ctx).
+		// NOTE: We select t.msisdn directly from the transactions table rather than
+		// JOINing users. The previous INNER JOIN silently excluded guest transactions
+		// (user_id = NULL) from reconciliation, leaving them stuck in PENDING forever.
 		Raw(`
-			SELECT t.id, t.payment_reference, t.amount, t.created_at, u.msisdn
+			SELECT t.id, t.payment_reference, t.amount, t.created_at, t.msisdn
 			FROM transactions t
-			INNER JOIN users u ON u.id = t.user_id
 			WHERE t.status = 'PENDING'
 			AND t.created_at < ?
 			AND t.processed_at IS NULL
@@ -183,7 +185,7 @@ func (j *ReconciliationJob) Run(ctx context.Context) error {
 		}
 	}
 
-	logger.Error("[ReconciliationJob] done: total= succeeded= failed=", zap.Any("processed", processed), zap.Any("succeeded", succeeded), zap.Any("failed", failed))
+	logger.Info("[ReconciliationJob] done", zap.Int("processed", processed), zap.Int("succeeded", succeeded), zap.Int("failed", failed))
 
 	// Also recover any PROCESSING transactions that the background requery loop missed.
 	if err := j.recharge.RecoverProcessingTransactions(ctx); err != nil {

@@ -317,15 +317,12 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 		// Find or create user account (auto-create for guest transactions)
 		// Query within transaction to see committed data
 		var user entities.Users
-		err := tx.Where("msisdn = ?", recharge.MSISDN).First(&user).Error
-		if err != nil {
-			// User doesn't exist - auto-create for guest transaction
+		userErr := tx.Where("msisdn = ?", recharge.MSISDN).First(&user).Error
+		if userErr != nil {
+			// User doesn't exist — auto-create for guest transaction
 			logger.Info("auto-creating user account for guest transaction", zap.String("msisdn", recharge.MSISDN))
-			
-			// Generate unique codes
 			userCode := fmt.Sprintf("USR%s", uuid.New().String()[:8])
 			referralCode := fmt.Sprintf("RCH%s", uuid.New().String()[:8])
-			
 			newUser := &entities.Users{
 				MSISDN:              recharge.MSISDN,
 				Email:               recharge.CustomerEmail,
@@ -335,9 +332,8 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 				TotalPoints:         int(pointsEarned),
 				TotalRechargeAmount: recharge.Amount,
 				IsActive:            true,
-				IsVerified:          false, // Not verified until they complete registration
+				IsVerified:          false,
 			}
-			
 			if err := tx.Create(newUser).Error; err != nil {
 				logger.Error("ProcessSuccessfulPayment: failed to create user account", zap.String("msisdn", recharge.MSISDN), zap.Error(err))
 				return fmt.Errorf("failed to create user account: %w", err)
@@ -345,27 +341,30 @@ func (s *RechargeService) ProcessSuccessfulPayment(ctx context.Context, paymentR
 			user = *newUser
 			txUser = user
 			logger.Info("ProcessSuccessfulPayment: user auto-created", zap.String("msisdn", recharge.MSISDN), zap.String("user_id", user.ID.String()))
-		
 			// Link transaction to newly created user
 			if err := tx.Model(&entities.Transactions{}).Where("id = ?", recharge.ID).Update("user_id", user.ID).Error; err != nil {
-				logger.Error("ProcessSuccessfulPayment: failed to link transaction to user", zap.Error(err))
+				logger.Error("ProcessSuccessfulPayment: failed to link transaction to new user", zap.Error(err))
 				return fmt.Errorf("failed to link transaction to user: %w", err)
 			}
 		} else {
-			// User exists - update points and stats
+			// User exists — update ONLY the specific fields we need (targeted UPDATE avoids
+			// unique-index violations that a full tx.Save(&user) can trigger on fields like
+			// referral_code, msisdn, user_code when GORM serialises zero-value fields).
 			logger.Info("ProcessSuccessfulPayment: updating existing user", zap.String("msisdn", recharge.MSISDN), zap.String("user_id", user.ID.String()))
-			user.TotalPoints += int(pointsEarned)
-			user.TotalRechargeAmount += recharge.Amount
-			
-			if err := tx.Save(&user).Error; err != nil {
+			if err := tx.Model(&entities.Users{}).Where("id = ?", user.ID).Updates(map[string]interface{}{
+				"total_points":          user.TotalPoints + int(pointsEarned),
+				"total_recharge_amount": user.TotalRechargeAmount + recharge.Amount,
+			}).Error; err != nil {
 				logger.Error("ProcessSuccessfulPayment: failed to update user points", zap.String("msisdn", recharge.MSISDN), zap.Error(err))
 				return fmt.Errorf("failed to update user points: %w", err)
 			}
+			user.TotalPoints += int(pointsEarned)
+			user.TotalRechargeAmount += recharge.Amount
 			txUser = user
-			// Link transaction to existing user (was missing — user_id was always NULL for existing users)
+			// Link transaction to existing user
 			if err := tx.Model(&entities.Transactions{}).Where("id = ?", recharge.ID).Update("user_id", user.ID).Error; err != nil {
 				logger.Error("ProcessSuccessfulPayment: failed to link transaction to existing user", zap.Error(err))
-				return fmt.Errorf("failed to link transaction to user: %w", err)
+				return fmt.Errorf("failed to link transaction to existing user: %w", err)
 			}
 		}
 

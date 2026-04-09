@@ -197,7 +197,6 @@ func (s *AuthService) VerifyOTP(ctx context.Context, msisdn, code, purpose strin
 	}
 
 	// Generate JWT token (using normalized MSISDN)
-	logger.Info("[DEBUG] Generating JWT for normalized MSISDN: (original:)", zap.String("msisdn", normalizedMSISDN), zap.String("msisdn", msisdn))
 	token, err := s.GenerateToken(ctx, normalizedMSISDN)
 	if err != nil {
 		return "", nil, false, fmt.Errorf("failed to generate token: %w", err)

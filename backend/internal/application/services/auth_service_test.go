@@ -178,7 +178,7 @@ func TestSendOTP_InvalidMSISDN_ReturnsBadRequest(t *testing.T) {
 	userRepo := &mockUserRepoAuth{}
 
 	svc := newAuthSvc(otpRepo, userRepo)
-	err := svc.SendOTP(context.Background(), "not-a-phone", "login")
+	_, err := svc.SendOTP(context.Background(), "not-a-phone", "login")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "Invalid phone number")
@@ -196,7 +196,7 @@ func TestSendOTP_RateLimitExceeded_ReturnsError(t *testing.T) {
 		Return(int64(3), nil)
 
 	svc := newAuthSvc(otpRepo, userRepo)
-	err := svc.SendOTP(context.Background(), "08012345678", "login")
+	_, err := svc.SendOTP(context.Background(), "08012345678", "login")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "RATE_LIMIT_EXCEEDED")
@@ -213,7 +213,7 @@ func TestSendOTP_UnderRateLimit_CreatesOTPRecord(t *testing.T) {
 		Return(nil)
 
 	svc := newAuthSvc(otpRepo, userRepo)
-	err := svc.SendOTP(context.Background(), "08012345678", "login")
+	_, err := svc.SendOTP(context.Background(), "08012345678", "login")
 
 	// May error on SMS send (no real key), but the OTP record must be created
 	otpRepo.AssertCalled(t, "Create", mock.Anything, mock.AnythingOfType("*entities.OTP"))
@@ -229,7 +229,7 @@ func TestSendOTP_CountRecentOTPsDBError_ReturnsError(t *testing.T) {
 		Return(int64(0), errors.New("db connection lost"))
 
 	svc := newAuthSvc(otpRepo, userRepo)
-	err := svc.SendOTP(context.Background(), "08012345678", "login")
+	_, err := svc.SendOTP(context.Background(), "08012345678", "login")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "rate limit")

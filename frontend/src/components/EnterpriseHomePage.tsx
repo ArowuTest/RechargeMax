@@ -1154,24 +1154,47 @@ export const EnterpriseHomePage: React.FC = () => {
             <div>
               <p className="text-white font-semibold mb-3 text-sm">Services</p>
               <ul className="space-y-2 text-xs">
-                {['Airtime Recharge', 'Data Bundles', 'Daily Draws', 'Spin Wheel', 'Daily Subscription'].map((s) => (
-                  <li key={s} className="hover:text-purple-400 cursor-pointer transition-colors">{s}</li>
+                {([
+                  { label: 'Airtime Recharge', href: '#recharge' },
+                  { label: 'Data Bundles', href: '#recharge' },
+                  { label: 'Daily Draws', href: '#draws' },
+                  { label: 'Spin Wheel', href: '#spin' },
+                  { label: 'Daily Subscription', href: '#subscription' },
+                ] as { label: string; href: string }[]).map((s) => (
+                  <li key={s.label}>
+                    <a href={s.href} className="hover:text-purple-400 transition-colors">{s.label}</a>
+                  </li>
                 ))}
               </ul>
             </div>
             <div>
               <p className="text-white font-semibold mb-3 text-sm">Networks</p>
               <ul className="space-y-2 text-xs">
-                {['MTN Nigeria', 'Airtel Nigeria', 'Glo Mobile', '9mobile'].map((n) => (
-                  <li key={n} className="hover:text-purple-400 cursor-pointer transition-colors">{n}</li>
+                {([
+                  { label: 'MTN Nigeria', href: 'https://www.mtnonline.com' },
+                  { label: 'Airtel Nigeria', href: 'https://www.airtel.com.ng' },
+                  { label: 'Glo Mobile', href: 'https://www.gloworld.com' },
+                  { label: '9mobile', href: 'https://www.9mobile.com.ng' },
+                ] as { label: string; href: string }[]).map((n) => (
+                  <li key={n.label}>
+                    <a href={n.href} target="_blank" rel="noopener noreferrer" className="hover:text-purple-400 transition-colors">{n.label}</a>
+                  </li>
                 ))}
               </ul>
             </div>
             <div>
               <p className="text-white font-semibold mb-3 text-sm">Company</p>
               <ul className="space-y-2 text-xs">
-                {['About Us', 'Contact', 'Privacy Policy', 'Terms of Service', 'Affiliate Program'].map((c) => (
-                  <li key={c} className="hover:text-purple-400 cursor-pointer transition-colors">{c}</li>
+                {([
+                  { label: 'About Us', href: '#about' },
+                  { label: 'Contact', href: '#contact' },
+                  { label: 'Privacy Policy', href: '#privacy' },
+                  { label: 'Terms of Service', href: '#terms' },
+                  { label: 'Affiliate Program', href: '#affiliate' },
+                ] as { label: string; href: string }[]).map((c) => (
+                  <li key={c.label}>
+                    <a href={c.href} className="hover:text-purple-400 transition-colors">{c.label}</a>
+                  </li>
                 ))}
               </ul>
             </div>

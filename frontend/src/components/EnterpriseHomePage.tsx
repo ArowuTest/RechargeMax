@@ -1141,7 +1141,7 @@ export const EnterpriseHomePage: React.FC = () => {
       {/* ── Footer ───────────────────────────────────────────────── */}
       <footer className="bg-gray-900 text-gray-400 py-10">
         <div className="max-w-screen-xl mx-auto px-4">
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-8">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-8 mb-8">
             <div>
               <div className="flex items-center gap-2.5 mb-3">
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br gradient-brand flex items-center justify-center">
@@ -1173,6 +1173,24 @@ export const EnterpriseHomePage: React.FC = () => {
                 {['About Us', 'Contact', 'Privacy Policy', 'Terms of Service', 'Affiliate Program'].map((c) => (
                   <li key={c} className="hover:text-purple-400 cursor-pointer transition-colors">{c}</li>
                 ))}
+              </ul>
+            </div>
+            <div>
+              <p className="text-white font-semibold mb-3 text-sm">Contact Us</p>
+              <ul className="space-y-3 text-xs">
+                <li className="flex items-start gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 mt-0.5 text-purple-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span className="leading-relaxed">46 Oyibo Adjerho,<br />Lekki Phase 1,<br />Lagos, Nigeria</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-purple-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                  </svg>
+                  <a href="tel:+447958464324" className="hover:text-purple-400 transition-colors">+44 7958 464324</a>
+                </li>
               </ul>
             </div>
           </div>

@@ -1,12 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatCurrency } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
-import { Gift, Zap, RotateCcw, Loader2, X, Sparkles, Trophy } from 'lucide-react';
+import { Gift, Zap, RotateCcw, Loader2, X, Sparkles, Trophy, CheckCircle2 } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { useAuthContext } from '@/contexts/AuthContext';
 import confetti from 'canvas-confetti';
+import { NIGERIAN_BANKS } from '@/constants/banks';
 
 /* ── Fallback prizes (used when /spin/prizes is unreachable) ── */
 const FALLBACK_PRIZES = [
@@ -30,14 +34,43 @@ interface WheelPrize {
   no_win_message?: string;
 }
 
+interface SpinResult {
+  prize_won?: string;
+  prize_type?: string;
+  prize_value?: number;
+  claim_status?: string;
+  no_win?: boolean;
+  no_win_message?: string;
+  /** UUID of the spin_results row — needed for the claim API call */
+  spin_result_id?: string;
+  id?: string;
+}
+
+interface ClaimForm {
+  account_number: string;
+  account_name: string;
+  bank_name: string;
+  bank_code: string;
+  address: string;
+  phone_number: string;
+}
+
+const EMPTY_CLAIM: ClaimForm = {
+  account_number: '',
+  account_name: '',
+  bank_name: '',
+  bank_code: '',
+  address: '',
+  phone_number: '',
+};
+
 interface SpinWheelProps {
   isOpen: boolean;
   onClose: () => void;
   transactionAmount: number;
   userPhone: string;
   onPrizeWon?: (prize: any) => void;
-  /** Called when the backend rejects the spin with a daily-limit error.
-   *  The parent should close the wheel and show the upgrade nudge. */
+  /** Called when the backend rejects the spin with a daily-limit error. */
   onSpinLimitReached?: () => void;
 }
 
@@ -45,16 +78,19 @@ interface SpinWheelProps {
 function fireWinConfetti() {
   const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 9999 };
   const count = 200;
-  const origin1 = { x: 0.2, y: 0.5 };
-  const origin2 = { x: 0.8, y: 0.5 };
-  confetti({ ...defaults, particleCount: count * 0.4, origin: origin1,
+  confetti({ ...defaults, particleCount: count * 0.4, origin: { x: 0.2, y: 0.5 },
     colors: ['#7c3aed', '#a855f7', '#f59e0b', '#fbbf24', '#10b981'] });
-  confetti({ ...defaults, particleCount: count * 0.4, origin: origin2,
+  confetti({ ...defaults, particleCount: count * 0.4, origin: { x: 0.8, y: 0.5 },
     colors: ['#7c3aed', '#c084fc', '#f59e0b', '#fcd34d', '#ec4899'] });
   setTimeout(() => {
     confetti({ ...defaults, particleCount: count * 0.2, origin: { x: 0.5, y: 0.3 },
       colors: ['#ffffff', '#f59e0b', '#7c3aed'] });
   }, 300);
+}
+
+/** Returns true for prize types that require user-submitted details before payout. */
+function requiresClaimForm(type: string): boolean {
+  return type === 'CASH' || type === 'PHYSICAL' || type === 'GOODS';
 }
 
 export const SpinWheel: React.FC<SpinWheelProps> = ({
@@ -66,10 +102,18 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
   const [loadingPrizes, setLoadingPrizes] = useState(true);
   const [isSpinning, setIsSpinning] = useState(false);
   const [rotation, setRotation] = useState(0);
-  const [selectedPrize, setSelectedPrize] = useState<any>(null);
+  const [selectedPrize, setSelectedPrize] = useState<WheelPrize & { claimStatus?: string } | null>(null);
+  const [spinResult, setSpinResult] = useState<SpinResult | null>(null);
   const [hasSpun, setHasSpun] = useState(false);
   const [showWin, setShowWin] = useState(false);
   const [noWinResult, setNoWinResult] = useState<{ message: string } | null>(null);
+
+  /* ── Inline claim form state ── */
+  const [showClaimForm, setShowClaimForm] = useState(false);
+  const [claimForm, setClaimForm] = useState<ClaimForm>(EMPTY_CLAIM);
+  const [isClaiming, setIsClaiming] = useState(false);
+  const [claimSuccess, setClaimSuccess] = useState(false);
+
   const wheelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -103,17 +147,21 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
     if (isSpinning || hasSpun) return;
     setIsSpinning(true);
     setShowWin(false);
+    setShowClaimForm(false);
+    setClaimSuccess(false);
 
     try {
       const spinBody = isAuthenticated ? {} : { msisdn: userPhone };
       const response = await apiClient.post('/spin/play', spinBody);
       if (!response.data.success) throw new Error(response.data.error || 'Failed to spin');
 
-      const spinResult = response.data.data;
+      const result: SpinResult = response.data.data;
+      setSpinResult(result);
+
       const winningPrize: WheelPrize =
-        prizes.find((p) => p.type === spinResult.prize_type && p.value === spinResult.prize_value) ??
-        prizes.find((p) => p.name === spinResult.prize_won) ??
-        prizes[0] ?? { name: spinResult.prize_won ?? 'Prize', type: spinResult.prize_type ?? 'AIRTIME', value: 0, probability: 0, color: '#6b7280' };
+        prizes.find((p) => p.type === result.prize_type && p.value === result.prize_value) ??
+        prizes.find((p) => p.name === result.prize_won) ??
+        prizes[0] ?? { name: result.prize_won ?? 'Prize', type: result.prize_type ?? 'AIRTIME', value: 0, probability: 0, color: '#6b7280' };
 
       const prizeIndex = prizes.findIndex((p) => p.name === winningPrize.name);
       const targetAngle = prizeIndex * segmentAngle + segmentAngle / 2;
@@ -125,38 +173,35 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
         setIsSpinning(false);
         setHasSpun(true);
 
-        // ── No-win slot ──────────────────────────────────────────────────────
-        if (spinResult.no_win) {
-          setNoWinResult({
-            message: spinResult.no_win_message || 'Better luck next time! Recharge again to spin.',
-          });
-          toast({
-            title: 'Not this time…',
-            description: spinResult.no_win_message || 'Keep recharging for more spin chances!',
-            duration: 6000,
-          });
+        /* ── No-win slot ── */
+        if (result.no_win) {
+          setNoWinResult({ message: result.no_win_message || 'Better luck next time! Recharge again to spin.' });
+          toast({ title: 'Not this time…', description: result.no_win_message || 'Keep recharging for more spin chances!', duration: 6000 });
           return;
         }
 
-        // ── Prize won ────────────────────────────────────────────────────────
-        setSelectedPrize({ ...winningPrize, claimStatus: spinResult.claim_status });
+        /* ── Prize won ── */
+        setSelectedPrize({ ...winningPrize, claimStatus: result.claim_status });
         setShowWin(true);
         fireWinConfetti();
 
+        // For cash/physical prizes that need a form, show the form immediately
+        if (isAuthenticated && requiresClaimForm(winningPrize.type)) {
+          setShowClaimForm(true);
+        }
+
         const claimInstructions =
           winningPrize.type === 'AIRTIME' || winningPrize.type === 'DATA'
-            ? spinResult.claim_status === 'PROVISIONING'
+            ? result.claim_status === 'PROVISIONING'
               ? 'Being processed — credited within 5–10 min.'
               : 'Check Dashboard → Prizes for claim status.'
-            : winningPrize.type === 'CASH'
-            ? 'Go to Dashboard → Prizes to submit bank details.'
-            : 'Login to see your account update.';
+            : requiresClaimForm(winningPrize.type)
+            ? isAuthenticated
+              ? 'Please fill in your details below to claim your prize.'
+              : 'Login to submit your claim details.'
+            : 'Your prize has been recorded.';
 
-        toast({
-          title: '🎉 You Won!',
-          description: `${winningPrize.name}! ${claimInstructions}`,
-          duration: 10000,
-        });
+        toast({ title: '🎉 You Won!', description: `${winningPrize.name}! ${claimInstructions}`, duration: 10000 });
         onPrizeWon?.(winningPrize);
       }, 4500);
     } catch (error: any) {
@@ -167,8 +212,6 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
         error.message ??
         'Failed to spin. Please try again.';
 
-      // Detect daily-limit errors — close the wheel and show the upgrade nudge
-      // instead of leaving the user staring at an unusable wheel.
       const isLimitError =
         errMsg.toLowerCase().includes('daily spin limit') ||
         errMsg.toLowerCase().includes('not eligible') ||
@@ -177,24 +220,60 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
         error.response?.status === 429;
 
       if (isLimitError && onSpinLimitReached) {
-        // Small delay so the user can read the brief toast before the modal swaps
         toast({ title: 'Spins Used Up', description: errMsg, variant: 'destructive', duration: 3000 });
-        setTimeout(() => {
-          handleClose();
-          onSpinLimitReached();
-        }, 1200);
+        setTimeout(() => { handleClose(); onSpinLimitReached(); }, 1200);
       } else {
         toast({ title: 'Spin Failed', description: errMsg, variant: 'destructive', duration: 5000 });
       }
     }
   };
 
+  const handleSubmitClaim = async () => {
+    if (!selectedPrize || !spinResult) return;
+
+    // Validate required fields
+    if (!claimForm.account_number || !claimForm.account_name || !claimForm.bank_name) {
+      toast({ title: 'Missing Details', description: 'Please fill in your account number, account name, and bank.', variant: 'destructive' });
+      return;
+    }
+
+    const prizeId = spinResult.spin_result_id ?? spinResult.id;
+    if (!prizeId) {
+      toast({ title: 'Error', description: 'Could not identify your prize. Please go to Dashboard → Prizes to claim.', variant: 'destructive' });
+      return;
+    }
+
+    setIsClaiming(true);
+    try {
+      await apiClient.post(`/winner/${prizeId}/claim`, {
+        account_number: claimForm.account_number,
+        account_name:   claimForm.account_name,
+        bank_name:      claimForm.bank_name,
+        bank_code:      claimForm.bank_code,
+        address:        claimForm.address,
+        phone_number:   claimForm.phone_number,
+      });
+      setClaimSuccess(true);
+      setShowClaimForm(false);
+      toast({ title: '✅ Claim Submitted!', description: 'Your bank details have been saved. Our team will process your payment within 24–48 hours.', duration: 8000 });
+    } catch (err: any) {
+      const msg = err.response?.data?.error?.message ?? err.message ?? 'Failed to submit claim.';
+      toast({ title: 'Claim Failed', description: msg, variant: 'destructive' });
+    } finally {
+      setIsClaiming(false);
+    }
+  };
+
   const handleClose = () => {
     setRotation(0);
     setSelectedPrize(null);
+    setSpinResult(null);
     setHasSpun(false);
     setShowWin(false);
     setNoWinResult(null);
+    setShowClaimForm(false);
+    setClaimForm(EMPTY_CLAIM);
+    setClaimSuccess(false);
     onClose();
   };
 
@@ -352,40 +431,159 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
                 </div>
               )}
 
-              {/* Win result */}
+              {/* ── Win result panel ── */}
               <AnimatePresence>
                 {showWin && selectedPrize && (
                   <motion.div
                     initial={{ scale: 0.7, opacity: 0, y: 20 }}
                     animate={{ scale: 1, opacity: 1, y: 0 }}
                     transition={{ type: 'spring', damping: 18, stiffness: 260 }}
-                    className="rounded-2xl p-5 text-center space-y-3 animate-prize-glow"
+                    className="rounded-2xl p-5 space-y-4 animate-prize-glow"
                     style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.3), rgba(245,158,11,0.2))', border: '1px solid rgba(245,158,11,0.4)' }}
                   >
-                    <motion.div
-                      animate={{ rotate: [0, -10, 10, -5, 5, 0], scale: [1, 1.2, 1] }}
-                      transition={{ duration: 0.6, delay: 0.2 }}
-                    >
-                      <Trophy className="w-10 h-10 text-yellow-400 mx-auto" />
-                    </motion.div>
-                    <div>
+                    {/* Prize header */}
+                    <div className="text-center space-y-1">
+                      <motion.div
+                        animate={{ rotate: [0, -10, 10, -5, 5, 0], scale: [1, 1.2, 1] }}
+                        transition={{ duration: 0.6, delay: 0.2 }}
+                      >
+                        <Trophy className="w-10 h-10 text-yellow-400 mx-auto" />
+                      </motion.div>
                       <p className="text-yellow-300 text-sm font-semibold uppercase tracking-wider">🎉 Congratulations!</p>
                       <p className="text-white text-2xl font-black mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                         {selectedPrize.name}
                       </p>
                     </div>
-                    <p className="text-purple-300 text-xs leading-relaxed">
-                      {selectedPrize.type === 'CASH'
-                        ? 'Go to Dashboard → Prizes to submit your bank details.'
-                        : selectedPrize.claimStatus === 'PROVISIONING'
-                        ? 'Being credited to your phone within 5–10 minutes.'
-                        : 'Login and go to Dashboard → Prizes to check status.'}
-                    </p>
+
+                    {/* ── Claim success confirmation ── */}
+                    {claimSuccess && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="rounded-xl p-4 text-center space-y-2"
+                        style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.4)' }}
+                      >
+                        <CheckCircle2 className="w-8 h-8 text-green-400 mx-auto" />
+                        <p className="text-green-300 text-sm font-semibold">Claim submitted successfully!</p>
+                        <p className="text-green-200 text-xs">Our team will process your payment within 24–48 hours.</p>
+                      </motion.div>
+                    )}
+
+                    {/* ── Inline claim form for CASH / PHYSICAL / GOODS ── */}
+                    {showClaimForm && isAuthenticated && requiresClaimForm(selectedPrize.type) && !claimSuccess && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="space-y-3"
+                        style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '12px', padding: '16px' }}
+                      >
+                        <p className="text-white/90 text-sm font-semibold">
+                          {selectedPrize.type === 'CASH'
+                            ? 'Enter your bank details to receive your cash prize:'
+                            : 'Enter your delivery details for your prize:'}
+                        </p>
+
+                        {/* Account Number */}
+                        <div className="space-y-1">
+                          <Label className="text-white/70 text-xs">Account Number *</Label>
+                          <Input
+                            placeholder="0123456789"
+                            value={claimForm.account_number}
+                            onChange={(e) => setClaimForm((p) => ({ ...p, account_number: e.target.value }))}
+                            className="h-9 bg-white/10 border-white/20 text-white placeholder:text-white/30 focus:border-purple-400"
+                          />
+                        </div>
+
+                        {/* Account Name */}
+                        <div className="space-y-1">
+                          <Label className="text-white/70 text-xs">Account Name *</Label>
+                          <Input
+                            placeholder="Full name on account"
+                            value={claimForm.account_name}
+                            onChange={(e) => setClaimForm((p) => ({ ...p, account_name: e.target.value }))}
+                            className="h-9 bg-white/10 border-white/20 text-white placeholder:text-white/30 focus:border-purple-400"
+                          />
+                        </div>
+
+                        {/* Bank selector */}
+                        <div className="space-y-1">
+                          <Label className="text-white/70 text-xs">Bank *</Label>
+                          <Select
+                            value={claimForm.bank_name}
+                            onValueChange={(val) => {
+                              const bank = NIGERIAN_BANKS.find((b) => b.name === val);
+                              setClaimForm((p) => ({ ...p, bank_name: val, bank_code: bank?.code ?? '' }));
+                            }}
+                          >
+                            <SelectTrigger className="h-9 bg-white/10 border-white/20 text-white focus:border-purple-400">
+                              <SelectValue placeholder="Select your bank" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {NIGERIAN_BANKS.map((b) => (
+                                <SelectItem key={b.code} value={b.name}>{b.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Delivery address — only for physical goods */}
+                        {(selectedPrize.type === 'PHYSICAL' || selectedPrize.type === 'GOODS') && (
+                          <div className="space-y-1">
+                            <Label className="text-white/70 text-xs">Delivery Address</Label>
+                            <Input
+                              placeholder="Full delivery address"
+                              value={claimForm.address}
+                              onChange={(e) => setClaimForm((p) => ({ ...p, address: e.target.value }))}
+                              className="h-9 bg-white/10 border-white/20 text-white placeholder:text-white/30 focus:border-purple-400"
+                            />
+                          </div>
+                        )}
+
+                        {/* Contact phone */}
+                        <div className="space-y-1">
+                          <Label className="text-white/70 text-xs">Contact Phone</Label>
+                          <Input
+                            placeholder="0801 234 5678"
+                            value={claimForm.phone_number}
+                            onChange={(e) => setClaimForm((p) => ({ ...p, phone_number: e.target.value }))}
+                            className="h-9 bg-white/10 border-white/20 text-white placeholder:text-white/30 focus:border-purple-400"
+                          />
+                        </div>
+
+                        {/* Submit button */}
+                        <Button
+                          onClick={handleSubmitClaim}
+                          disabled={isClaiming}
+                          className="w-full btn-claim border-0 font-bold"
+                        >
+                          {isClaiming
+                            ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Submitting…</>
+                            : <><Gift className="w-4 h-4 mr-2" />Submit Claim</>
+                          }
+                        </Button>
+                      </motion.div>
+                    )}
+
+                    {/* ── Not logged in — prompt to login ── */}
+                    {!isAuthenticated && requiresClaimForm(selectedPrize.type) && !claimSuccess && (
+                      <p className="text-purple-300 text-xs text-center leading-relaxed">
+                        Login to your account to submit your bank details and receive your prize.
+                      </p>
+                    )}
+
+                    {/* ── Airtime / Data — auto-provisioned ── */}
+                    {!requiresClaimForm(selectedPrize.type) && !claimSuccess && (
+                      <p className="text-purple-300 text-xs text-center leading-relaxed">
+                        {selectedPrize.claimStatus === 'PROVISIONING'
+                          ? 'Being credited to your phone within 5–10 minutes.'
+                          : 'Check Dashboard → Prizes for your claim status.'}
+                      </p>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
 
-              {/* No-win result panel */}
+              {/* ── No-win result panel ── */}
               <AnimatePresence>
                 {noWinResult && (
                   <motion.div
@@ -414,7 +612,7 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
                 )}
               </AnimatePresence>
 
-              {/* Action buttons */}
+              {/* ── Action buttons ── */}
               <div className="space-y-2">
                 {!hasSpun ? (
                   <div className="flex gap-3">
@@ -440,7 +638,7 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
                     </motion.button>
                   </div>
                 ) : noWinResult ? (
-                  /* No-win CTA buttons */
+                  /* No-win CTA */
                   <div className="space-y-2">
                     <motion.button
                       onClick={handleClose}
@@ -463,31 +661,37 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
                     </motion.button>
                   </div>
                 ) : (
-                  /* Prize won CTA buttons */
+                  /* Prize won CTA */
                   <div className="space-y-2">
-                    <motion.button
-                      onClick={() => window.location.href = '/login'}
-                      className="w-full py-3.5 rounded-2xl font-bold text-white btn-claim flex items-center justify-center gap-2"
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.3 }}
-                    >
-                      <Gift className="w-4 h-4" /> Login to Claim Prize
-                    </motion.button>
+                    {/* If not logged in and prize needs a form, show login button */}
+                    {!isAuthenticated && requiresClaimForm(selectedPrize?.type ?? '') && !claimSuccess && (
+                      <motion.button
+                        onClick={() => window.location.href = '/login'}
+                        className="w-full py-3.5 rounded-2xl font-bold text-white btn-claim flex items-center justify-center gap-2"
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.3 }}
+                      >
+                        <Gift className="w-4 h-4" /> Login to Claim Prize
+                      </motion.button>
+                    )}
                     <motion.button
                       onClick={handleClose}
                       className="w-full py-2.5 rounded-2xl font-medium text-white/50 hover:text-white/70 transition-colors text-sm"
                       whileTap={{ scale: 0.98 }}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.4 }}
                     >
-                      Close (Claim Later)
+                      {claimSuccess ? 'Close' : 'Claim Later (Dashboard → Prizes)'}
                     </motion.button>
                   </div>
                 )}
               </div>
 
-              {/* Prize list */}
+              {/* Prize list (only shown before spinning) */}
               {!showWin && !noWinResult && (
                 <div className="border-t border-white/10 pt-4">
                   <p className="text-center text-xs text-purple-300 font-semibold uppercase tracking-wider mb-3">Possible Prizes</p>
